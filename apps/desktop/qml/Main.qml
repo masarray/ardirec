@@ -630,7 +630,7 @@ ApplicationWindow {
                     font.pixelSize: 8
                 }
                 Label {
-                    text: "ardirec 0.2.0-alpha.3"
+                    text: "ardirec " + Qt.application.version
                     color: "#777777"
                     font.pixelSize: 8
                 }
