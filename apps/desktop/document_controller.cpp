@@ -64,6 +64,12 @@ double nice_peak(double peak) {
     else if (normalized <= 5.0) step = 5.0;
     return step * base;
 }
+
+QString normalized_unit(QString unit) {
+    unit = unit.trimmed().toUpper();
+    unit.remove(' ');
+    return unit;
+}
 } // namespace
 
 double DocumentController::durationSeconds() const {
@@ -83,6 +89,12 @@ const std::vector<double>& DocumentController::analogSamples(int index) const {
     static const std::vector<double> empty;
     if (index < 0 || index >= static_cast<int>(m_analogSamples.size())) return empty;
     return m_analogSamples[static_cast<std::size_t>(index)];
+}
+
+const std::vector<std::uint8_t>& DocumentController::statusSamples(int index) const {
+    static const std::vector<std::uint8_t> empty;
+    if (index < 0 || index >= static_cast<int>(m_statusSamples.size())) return empty;
+    return m_statusSamples[static_cast<std::size_t>(index)];
 }
 
 std::pair<std::size_t, std::size_t> DocumentController::visibleSampleRange(double zoomFactor,
@@ -138,7 +150,9 @@ void DocumentController::openCfg(const QUrl& url) {
         m_channels.clear();
         m_channelNames.clear();
         m_channelUnits.clear();
+        m_statusNames.clear();
         m_analogCount = static_cast<int>(cfg.analog_channels.size());
+        m_digitalCount = static_cast<int>(cfg.status_channels.size());
         for (const auto& ch : cfg.analog_channels) {
             const auto unit = ch.units.empty() ? std::string{} : " · " + ch.units;
             m_channels << QStringLiteral("A  %1%2")
@@ -147,19 +161,30 @@ void DocumentController::openCfg(const QUrl& url) {
             m_channelUnits << QString::fromStdString(ch.units);
         }
         for (const auto& ch : cfg.status_channels) {
-            m_channels << QStringLiteral("D  %1").arg(QString::fromStdString(ch.id));
+            const QString name = QString::fromStdString(ch.id);
+            m_channels << QStringLiteral("D  %1").arg(name);
+            m_statusNames << name;
         }
 
         m_analogSamples.assign(cfg.analog_channels.size(), {});
         for (auto& values : m_analogSamples) values.reserve(frames.size());
+        m_statusSamples.assign(cfg.status_channels.size(), {});
+        for (auto& values : m_statusSamples) values.reserve(frames.size());
+        m_statusNormalState.clear();
+        m_statusNormalState.reserve(cfg.status_channels.size());
+        for (const auto& channel : cfg.status_channels) m_statusNormalState.push_back(channel.normal_state);
         m_timeSeconds.clear();
         m_timeSeconds.reserve(frames.size());
 
         const double timeScale = cfg.time_multiplier * 1.0e-6;
         for (const auto& frame : frames) {
             m_timeSeconds.push_back(static_cast<double>(frame.raw_timestamp) * timeScale);
-            const auto count = std::min(frame.analog.size(), m_analogSamples.size());
-            for (std::size_t i = 0; i < count; ++i) m_analogSamples[i].push_back(frame.analog[i]);
+            const auto analogCount = std::min(frame.analog.size(), m_analogSamples.size());
+            for (std::size_t i = 0; i < analogCount; ++i) m_analogSamples[i].push_back(frame.analog[i]);
+            const auto statusCount = std::min(frame.status.size(), m_statusSamples.size());
+            for (std::size_t i = 0; i < statusCount; ++i) {
+                m_statusSamples[i].push_back(frame.status[i] ? std::uint8_t{1} : std::uint8_t{0});
+            }
         }
 
         m_channelPeaks.assign(m_analogSamples.size(), 1.0);
@@ -169,6 +194,15 @@ void DocumentController::openCfg(const QUrl& url) {
                 if (std::isfinite(value)) peak = std::max(peak, std::abs(value));
             }
             m_channelPeaks[channel] = nice_peak(peak);
+        }
+
+        m_statusActive.assign(m_statusSamples.size(), false);
+        m_activeDigitalCount = 0;
+        for (std::size_t channel = 0; channel < m_statusSamples.size(); ++channel) {
+            const bool active = std::any_of(m_statusSamples[channel].begin(), m_statusSamples[channel].end(),
+                                            [](std::uint8_t value) { return value != 0; });
+            m_statusActive[channel] = active;
+            if (active) ++m_activeDigitalCount;
         }
 
         m_triggerOffsetSeconds = dataStartSeconds();
@@ -191,7 +225,10 @@ void DocumentController::openCfg(const QUrl& url) {
         m_recordHealth = hitLimit
                              ? QStringLiteral("Loaded · preview capped at %1 samples for alpha")
                                    .arg(static_cast<qulonglong>(kViewerAlphaFrameLimit))
-                             : QStringLiteral("Loaded · CFG/DAT consistent enough to render");
+                             : QStringLiteral("Loaded · %1 analog · %2 digital (%3 active)")
+                                   .arg(m_analogCount)
+                                   .arg(m_digitalCount)
+                                   .arg(m_activeDigitalCount);
         m_error.clear();
         emit documentChanged();
         emit waveformChanged();
@@ -219,18 +256,39 @@ QString DocumentController::channelUnit(int index) const {
     return index >= 0 && index < m_channelUnits.size() ? m_channelUnits.at(index) : QString{};
 }
 
+QString DocumentController::analogRole(int index) const {
+    if (index < 0 || index >= m_channelNames.size()) return QStringLiteral("Other");
+    const QString unit = normalized_unit(channelUnit(index));
+    const QString name = channelName(index).trimmed().toUpper();
+
+    if (unit == QStringLiteral("V") || unit == QStringLiteral("KV") || unit == QStringLiteral("MV")
+        || unit.contains(QStringLiteral("VOLT"))) {
+        return QStringLiteral("Voltage");
+    }
+    if (unit == QStringLiteral("A") || unit == QStringLiteral("KA") || unit == QStringLiteral("MA")
+        || unit.contains(QStringLiteral("AMP"))) {
+        return QStringLiteral("Current");
+    }
+
+    if (name.startsWith('V') || name.startsWith('U') || name.contains(QStringLiteral(":V"))
+        || name.contains(QStringLiteral("UL1")) || name.contains(QStringLiteral("UL2"))
+        || name.contains(QStringLiteral("UL3"))) {
+        return QStringLiteral("Voltage");
+    }
+    if (name.startsWith('I') || name.contains(QStringLiteral(":I")) || name.contains(QStringLiteral("IL1"))
+        || name.contains(QStringLiteral("IL2")) || name.contains(QStringLiteral("IL3"))) {
+        return QStringLiteral("Current");
+    }
+    return QStringLiteral("Other");
+}
+
 double DocumentController::channelPeak(int index) const {
     if (index < 0 || index >= static_cast<int>(m_channelPeaks.size())) return 1.0;
     return m_channelPeaks[static_cast<std::size_t>(index)];
 }
 
-double DocumentController::sampleValue(int channelIndex, double absoluteTimeSeconds) const {
-    if (channelIndex < 0 || channelIndex >= static_cast<int>(m_analogSamples.size()) || m_timeSeconds.empty()) {
-        return std::numeric_limits<double>::quiet_NaN();
-    }
-    const auto& samples = m_analogSamples[static_cast<std::size_t>(channelIndex)];
-    if (samples.empty()) return std::numeric_limits<double>::quiet_NaN();
-
+std::size_t DocumentController::nearestSampleIndex(double absoluteTimeSeconds) const {
+    if (m_timeSeconds.empty()) return 0;
     absoluteTimeSeconds = std::clamp(absoluteTimeSeconds, dataStartSeconds(), dataEndSeconds());
     auto it = std::lower_bound(m_timeSeconds.begin(), m_timeSeconds.end(), absoluteTimeSeconds);
     std::size_t index = static_cast<std::size_t>(std::distance(m_timeSeconds.begin(), it));
@@ -240,7 +298,16 @@ double DocumentController::sampleValue(int channelIndex, double absoluteTimeSeco
         const double after = std::abs(m_timeSeconds[index] - absoluteTimeSeconds);
         if (before <= after) --index;
     }
-    index = std::min(index, samples.size() - 1);
+    return index;
+}
+
+double DocumentController::sampleValue(int channelIndex, double absoluteTimeSeconds) const {
+    if (channelIndex < 0 || channelIndex >= static_cast<int>(m_analogSamples.size()) || m_timeSeconds.empty()) {
+        return std::numeric_limits<double>::quiet_NaN();
+    }
+    const auto& samples = m_analogSamples[static_cast<std::size_t>(channelIndex)];
+    if (samples.empty()) return std::numeric_limits<double>::quiet_NaN();
+    const std::size_t index = std::min(nearestSampleIndex(absoluteTimeSeconds), samples.size() - 1);
     return samples[index];
 }
 
@@ -255,6 +322,27 @@ QString DocumentController::sampleValueText(int channelIndex, double absoluteTim
     const QString unit = channelUnit(channelIndex);
     return unit.isEmpty() ? QString::number(value, 'f', decimals)
                           : QStringLiteral("%1 %2").arg(QString::number(value, 'f', decimals), unit);
+}
+
+QString DocumentController::digitalName(int index) const {
+    return index >= 0 && index < m_statusNames.size() ? m_statusNames.at(index) : QStringLiteral("—");
+}
+
+bool DocumentController::digitalIsActive(int index) const {
+    return index >= 0 && index < static_cast<int>(m_statusActive.size())
+           && m_statusActive[static_cast<std::size_t>(index)];
+}
+
+bool DocumentController::digitalStateAt(int index, double absoluteTimeSeconds) const {
+    if (index < 0 || index >= static_cast<int>(m_statusSamples.size()) || m_timeSeconds.empty()) return false;
+    const auto& samples = m_statusSamples[static_cast<std::size_t>(index)];
+    if (samples.empty()) return false;
+    const std::size_t sample = std::min(nearestSampleIndex(absoluteTimeSeconds), samples.size() - 1);
+    return samples[sample] != 0;
+}
+
+QString DocumentController::digitalStateText(int index, double absoluteTimeSeconds) const {
+    return digitalStateAt(index, absoluteTimeSeconds) ? QStringLiteral("1") : QStringLiteral("0");
 }
 
 void DocumentController::rebuildSelectedSamples() {

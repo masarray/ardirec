@@ -7,6 +7,7 @@
 #include <QUrl>
 
 #include <cstddef>
+#include <cstdint>
 #include <utility>
 #include <vector>
 
@@ -19,6 +20,8 @@ class DocumentController final : public QObject {
     Q_PROPERTY(QString selectedSignal READ selectedSignal NOTIFY waveformChanged)
     Q_PROPERTY(int selectedAnalogIndex READ selectedAnalogIndex NOTIFY waveformChanged)
     Q_PROPERTY(int analogCount READ analogCount NOTIFY documentChanged)
+    Q_PROPERTY(int digitalCount READ digitalCount NOTIFY documentChanged)
+    Q_PROPERTY(int activeDigitalCount READ activeDigitalCount NOTIFY documentChanged)
     Q_PROPERTY(qulonglong sampleCount READ sampleCount NOTIFY documentChanged)
     Q_PROPERTY(double durationSeconds READ durationSeconds NOTIFY documentChanged)
     Q_PROPERTY(double dataStartSeconds READ dataStartSeconds NOTIFY documentChanged)
@@ -41,6 +44,8 @@ public:
     QString selectedSignal() const { return m_selectedSignal; }
     int selectedAnalogIndex() const { return m_selectedAnalogIndex; }
     int analogCount() const { return m_analogCount; }
+    int digitalCount() const { return m_digitalCount; }
+    int activeDigitalCount() const { return m_activeDigitalCount; }
     qulonglong sampleCount() const { return static_cast<qulonglong>(m_timeSeconds.size()); }
     double durationSeconds() const;
     double dataStartSeconds() const;
@@ -57,6 +62,7 @@ public:
     [[nodiscard]] const std::vector<double>& selectedSamples() const { return m_selectedSamples; }
     [[nodiscard]] const std::vector<double>& timeSeconds() const { return m_timeSeconds; }
     [[nodiscard]] const std::vector<double>& analogSamples(int index) const;
+    [[nodiscard]] const std::vector<std::uint8_t>& statusSamples(int index) const;
     [[nodiscard]] std::pair<std::size_t, std::size_t> visibleSampleRange(double zoomFactor,
                                                                         double panFraction) const;
 
@@ -64,11 +70,16 @@ public:
     Q_INVOKABLE void selectChannel(int index);
     Q_INVOKABLE QString channelName(int index) const;
     Q_INVOKABLE QString channelUnit(int index) const;
+    Q_INVOKABLE QString analogRole(int index) const;
     Q_INVOKABLE double channelPeak(int index) const;
     Q_INVOKABLE double sampleValue(int channelIndex,
                                    double absoluteTimeSeconds) const;
     Q_INVOKABLE QString sampleValueText(int channelIndex,
                                         double absoluteTimeSeconds) const;
+    Q_INVOKABLE QString digitalName(int index) const;
+    Q_INVOKABLE bool digitalIsActive(int index) const;
+    Q_INVOKABLE bool digitalStateAt(int index, double absoluteTimeSeconds) const;
+    Q_INVOKABLE QString digitalStateText(int index, double absoluteTimeSeconds) const;
 
 signals:
     void documentChanged();
@@ -77,12 +88,14 @@ signals:
 
 private:
     void rebuildSelectedSamples();
+    [[nodiscard]] std::size_t nearestSampleIndex(double absoluteTimeSeconds) const;
 
     QString m_title{QStringLiteral("No record open")};
     QString m_metadata{QStringLiteral("Open a COMTRADE CFG to begin")};
     QStringList m_channels;
     QStringList m_channelNames;
     QStringList m_channelUnits;
+    QStringList m_statusNames;
     QString m_error;
     QString m_selectedSignal{QStringLiteral("No signal")};
     QString m_recorderId{QStringLiteral("—")};
@@ -93,9 +106,14 @@ private:
     QString m_recordHealth{QStringLiteral("No record")};
     int m_selectedAnalogIndex{-1};
     int m_analogCount{0};
+    int m_digitalCount{0};
+    int m_activeDigitalCount{0};
     double m_nominalFrequency{0.0};
     double m_triggerOffsetSeconds{0.0};
     std::vector<std::vector<double>> m_analogSamples;
+    std::vector<std::vector<std::uint8_t>> m_statusSamples;
+    std::vector<bool> m_statusActive;
+    std::vector<int> m_statusNormalState;
     std::vector<double> m_channelPeaks;
     std::vector<double> m_selectedSamples;
     std::vector<double> m_timeSeconds;

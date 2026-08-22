@@ -6,6 +6,8 @@ qt_add_executable(ardirec WIN32 MACOSX_BUNDLE
     document_controller.hpp
     waveform_item.cpp
     waveform_item.hpp
+    digital_item.cpp
+    digital_item.hpp
 )
 
 qt_add_qml_module(ardirec
@@ -18,6 +20,9 @@ qt_add_qml_module(ardirec
         qml/MeasurementPanel.qml
         qml/TimeRuler.qml
         qml/TrackView.qml
+        qml/EventStrip.qml
+        qml/SectionHeader.qml
+        qml/DigitalTrackView.qml
 )
 
 target_link_libraries(ardirec PRIVATE
