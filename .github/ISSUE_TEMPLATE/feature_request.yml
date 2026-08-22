@@ -1,0 +1,23 @@
+name: Feature request
+description: Propose an engineering workflow improvement
+title: "[feature] "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Engineering problem
+      description: Describe the workflow problem before proposing UI.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+    validations:
+      required: true
+  - type: dropdown
+    id: gate
+    attributes:
+      label: Likely roadmap gate
+      options: [G1 Viewer, G2 Compatibility, G3 Electrical Core, G4 Analysis Views, G5 Workflow, G7+ Future]

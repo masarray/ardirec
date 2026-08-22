@@ -1,0 +1,32 @@
+name: Bug report
+description: Report a reproducible defect
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction steps
+    validations:
+      required: true
+  - type: textarea
+    id: record
+    attributes:
+      label: COMTRADE details
+      description: Revision, DAT format, channel counts and whether the file can legally be shared.
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected vs actual
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: ardirec version / commit

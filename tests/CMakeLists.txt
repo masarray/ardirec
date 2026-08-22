@@ -1,0 +1,6 @@
+add_executable(ardirec_core_tests test_comtrade.cpp)
+target_link_libraries(ardirec_core_tests PRIVATE ardirec::core)
+target_compile_definitions(ardirec_core_tests PRIVATE ARDIREC_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
+ardirec_set_warnings(ardirec_core_tests)
+ardirec_enable_sanitizers(ardirec_core_tests)
+add_test(NAME ardirec_core_tests COMMAND ardirec_core_tests)

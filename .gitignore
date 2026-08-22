@@ -1,0 +1,22 @@
+# Build outputs
+/build/
+/build-*/
+/out/
+/dist/
+CMakeUserPresets.json
+
+# Qt / IDE
+.qmlcache/
+*.user
+*.user.*
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Generated / local
+compile_commands.json
+*.log
+*.tmp
