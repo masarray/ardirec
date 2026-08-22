@@ -204,6 +204,7 @@ void DocumentController::openCfg(const QUrl& url) {
             m_statusActive[channel] = active;
             if (active) ++m_activeDigitalCount;
         }
+        rebuildDigitalEdges();
 
         m_triggerOffsetSeconds = dataStartSeconds();
         const auto startStamp = parse_comtrade_timestamp(cfg.start_time.raw);
@@ -343,6 +344,48 @@ bool DocumentController::digitalStateAt(int index, double absoluteTimeSeconds) c
 
 QString DocumentController::digitalStateText(int index, double absoluteTimeSeconds) const {
     return digitalStateAt(index, absoluteTimeSeconds) ? QStringLiteral("1") : QStringLiteral("0");
+}
+
+double DocumentController::snapToDigitalEdge(double absoluteTimeSeconds, double maxDistanceSeconds) const {
+    if (m_digitalEdgeTimes.empty() || !std::isfinite(absoluteTimeSeconds)
+        || !std::isfinite(maxDistanceSeconds) || maxDistanceSeconds <= 0.0) {
+        return absoluteTimeSeconds;
+    }
+
+    const auto it = std::lower_bound(m_digitalEdgeTimes.begin(), m_digitalEdgeTimes.end(), absoluteTimeSeconds);
+    double nearest = absoluteTimeSeconds;
+    double distance = std::numeric_limits<double>::infinity();
+
+    if (it != m_digitalEdgeTimes.end()) {
+        nearest = *it;
+        distance = std::abs(*it - absoluteTimeSeconds);
+    }
+    if (it != m_digitalEdgeTimes.begin()) {
+        const double candidate = *std::prev(it);
+        const double candidateDistance = std::abs(candidate - absoluteTimeSeconds);
+        if (candidateDistance < distance) {
+            nearest = candidate;
+            distance = candidateDistance;
+        }
+    }
+
+    return distance <= maxDistanceSeconds ? nearest : absoluteTimeSeconds;
+}
+
+void DocumentController::rebuildDigitalEdges() {
+    m_digitalEdgeTimes.clear();
+    if (m_timeSeconds.size() < 2 || m_statusSamples.empty()) return;
+
+    for (const auto& samples : m_statusSamples) {
+        const std::size_t count = std::min(samples.size(), m_timeSeconds.size());
+        for (std::size_t i = 1; i < count; ++i) {
+            if (samples[i] != samples[i - 1]) m_digitalEdgeTimes.push_back(m_timeSeconds[i]);
+        }
+    }
+
+    std::sort(m_digitalEdgeTimes.begin(), m_digitalEdgeTimes.end());
+    m_digitalEdgeTimes.erase(std::unique(m_digitalEdgeTimes.begin(), m_digitalEdgeTimes.end()),
+                             m_digitalEdgeTimes.end());
 }
 
 void DocumentController::rebuildSelectedSamples() {
