@@ -64,7 +64,7 @@ jobs:
 
           $sfx = 'C:\Program Files\7-Zip\7z.sfx'
           if (!(Test-Path $sfx)) { throw "7-Zip SFX module not found at $sfx" }
-          $output = 'ardirec-v0.2.0-alpha.2-windows-x64-portable.exe'
+          $output = 'ardirec-v0.2.0-alpha.3-windows-x64-portable.exe'
           $stream = [System.IO.File]::Open($output, [System.IO.FileMode]::Create)
           try {
             foreach ($path in @($sfx, 'sfx-config.txt', 'ardirec-payload.7z')) {
@@ -79,27 +79,27 @@ jobs:
       - name: Publish GitHub prerelease
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v0.2.0-alpha.2
-          name: ardirec v0.2.0-alpha.2 — Analysis Workspace Alpha
+          tag_name: v0.2.0-alpha.3
+          name: ardirec v0.2.0-alpha.3 — Disturbance Stack Alpha
           prerelease: true
           make_latest: false
           generate_release_notes: true
           body: |
-            Second ardirec desktop alpha, rebuilt around a disturbance-analysis workflow rather than a single-waveform viewer.
+            Third ardirec desktop alpha. The Time Signals workspace now behaves like a real disturbance-record stack while keeping ardirec's own visual identity.
 
             Highlights:
-            - SIGRA-style synchronized stacked analog tracks on one shared timebase.
-            - COMTRADE trigger-relative time ruler and visible trigger marker.
-            - Absolute dual cursors with a compact cursor measurement table.
-            - Instantaneous values and cursor delta for the selected measuring signal.
-            - Signal drawer for adding/removing up to eight analysis tracks.
-            - Fit-record and trigger-focus navigation plus mouse-centered zoom and synchronized pan.
-            - Improved Scene Graph decimation so ordinary AC waveforms remain readable instead of becoming vertical envelopes too early.
-            - Portable Windows x64 distribution as one EXE download.
+            - Voltage and current channels are recognized and shown as separate synchronized sections.
+            - The workspace scrolls vertically instead of compressing every signal into the viewport.
+            - COMTRADE digital/status channels are decoded and rendered as timing bars on the same timebase.
+            - Digital Events can show active channels or all channels.
+            - Trigger, Cursor 1 and Cursor 2 remain synchronized through analog and digital rows.
+            - Mouse wheel scrolls the signal stack; Ctrl+wheel zooms the common timebase.
+            - Event/trigger strip and pinned time ruler make the fault-record workflow immediately recognizable.
+            - Portable Windows x64 distribution remains one EXE download.
 
-            Alpha limitation: the desktop preview currently caps loading at 500,000 sample frames while the memory-mapped/LOD SignalStore is being completed. Digital channels are parsed but dedicated digital-track rendering is still pending.
+            Alpha limitation: loading is still capped at 500,000 sample frames while the memory-mapped SignalStore and persistent LOD cache are being completed. RMS/phasor/vector/R-X/harmonics are later gates.
 
             This build is unsigned, so Windows SmartScreen may show a warning.
           files: |
-            ardirec-v0.2.0-alpha.2-windows-x64-portable.exe
+            ardirec-v0.2.0-alpha.3-windows-x64-portable.exe
             SHA256SUMS.txt
