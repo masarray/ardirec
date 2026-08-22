@@ -30,7 +30,6 @@ jobs:
       - uses: jurplel/install-qt-action@v4
         with:
           version: '6.8.3'
-          modules: 'qtdeclarative'
           cache: true
       - name: Configure
         run: cmake -S . -B build -DARDIREC_BUILD_DESKTOP=ON -DARDIREC_BUILD_TESTS=ON
