@@ -15,6 +15,9 @@ qt_add_qml_module(ardirec
         qml/Main.qml
         qml/SignalSidebar.qml
         qml/TopBar.qml
+        qml/MeasurementPanel.qml
+        qml/TimeRuler.qml
+        qml/TrackView.qml
 )
 
 target_link_libraries(ardirec PRIVATE
