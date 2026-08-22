@@ -64,7 +64,7 @@ jobs:
 
           $sfx = 'C:\Program Files\7-Zip\7z.sfx'
           if (!(Test-Path $sfx)) { throw "7-Zip SFX module not found at $sfx" }
-          $output = 'ardirec-v0.2.0-alpha.2-windows-x64-portable.exe'
+          $output = 'ardirec-v0.2.0-alpha.3-windows-x64-portable.exe'
           $stream = [System.IO.File]::Open($output, [System.IO.FileMode]::Create)
           try {
             foreach ($path in @($sfx, 'sfx-config.txt', 'ardirec-payload.7z')) {
@@ -80,6 +80,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ardirec-windows-x64-portable
-          path: ardirec-v0.2.0-alpha.2-windows-x64-portable.exe
+          path: ardirec-v0.2.0-alpha.3-windows-x64-portable.exe
           if-no-files-found: error
           retention-days: 14
