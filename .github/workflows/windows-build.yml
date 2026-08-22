@@ -1,0 +1,85 @@
+name: Windows Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-portable:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.4'
+          arch: 'win64_msvc2022_64'
+          cache: true
+
+      - name: Configure
+        shell: pwsh
+        run: >-
+          cmake -S . -B build -A x64
+          -DARDIREC_BUILD_DESKTOP=ON
+          -DARDIREC_BUILD_TESTS=ON
+
+      - name: Build
+        shell: pwsh
+        run: cmake --build build --config Release --parallel 2
+
+      - name: Test
+        shell: pwsh
+        run: ctest --test-dir build -C Release --output-on-failure
+
+      - name: Stage Qt application
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path package | Out-Null
+          Copy-Item build/apps/desktop/Release/ardirec.exe package/ardirec.exe
+          windeployqt --release --compiler-runtime --no-translations --qmldir apps/desktop/qml package/ardirec.exe
+
+      - name: Build single-file portable EXE
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Push-Location package
+          & 7z a ..\ardirec-payload.7z .\* -mx=9 | Out-Host
+          Pop-Location
+
+          @'
+          ;!@Install@!UTF-8!
+          Title="ardirec"
+          RunProgram="ardirec.exe"
+          GUIMode="2"
+          ;!@InstallEnd@!
+          '@ | Set-Content -Encoding UTF8 sfx-config.txt
+
+          $sfx = 'C:\Program Files\7-Zip\7z.sfx'
+          if (!(Test-Path $sfx)) { throw "7-Zip SFX module not found at $sfx" }
+          $output = 'ardirec-v0.2.0-alpha.1-windows-x64-portable.exe'
+          $stream = [System.IO.File]::Open($output, [System.IO.FileMode]::Create)
+          try {
+            foreach ($path in @($sfx, 'sfx-config.txt', 'ardirec-payload.7z')) {
+              $bytes = [System.IO.File]::ReadAllBytes($path)
+              $stream.Write($bytes, 0, $bytes.Length)
+            }
+          } finally {
+            $stream.Dispose()
+          }
+          Get-FileHash $output -Algorithm SHA256 | Format-List
+
+      - name: Upload single EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: ardirec-windows-x64-portable
+          path: ardirec-v0.2.0-alpha.1-windows-x64-portable.exe
+          if-no-files-found: error
+          retention-days: 14
