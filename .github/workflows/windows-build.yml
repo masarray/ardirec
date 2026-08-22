@@ -42,44 +42,25 @@ jobs:
       - name: Stage Qt application
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path package | Out-Null
-          Copy-Item build/apps/desktop/Release/ardirec.exe package/ardirec.exe
-          windeployqt --release --compiler-runtime --no-translations --qmldir apps/desktop/qml package/ardirec.exe
+          $folder = 'ardirec-v0.2.0-alpha.5-windows-x64'
+          New-Item -ItemType Directory -Force -Path $folder | Out-Null
+          Copy-Item build/apps/desktop/Release/ardirec.exe "$folder/ardirec.exe"
+          windeployqt --release --compiler-runtime --no-translations --qmldir apps/desktop/qml "$folder/ardirec.exe"
 
-      - name: Build single-file portable EXE
+      - name: Build portable ZIP
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          Push-Location package
-          & 7z a ..\ardirec-payload.7z .\* -mx=9 | Out-Host
-          Pop-Location
+          $folder = 'ardirec-v0.2.0-alpha.5-windows-x64'
+          $zip = 'ardirec-v0.2.0-alpha.5-windows-x64-portable.zip'
+          if (Test-Path $zip) { Remove-Item $zip -Force }
+          Compress-Archive -Path $folder -DestinationPath $zip -CompressionLevel Optimal
+          Get-FileHash $zip -Algorithm SHA256 | Format-List
 
-          @'
-          ;!@Install@!UTF-8!
-          Title="ardirec"
-          RunProgram="ardirec.exe"
-          GUIMode="2"
-          ;!@InstallEnd@!
-          '@ | Set-Content -Encoding UTF8 sfx-config.txt
-
-          $sfx = 'C:\Program Files\7-Zip\7z.sfx'
-          if (!(Test-Path $sfx)) { throw "7-Zip SFX module not found at $sfx" }
-          $output = 'ardirec-v0.2.0-alpha.4-windows-x64-portable.exe'
-          $stream = [System.IO.File]::Open($output, [System.IO.FileMode]::Create)
-          try {
-            foreach ($path in @($sfx, 'sfx-config.txt', 'ardirec-payload.7z')) {
-              $bytes = [System.IO.File]::ReadAllBytes($path)
-              $stream.Write($bytes, 0, $bytes.Length)
-            }
-          } finally {
-            $stream.Dispose()
-          }
-          Get-FileHash $output -Algorithm SHA256 | Format-List
-
-      - name: Upload single EXE
+      - name: Upload portable ZIP
         uses: actions/upload-artifact@v4
         with:
-          name: ardirec-windows-x64-portable
-          path: ardirec-v0.2.0-alpha.4-windows-x64-portable.exe
+          name: ardirec-windows-x64-portable-zip
+          path: ardirec-v0.2.0-alpha.5-windows-x64-portable.zip
           if-no-files-found: error
           retention-days: 14
