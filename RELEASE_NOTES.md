@@ -1,24 +1,30 @@
-# ardirec v0.2.0-alpha.1 — G1 Viewer Alpha
+# ardirec v0.2.0-alpha.2 — Analysis Workspace Alpha
 
-This is the first testable Windows desktop build of **ardirec**.
+This alpha replaces the original single-waveform viewer with a disturbance-analysis workspace designed around the workflow of established tools such as SIGRA, while keeping ardirec's own implementation and visual identity.
 
-## What works
+## What changed
 
-- Open a COMTRADE `.cfg` and automatically locate its companion `.dat`.
-- Decode ASCII, BINARY, BINARY32 and FLOAT32 sample data using the native C++ core.
-- Display the first/selected analog channel with a custom Qt Quick Scene Graph waveform renderer.
-- Select analog channels from the signal list.
-- Zoom with the mouse wheel and pan the visible record by dragging.
-- Use two visible cursors for basic time measurement.
-- Show record metadata and sample count.
-- Package the Qt runtime into a single portable Windows `.exe` download.
+- Multiple analog channels are displayed as synchronized stacked tracks instead of one fullscreen waveform.
+- A shared trigger-relative time ruler spans every track.
+- The COMTRADE trigger is drawn as a common vertical reference through all traces.
+- Dual cursors now represent absolute record time, so zooming and panning no longer change the measured timestamps.
+- A compact cursor table shows Cursor 1, Cursor 2, C2-C1, instantaneous values and time-derived frequency.
+- The measuring signal can be changed independently from the visible track set.
+- The signal browser is now an on-demand drawer rather than a permanent sidebar that steals plot width.
+- Up to eight analog tracks can be added or removed from the workspace.
+- Fit Record and Trigger Focus navigation are available from the main toolbar.
+- Mouse-wheel zoom is centered around the pointer position and all tracks pan together.
+- The Scene Graph renderer no longer switches to a min/max envelope for ordinary 3–4 samples-per-pixel AC waveforms; envelope rendering is reserved for genuinely dense views.
+- Vertical scaling is centered around zero for electrical waveforms.
+- Record station, recorder, COMTRADE revision/format, nominal frequency, start time and trigger time remain visible during analysis.
+- Windows packaging remains a one-file portable EXE.
 
 ## Alpha limitations
 
-- Desktop loading is deliberately capped at 500,000 sample frames until the memory-mapped SignalStore and persistent LOD cache land.
-- Digital channels are parsed but digital-track rendering is not in this alpha.
-- Cursor snapping, RMS/phasor/vector/R-X/harmonics and workspace persistence are later G1/G2 gates.
-- The Windows binary is currently unsigned and may trigger SmartScreen.
+- Desktop loading remains capped at 500,000 sample frames until the memory-mapped SignalStore and persistent LOD cache land.
+- Digital channels are decoded by the core but dedicated digital transition tracks are not yet shown in the workspace.
+- Per-track manual Y scaling, cursor sample snapping, RMS/phasor/vector/R-X/harmonics and workspace persistence remain future gates.
+- The Windows binary is unsigned and may trigger SmartScreen.
 
 ## Packaging note
 
