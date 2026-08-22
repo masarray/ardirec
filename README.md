@@ -17,19 +17,27 @@ ardirec targets four qualities above feature count:
 
 See [PRD](docs/PRD.md), [parity matrix](docs/PARITY_MATRIX.md), [architecture](docs/ARCHITECTURE.md), and [roadmap](docs/ROADMAP.md).
 
-## Current status — G0 Foundation
+## Current status — G1 Viewer Alpha
 
-This repository already contains:
+The first testable desktop alpha now contains:
 
-- C++20 COMTRADE CFG parser foundation.
-- Reference DAT decoder for ASCII, BINARY, BINARY32 and FLOAT32.
+- C++20 COMTRADE CFG parser.
+- DAT decoding for ASCII, BINARY, BINARY32 and FLOAT32.
+- Packed digital/status decoding.
 - Automatic sibling-file discovery (`.cfg/.dat/.hdr/.inf/.dmf`).
 - `ardirec-cli inspect` for deterministic parser smoke tests.
-- Qt Quick desktop shell with a custom `QQuickItem` / Qt Scene Graph waveform renderer skeleton.
-- Unit-test fixture and CI-ready CMake structure.
+- Qt Quick desktop viewer that opens a real CFG/DAT pair and renders selected analog samples through a custom `QQuickItem` / Qt Scene Graph path.
+- Min/max display decimation, analog channel selection, mouse-wheel zoom, drag pan and dual cursors.
+- Windows CI plus a one-file portable EXE packaging workflow.
 - Product, compatibility, performance and validation specifications.
 
-The reference DAT decoder is deliberately **not** the final large-file viewer backend. G1 introduces memory-mapped/lazy decoding and a min/max LOD pyramid before real records are connected to the GPU renderer.
+The alpha deliberately caps desktop preview loading at **500,000 frames**. The next G1 slice replaces this temporary limit with a memory-mapped/lazy SignalStore and persistent multi-resolution LOD pyramid.
+
+## Try the Windows alpha
+
+The GitHub prerelease `v0.2.0-alpha.1` publishes `ardirec-v0.2.0-alpha.1-windows-x64-portable.exe`. It is a single-download self-extracting portable bundle: no installer is written to Windows, although the private Qt runtime is unpacked to a temporary directory while the application runs.
+
+The alpha binary is unsigned, so Windows SmartScreen may warn on first launch.
 
 ## Build
 
