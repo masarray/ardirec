@@ -1,4 +1,4 @@
-name: Release Portable
+name: Release Portable ZIP
 
 on:
   push:
@@ -42,64 +42,46 @@ jobs:
       - name: Stage Qt application
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path package | Out-Null
-          Copy-Item build/apps/desktop/Release/ardirec.exe package/ardirec.exe
-          windeployqt --release --compiler-runtime --no-translations --qmldir apps/desktop/qml package/ardirec.exe
+          $folder = 'ardirec-v0.2.0-alpha.5-windows-x64'
+          New-Item -ItemType Directory -Force -Path $folder | Out-Null
+          Copy-Item build/apps/desktop/Release/ardirec.exe "$folder/ardirec.exe"
+          windeployqt --release --compiler-runtime --no-translations --qmldir apps/desktop/qml "$folder/ardirec.exe"
 
-      - name: Build portable EXE
+      - name: Build portable ZIP
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          Push-Location package
-          & 7z a ..\ardirec-payload.7z .\* -mx=9 | Out-Host
-          Pop-Location
-
-          @'
-          ;!@Install@!UTF-8!
-          Title="ardirec"
-          RunProgram="ardirec.exe"
-          GUIMode="2"
-          ;!@InstallEnd@!
-          '@ | Set-Content -Encoding UTF8 sfx-config.txt
-
-          $sfx = 'C:\Program Files\7-Zip\7z.sfx'
-          if (!(Test-Path $sfx)) { throw "7-Zip SFX module not found at $sfx" }
-          $output = 'ardirec-v0.2.0-alpha.4-windows-x64-portable.exe'
-          $stream = [System.IO.File]::Open($output, [System.IO.FileMode]::Create)
-          try {
-            foreach ($path in @($sfx, 'sfx-config.txt', 'ardirec-payload.7z')) {
-              $bytes = [System.IO.File]::ReadAllBytes($path)
-              $stream.Write($bytes, 0, $bytes.Length)
-            }
-          } finally {
-            $stream.Dispose()
-          }
-          (Get-FileHash $output -Algorithm SHA256).Hash + '  ' + $output | Set-Content SHA256SUMS.txt
+          $folder = 'ardirec-v0.2.0-alpha.5-windows-x64'
+          $zip = 'ardirec-v0.2.0-alpha.5-windows-x64-portable.zip'
+          if (Test-Path $zip) { Remove-Item $zip -Force }
+          Compress-Archive -Path $folder -DestinationPath $zip -CompressionLevel Optimal
+          (Get-FileHash $zip -Algorithm SHA256).Hash + '  ' + $zip | Set-Content SHA256SUMS.txt
 
       - name: Publish GitHub prerelease
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v0.2.0-alpha.4
-          name: ardirec v0.2.0-alpha.4 — Cursor Edge Snap Alpha
+          tag_name: v0.2.0-alpha.5
+          name: ardirec v0.2.0-alpha.5 — Portable ZIP Development Build
           prerelease: true
           make_latest: false
           generate_release_notes: true
           body: |
-            Fourth ardirec desktop alpha, focused on precision timing measurements across protection digital states.
+            Development distribution policy update for ardirec.
 
-            Highlights:
-            - Hover a measurement cursor and the pointer changes to a horizontal-resize cursor.
-            - Cursor 1 and Cursor 2 snap to nearby COMTRADE digital/status transitions while being dragged.
-            - Rising and falling edges are both snap targets, enabling precise Pickup → Trip, Pickup → Dropoff, Trip → CB Open and similar measurements.
-            - Snap tolerance is visual/pixel based, so it feels consistent at every time zoom level.
-            - Digital transition timestamps are indexed once when the record loads; cursor dragging uses logarithmic nearest-edge lookup.
-            - Right-click placement/drag of Cursor 2 uses the same edge snapping behavior.
-            - Existing disturbance stack, synchronized voltage/current/digital tracks, vertical scrolling, pan and Ctrl+wheel zoom remain intact.
-            - Portable Windows x64 distribution remains one EXE download.
+            Windows alpha/beta builds now ship as a transparent portable ZIP folder instead of a self-extracting EXE. This keeps the development workflow fast, makes the Qt runtime layout explicit, and avoids confusing a self-extracting bundle with a true monolithic executable.
+
+            Usage:
+            1. Download `ardirec-v0.2.0-alpha.5-windows-x64-portable.zip`.
+            2. Extract the folder anywhere.
+            3. Run `ardirec.exe` inside the extracted folder.
+
+            The application remains fully portable: no installer is required and no installation is written to Windows. A proper installer will be introduced closer to stable/final releases.
+
+            This build retains the alpha.4 cursor improvements, including horizontal-resize hover feedback and snapping Cursor 1 / Cursor 2 to rising and falling COMTRADE digital transitions.
 
             Alpha limitation: loading is still capped at 500,000 sample frames while the memory-mapped SignalStore and persistent LOD cache are being completed. RMS/phasor/vector/R-X/harmonics remain later gates.
 
-            This build is unsigned, so Windows SmartScreen may show a warning.
+            The executable is unsigned, so Windows SmartScreen may show a warning.
           files: |
-            ardirec-v0.2.0-alpha.4-windows-x64-portable.exe
+            ardirec-v0.2.0-alpha.5-windows-x64-portable.zip
             SHA256SUMS.txt
