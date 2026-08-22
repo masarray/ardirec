@@ -80,6 +80,8 @@ public:
     Q_INVOKABLE bool digitalIsActive(int index) const;
     Q_INVOKABLE bool digitalStateAt(int index, double absoluteTimeSeconds) const;
     Q_INVOKABLE QString digitalStateText(int index, double absoluteTimeSeconds) const;
+    Q_INVOKABLE double snapToDigitalEdge(double absoluteTimeSeconds,
+                                         double maxDistanceSeconds) const;
 
 signals:
     void documentChanged();
@@ -89,6 +91,7 @@ signals:
 private:
     void rebuildSelectedSamples();
     [[nodiscard]] std::size_t nearestSampleIndex(double absoluteTimeSeconds) const;
+    void rebuildDigitalEdges();
 
     QString m_title{QStringLiteral("No record open")};
     QString m_metadata{QStringLiteral("Open a COMTRADE CFG to begin")};
@@ -114,6 +117,7 @@ private:
     std::vector<std::vector<std::uint8_t>> m_statusSamples;
     std::vector<bool> m_statusActive;
     std::vector<int> m_statusNormalState;
+    std::vector<double> m_digitalEdgeTimes;
     std::vector<double> m_channelPeaks;
     std::vector<double> m_selectedSamples;
     std::vector<double> m_timeSeconds;

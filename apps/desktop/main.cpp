@@ -12,7 +12,7 @@ int main(int argc, char* argv[]) {
     QGuiApplication app(argc, argv);
     QGuiApplication::setApplicationName(QStringLiteral("ardirec"));
     QGuiApplication::setOrganizationName(QStringLiteral("ardirec"));
-    QGuiApplication::setApplicationVersion(QStringLiteral("0.2.0-alpha.3"));
+    QGuiApplication::setApplicationVersion(QStringLiteral("0.2.0-alpha.4"));
 
     qmlRegisterType<WaveformItem>("Ardirec.Render", 1, 0, "WaveformItem");
     qmlRegisterType<DigitalItem>("Ardirec.Render", 1, 0, "DigitalItem");
