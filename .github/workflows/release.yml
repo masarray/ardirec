@@ -64,7 +64,7 @@ jobs:
 
           $sfx = 'C:\Program Files\7-Zip\7z.sfx'
           if (!(Test-Path $sfx)) { throw "7-Zip SFX module not found at $sfx" }
-          $output = 'ardirec-v0.2.0-alpha.3-windows-x64-portable.exe'
+          $output = 'ardirec-v0.2.0-alpha.4-windows-x64-portable.exe'
           $stream = [System.IO.File]::Open($output, [System.IO.FileMode]::Create)
           try {
             foreach ($path in @($sfx, 'sfx-config.txt', 'ardirec-payload.7z')) {
@@ -79,27 +79,27 @@ jobs:
       - name: Publish GitHub prerelease
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v0.2.0-alpha.3
-          name: ardirec v0.2.0-alpha.3 — Disturbance Stack Alpha
+          tag_name: v0.2.0-alpha.4
+          name: ardirec v0.2.0-alpha.4 — Cursor Edge Snap Alpha
           prerelease: true
           make_latest: false
           generate_release_notes: true
           body: |
-            Third ardirec desktop alpha. The Time Signals workspace now behaves like a real disturbance-record stack while keeping ardirec's own visual identity.
+            Fourth ardirec desktop alpha, focused on precision timing measurements across protection digital states.
 
             Highlights:
-            - Voltage and current channels are recognized and shown as separate synchronized sections.
-            - The workspace scrolls vertically instead of compressing every signal into the viewport.
-            - COMTRADE digital/status channels are decoded and rendered as timing bars on the same timebase.
-            - Digital Events can show active channels or all channels.
-            - Trigger, Cursor 1 and Cursor 2 remain synchronized through analog and digital rows.
-            - Mouse wheel scrolls the signal stack; Ctrl+wheel zooms the common timebase.
-            - Event/trigger strip and pinned time ruler make the fault-record workflow immediately recognizable.
+            - Hover a measurement cursor and the pointer changes to a horizontal-resize cursor.
+            - Cursor 1 and Cursor 2 snap to nearby COMTRADE digital/status transitions while being dragged.
+            - Rising and falling edges are both snap targets, enabling precise Pickup → Trip, Pickup → Dropoff, Trip → CB Open and similar measurements.
+            - Snap tolerance is visual/pixel based, so it feels consistent at every time zoom level.
+            - Digital transition timestamps are indexed once when the record loads; cursor dragging uses logarithmic nearest-edge lookup.
+            - Right-click placement/drag of Cursor 2 uses the same edge snapping behavior.
+            - Existing disturbance stack, synchronized voltage/current/digital tracks, vertical scrolling, pan and Ctrl+wheel zoom remain intact.
             - Portable Windows x64 distribution remains one EXE download.
 
-            Alpha limitation: loading is still capped at 500,000 sample frames while the memory-mapped SignalStore and persistent LOD cache are being completed. RMS/phasor/vector/R-X/harmonics are later gates.
+            Alpha limitation: loading is still capped at 500,000 sample frames while the memory-mapped SignalStore and persistent LOD cache are being completed. RMS/phasor/vector/R-X/harmonics remain later gates.
 
             This build is unsigned, so Windows SmartScreen may show a warning.
           files: |
-            ardirec-v0.2.0-alpha.3-windows-x64-portable.exe
+            ardirec-v0.2.0-alpha.4-windows-x64-portable.exe
             SHA256SUMS.txt
