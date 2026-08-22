@@ -8,7 +8,7 @@
 
 class DocumentController;
 
-class WaveformItem final : public QQuickItem {
+class WaveformItem : public QQuickItem {
     Q_OBJECT
     Q_PROPERTY(QObject* document READ document WRITE setDocument NOTIFY documentChanged)
     Q_PROPERTY(double zoomFactor READ zoomFactor WRITE setZoomFactor NOTIFY viewChanged)
@@ -16,7 +16,7 @@ class WaveformItem final : public QQuickItem {
 public:
     explicit WaveformItem(QQuickItem* parent = nullptr);
 
-    QObject* document() const { return m_document; }
+    QObject* document() const { return m_document.data(); }
     void setDocument(QObject* document);
 
     double zoomFactor() const { return m_zoomFactor; }
