@@ -1,21 +1,33 @@
 # Project Status
 
-**Current gate:** G0 — Foundation
+## Current milestone
 
-## Verified locally
+**G1 — Viewer Alpha (`v0.2.0-alpha.1`)**
 
-- CMake configure with desktop disabled.
-- C++20 core compilation with GCC 14.
-- Core regression test passes.
-- ASCII DAT decode/scaling fixture passes.
-- BINARY, BINARY32 and FLOAT32 reference decode/scaling fixtures pass.
-- Packed digital status decode passes.
-- CLI can inspect the bundled synthetic COMTRADE fixture.
+## Implemented
 
-## Not yet locally verified in this bootstrap environment
+- C++20 COMTRADE CFG parser.
+- DAT reader for ASCII, BINARY, BINARY32 and FLOAT32.
+- Packed digital decoding.
+- Companion-file discovery for CFG/DAT/HDR/INF/DMF.
+- Native CLI inspection tool.
+- Synthetic compatibility fixtures and regression tests.
+- Qt Quick desktop shell.
+- Real COMTRADE analog sample loading into the desktop document model.
+- Custom Qt Quick Scene Graph waveform rendering.
+- Min/max display decimation for zoomed-out waveform views.
+- Analog channel selection.
+- Basic zoom, pan and dual cursors.
+- Windows CI and one-file portable EXE packaging.
 
-Qt is not installed in the bootstrap container, so the Qt Quick target has not been compiled locally. GitHub Actions is configured to install Qt 6.8.4 and compile the desktop target after publication.
+## Next engineering gates
 
-## Next engineering milestone
+1. Memory-mapped binary SignalStore and indexed ASCII cache.
+2. Persistent multi-resolution LOD pyramid for very large records.
+3. Dedicated digital transition renderer.
+4. Accurate shared time axis and cursor snap modes.
+5. Record Health diagnostics and compatibility warnings.
+6. RMS/phasor/symmetrical-component calculation engine.
+7. Vector, R-X, harmonics and value-table views.
 
-G1 connects real COMTRADE samples to the Scene Graph renderer through a large-file SignalStore + min/max LOD path and adds shared pan/zoom plus dual cursors.
+The product scope remains locked: manual disturbance-analysis parity first, then multi-record combine/synchronization, then fault analysis.
