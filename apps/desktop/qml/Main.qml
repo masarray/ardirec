@@ -29,6 +29,8 @@ ApplicationWindow {
     property real axisWidth: 170
     property real analogTrackHeight: 148
     property real digitalTrackHeight: 28
+    property real cursorHoverRadius: 8
+    property real cursorSnapRadius: 12
     property var tracePalette: ["#a5751b", "#315b8a", "#2b8b82", "#8a4f63", "#556f32", "#70528d", "#a05935", "#4f6f79"]
 
     readonly property bool hasRecord: documentController.sampleCount > 1 && documentController.analogCount > 0
@@ -477,8 +479,40 @@ ApplicationWindow {
                 property bool movingCursorA: false
                 property bool movingCursorB: false
                 property bool panning: false
+                property bool hoverCursorA: false
+                property bool hoverCursorB: false
                 property real pressX: 0
                 property real panStartTime: 0
+
+                cursorShape: movingCursorA || movingCursorB || hoverCursorA || hoverCursorB
+                             ? Qt.SizeHorCursor
+                             : (panning ? Qt.ClosedHandCursor : Qt.ArrowCursor)
+
+                function cursorPixel(timeSeconds) {
+                    return (timeSeconds - window.viewStart)
+                           / Math.max(1e-12, window.visibleDuration) * width
+                }
+
+                function updateCursorHover(mouseX) {
+                    const ax = cursorPixel(window.cursorATime)
+                    const bx = cursorPixel(window.cursorBTime)
+                    hoverCursorA = window.cursorATime >= window.viewStart
+                                   && window.cursorATime <= window.viewEnd
+                                   && Math.abs(mouseX - ax) <= window.cursorHoverRadius
+                    hoverCursorB = window.cursorBTime >= window.viewStart
+                                   && window.cursorBTime <= window.viewEnd
+                                   && Math.abs(mouseX - bx) <= window.cursorHoverRadius
+                }
+
+                function snapCursorTime(targetTime) {
+                    const clamped = window.clamp(targetTime,
+                                                 documentController.dataStartSeconds,
+                                                 documentController.dataEndSeconds)
+                    if (documentController.digitalCount <= 0 || window.visibleDuration <= 0) return clamped
+                    const thresholdSeconds = window.visibleDuration
+                                             * window.cursorSnapRadius / Math.max(1, width)
+                    return documentController.snapToDigitalEdge(clamped, thresholdSeconds)
+                }
 
                 onPressed: mouse => {
                     const fraction = window.clamp(mouse.x / Math.max(1, width), 0, 1)
@@ -486,18 +520,23 @@ ApplicationWindow {
                     movingCursorA = false
                     movingCursorB = false
                     panning = false
+                    updateCursorHover(mouse.x)
 
                     if (mouse.button === Qt.RightButton) {
-                        window.cursorBTime = targetTime
+                        window.cursorBTime = snapCursorTime(targetTime)
                         movingCursorB = true
+                        hoverCursorB = true
                         return
                     }
 
-                    const ax = (window.cursorATime - window.viewStart) / Math.max(1e-12, window.visibleDuration) * width
-                    const bx = (window.cursorBTime - window.viewStart) / Math.max(1e-12, window.visibleDuration) * width
-                    if (Math.abs(mouse.x - ax) <= 9) movingCursorA = true
-                    else if (Math.abs(mouse.x - bx) <= 9) movingCursorB = true
-                    else {
+                    const ax = cursorPixel(window.cursorATime)
+                    const bx = cursorPixel(window.cursorBTime)
+                    const distanceA = Math.abs(mouse.x - ax)
+                    const distanceB = Math.abs(mouse.x - bx)
+                    if (distanceA <= window.cursorHoverRadius || distanceB <= window.cursorHoverRadius) {
+                        if (distanceA <= distanceB) movingCursorA = true
+                        else movingCursorB = true
+                    } else {
                         panning = true
                         pressX = mouse.x
                         panStartTime = window.viewStart
@@ -505,17 +544,14 @@ ApplicationWindow {
                 }
 
                 onPositionChanged: mouse => {
+                    updateCursorHover(mouse.x)
                     if (!(mouse.buttons & (Qt.LeftButton | Qt.RightButton))) return
                     const fraction = window.clamp(mouse.x / Math.max(1, width), 0, 1)
                     const targetTime = window.timeAtFraction(fraction)
                     if (movingCursorA) {
-                        window.cursorATime = window.clamp(targetTime,
-                                                         documentController.dataStartSeconds,
-                                                         documentController.dataEndSeconds)
+                        window.cursorATime = snapCursorTime(targetTime)
                     } else if (movingCursorB) {
-                        window.cursorBTime = window.clamp(targetTime,
-                                                         documentController.dataStartSeconds,
-                                                         documentController.dataEndSeconds)
+                        window.cursorBTime = snapCursorTime(targetTime)
                     } else if (panning && window.waveformZoom > 1.0) {
                         const deltaTime = (mouse.x - pressX) / Math.max(1, width) * window.visibleDuration
                         const desiredStart = panStartTime - deltaTime
@@ -526,10 +562,26 @@ ApplicationWindow {
                     }
                 }
 
-                onReleased: {
+                onReleased: mouse => {
                     movingCursorA = false
                     movingCursorB = false
                     panning = false
+                    updateCursorHover(mouse.x)
+                }
+
+                onCanceled: {
+                    movingCursorA = false
+                    movingCursorB = false
+                    panning = false
+                    hoverCursorA = false
+                    hoverCursorB = false
+                }
+
+                onExited: {
+                    if (!movingCursorA && !movingCursorB) {
+                        hoverCursorA = false
+                        hoverCursorB = false
+                    }
                 }
 
                 onWheel: wheel => {
@@ -573,7 +625,7 @@ ApplicationWindow {
                 }
                 Item { Layout.fillWidth: true }
                 Label {
-                    text: "Wheel scrolls signals · Ctrl+wheel zooms time · left-drag pans · right-click places Cursor 2"
+                    text: "Wheel scrolls signals · Ctrl+wheel zooms time · drag cursor ↔ snaps to digital edges · right-click places Cursor 2"
                     color: "#666666"
                     font.pixelSize: 8
                 }
