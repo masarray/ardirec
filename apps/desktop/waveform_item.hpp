@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #pragma once
 
+#include "document_controller.hpp"
+
 #include <QPointer>
 #include <QQuickItem>
 
 #include <vector>
-
-class DocumentController;
 
 class WaveformItem : public QQuickItem {
     Q_OBJECT
