@@ -1,0 +1,102 @@
+name: Release Portable
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release-windows:
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[release]')
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.4'
+          arch: 'win64_msvc2022_64'
+          cache: true
+
+      - name: Configure
+        shell: pwsh
+        run: >-
+          cmake -S . -B build -A x64
+          -DARDIREC_BUILD_DESKTOP=ON
+          -DARDIREC_BUILD_TESTS=ON
+
+      - name: Build
+        shell: pwsh
+        run: cmake --build build --config Release --parallel 2
+
+      - name: Test
+        shell: pwsh
+        run: ctest --test-dir build -C Release --output-on-failure
+
+      - name: Stage Qt application
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path package | Out-Null
+          Copy-Item build/apps/desktop/Release/ardirec.exe package/ardirec.exe
+          windeployqt --release --compiler-runtime --no-translations --qmldir apps/desktop/qml package/ardirec.exe
+
+      - name: Build portable EXE
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Push-Location package
+          & 7z a ..\ardirec-payload.7z .\* -mx=9 | Out-Host
+          Pop-Location
+
+          @'
+          ;!@Install@!UTF-8!
+          Title="ardirec"
+          RunProgram="ardirec.exe"
+          GUIMode="2"
+          ;!@InstallEnd@!
+          '@ | Set-Content -Encoding UTF8 sfx-config.txt
+
+          $sfx = 'C:\Program Files\7-Zip\7z.sfx'
+          if (!(Test-Path $sfx)) { throw "7-Zip SFX module not found at $sfx" }
+          $output = 'ardirec-v0.2.0-alpha.1-windows-x64-portable.exe'
+          $stream = [System.IO.File]::Open($output, [System.IO.FileMode]::Create)
+          try {
+            foreach ($path in @($sfx, 'sfx-config.txt', 'ardirec-payload.7z')) {
+              $bytes = [System.IO.File]::ReadAllBytes($path)
+              $stream.Write($bytes, 0, $bytes.Length)
+            }
+          } finally {
+            $stream.Dispose()
+          }
+          (Get-FileHash $output -Algorithm SHA256).Hash + '  ' + $output | Set-Content SHA256SUMS.txt
+
+      - name: Publish GitHub prerelease
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v0.2.0-alpha.1
+          name: ardirec v0.2.0-alpha.1 — G1 Viewer Alpha
+          prerelease: true
+          make_latest: false
+          generate_release_notes: true
+          body: |
+            First testable ardirec desktop build.
+
+            Highlights:
+            - Open COMTRADE CFG and auto-locate matching DAT.
+            - Decode ASCII, BINARY, BINARY32 and FLOAT32 sample data.
+            - Render real selected analog waveform through Qt Quick Scene Graph.
+            - Basic channel selection, zoom, pan and dual measurement cursors.
+            - Portable Windows x64 distribution as one EXE download.
+
+            Alpha limitation: the desktop preview currently caps loading at 500,000 sample frames while the memory-mapped/LOD SignalStore is being completed.
+
+            This build is unsigned, so Windows SmartScreen may show a warning.
+          files: |
+            ardirec-v0.2.0-alpha.1-windows-x64-portable.exe
+            SHA256SUMS.txt
