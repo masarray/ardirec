@@ -10,14 +10,13 @@ Rectangle {
 
     property var document
     property var analysis
-    property var zoneController
+    property var zoneController: distanceZoneController
     property real viewStart: 0.0
     property real visibleDuration: 1.0
     property real cursorATime: 0.0
     property real cursorBTime: 0.0
     property string valueRepresentation: document ? document.valueRepresentation : "secondary"
     property string selectedLoop: "L1-E"
-    property bool showRawDiagnostic: false
 
     readonly property bool earthLoop: selectedLoop.indexOf("-E") >= 0
     readonly property real kLMagnitude: zoneController ? zoneController.groundingFactorMagnitude : 0.0
@@ -269,8 +268,6 @@ Rectangle {
                 color: "#785b1a"
                 font.pixelSize: 7
                 elide: Text.ElideRight
-                ToolTip.visible: hovered
-                ToolTip.text: text
             }
         }
 
