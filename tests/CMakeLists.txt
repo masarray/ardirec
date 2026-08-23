@@ -4,3 +4,9 @@ target_compile_definitions(ardirec_core_tests PRIVATE ARDIREC_TEST_DATA_DIR="${C
 ardirec_set_warnings(ardirec_core_tests)
 ardirec_enable_sanitizers(ardirec_core_tests)
 add_test(NAME ardirec_core_tests COMMAND ardirec_core_tests)
+
+add_executable(ardirec_power_tests test_power.cpp)
+target_link_libraries(ardirec_power_tests PRIVATE ardirec::core)
+ardirec_set_warnings(ardirec_power_tests)
+ardirec_enable_sanitizers(ardirec_power_tests)
+add_test(NAME ardirec_power_tests COMMAND ardirec_power_tests)

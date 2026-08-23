@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <span>
 
 namespace {
 constexpr double kPi = 3.141592653589793238462643383279502884;
@@ -204,22 +205,65 @@ QVariantMap AnalysisController::phasorAt(int channelIndex, double absoluteTimeSe
             {QStringLiteral("phase"), channelPhase(channelIndex)}};
 }
 
+ardirec::power::HarmonicSpectrum AnalysisController::harmonicSpectrum(int channelIndex,
+                                                                      double absoluteTimeSeconds,
+                                                                      int maximumOrder) const {
+    if (!m_document || channelIndex < 0 || channelIndex >= m_document->analogCount()) return {};
+
+    const auto& samples = m_document->analogSamples(channelIndex);
+    const auto& times = m_document->timeSeconds();
+    const auto [first, end] = oneCycleWindow(absoluteTimeSeconds);
+    const std::size_t cappedEnd = std::min({end, samples.size(), times.size()});
+    if (first >= cappedEnd || cappedEnd - first < 4) return {};
+
+    const double frequency = m_document->nominalFrequency() > 1.0 ? m_document->nominalFrequency() : 50.0;
+    const std::size_t count = cappedEnd - first;
+    return ardirec::power::harmonic_spectrum(std::span<const double>(samples.data() + first, count),
+                                             std::span<const double>(times.data() + first, count),
+                                             frequency,
+                                             maximumOrder,
+                                             m_document->dataStartSeconds());
+}
+
+QVariantMap AnalysisController::harmonicSpectrumAt(int channelIndex,
+                                                   double absoluteTimeSeconds,
+                                                   int maximumOrder) const {
+    QVariantList bins;
+    if (!m_document) return {{QStringLiteral("valid"), false}, {QStringLiteral("bins"), bins}};
+
+    const auto spectrum = harmonicSpectrum(channelIndex, absoluteTimeSeconds, maximumOrder);
+    if (!spectrum.valid) return {{QStringLiteral("valid"), false}, {QStringLiteral("bins"), bins}};
+
+    const double representationScale = std::abs(m_document->channelDisplayScale(channelIndex));
+    const double recordedFundamental = spectrum.fundamental_rms;
+    for (const auto& bin : spectrum.bins) {
+        const double percent = recordedFundamental > 1.0e-12
+                                   ? bin.magnitude_rms / recordedFundamental * 100.0
+                                   : 0.0;
+        bins.push_back(QVariantMap{{QStringLiteral("order"), bin.order},
+                                   {QStringLiteral("magnitude"), bin.magnitude_rms * representationScale},
+                                   {QStringLiteral("percent"), percent},
+                                   {QStringLiteral("angle"), bin.angle_degrees}});
+    }
+
+    return {{QStringLiteral("valid"), true},
+            {QStringLiteral("fundamental"), spectrum.fundamental_rms * representationScale},
+            {QStringLiteral("thdPercent"), spectrum.thd_percent},
+            {QStringLiteral("dominantOrder"), spectrum.dominant_order},
+            {QStringLiteral("dominantMagnitude"), spectrum.dominant_rms * representationScale},
+            {QStringLiteral("dominantPercent"), spectrum.dominant_percent},
+            {QStringLiteral("bins"), bins},
+            {QStringLiteral("unit"), m_document->channelUnit(channelIndex)},
+            {QStringLiteral("name"), m_document->channelName(channelIndex)},
+            {QStringLiteral("phase"), channelPhase(channelIndex)}};
+}
+
 QVariantList AnalysisController::harmonicsAt(int channelIndex,
                                              double absoluteTimeSeconds,
                                              int maximumOrder) const {
-    QVariantList result;
-    if (!m_document || channelIndex < 0 || channelIndex >= m_document->analogCount()) return result;
-    maximumOrder = std::clamp(maximumOrder, 1, 50);
-
-    const double fundamental = std::abs(phasorComplex(channelIndex, absoluteTimeSeconds, 1));
-    for (int order = 1; order <= maximumOrder; ++order) {
-        const double magnitude = std::abs(phasorComplex(channelIndex, absoluteTimeSeconds, order));
-        const double percent = fundamental > 1.0e-12 ? magnitude / fundamental * 100.0 : 0.0;
-        result.push_back(QVariantMap{{QStringLiteral("order"), order},
-                                     {QStringLiteral("magnitude"), magnitude},
-                                     {QStringLiteral("percent"), percent}});
-    }
-    return result;
+    return harmonicSpectrumAt(channelIndex, absoluteTimeSeconds, maximumOrder)
+        .value(QStringLiteral("bins"))
+        .toList();
 }
 
 double AnalysisController::unitScaleToSi(int channelIndex) const {

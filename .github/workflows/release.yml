@@ -42,7 +42,7 @@ jobs:
       - name: Stage Qt application
         shell: pwsh
         run: |
-          $folder = 'ardirec-v0.2.0-alpha.7-windows-x64'
+          $folder = 'ardirec-v0.2.0-alpha.8-windows-x64'
           New-Item -ItemType Directory -Force -Path $folder | Out-Null
           Copy-Item build/apps/desktop/Release/ardirec.exe "$folder/ardirec.exe"
           windeployqt --release --compiler-runtime --no-translations --qmldir apps/desktop/qml "$folder/ardirec.exe"
@@ -51,8 +51,8 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $folder = 'ardirec-v0.2.0-alpha.7-windows-x64'
-          $zip = 'ardirec-v0.2.0-alpha.7-windows-x64-portable.zip'
+          $folder = 'ardirec-v0.2.0-alpha.8-windows-x64'
+          $zip = 'ardirec-v0.2.0-alpha.8-windows-x64-portable.zip'
           if (Test-Path $zip) { Remove-Item $zip -Force }
           Compress-Archive -Path $folder -DestinationPath $zip -CompressionLevel Optimal
           (Get-FileHash $zip -Algorithm SHA256).Hash + '  ' + $zip | Set-Content SHA256SUMS.txt
@@ -60,28 +60,27 @@ jobs:
       - name: Publish GitHub prerelease
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v0.2.0-alpha.7
-          name: ardirec v0.2.0-alpha.7 — P0 Analysis Workflow
+          tag_name: v0.2.0-alpha.8
+          name: ardirec v0.2.0-alpha.8 — Stacked Harmonic Analysis
           prerelease: true
           make_latest: false
           generate_release_notes: true
           body: |
-            ardirec alpha.7 hardens the primary fault-record investigation workflow.
+            ardirec alpha.8 delivers the P1 harmonic-analysis workflow on top of the P0 investigation foundation.
 
             Highlights:
-            - Global Secondary / Primary value representation based on COMTRADE analog primary, secondary and P/S metadata.
-            - One conversion policy is shared by waveform values/axes, one-cycle RMS, phasors, harmonic absolute magnitudes, value table and raw R-X impedance.
-            - Stored COMTRADE samples remain immutable; missing/invalid CT/PT ratios fall back safely to 1:1 and are surfaced in the UI.
-            - Primary/Secondary switching preserves the investigation state: time zoom/pan, vertical signal stack, selected channels, C1/C2 and digital-edge snap positions do not reset.
-            - Representation switching is O(1) for waveform/RMS caches; it changes a display scale and repaints instead of rebuilding large sample/RMS arrays on the UI thread.
-            - Instant and RMS modes share the exact same timebase and disturbance stack.
-            - Compact cursor header now shows C1, C2, C2-C1 and C2+C1 with simultaneous Instantaneous and RMS values.
-            - Record summary now includes the active value representation and available CT/PT ratio metadata.
-            - Existing phase colors, fixed muted trigger reference, Phasor, Harmonics, Locus and Table views remain synchronized with the same investigation context.
-
-            This is the P0 workflow slice. Stacked multi-signal harmonic diagrams are P1; compensated protection-loop/RIO-XRIO locus redesign is P2.
+            - Harmonics is now a stacked engineering workspace instead of a single-channel proof chart.
+            - Selecting a Voltage or Current measuring signal automatically presents mapped L1/L2/L3/E spectra together for fast phase comparison.
+            - C1 and C2 are visible simultaneously in every harmonic row; the active cursor uses the solid treatment while the comparison remains visible without losing phase-color identity.
+            - Each signal has a compact summary rail with H1 RMS, THD and dominant non-fundamental harmonic for both cursors.
+            - Distortion plots focus on H2..Hn so useful harmonic detail is not flattened by the always-100% fundamental reference.
+            - Display can switch between relative %H1 and absolute RMS engineering units.
+            - Harmonic-order presets cover H15, H25 and H50.
+            - A new pure C++ harmonic-spectrum engine computes all requested orders from one one-cycle sample window using a complex recurrence, replacing repeated per-order window scans.
+            - Deterministic tests validate a known H1=100 RMS, H3=10 RMS, H5=5 RMS waveform with THD=11.1803398875%, clean-sine near-zero THD, and isolated non-finite sample handling.
+            - Primary/Secondary representation from alpha.7 continues to scale absolute harmonic magnitudes while %H1 and THD remain invariant.
 
             Windows development distribution remains a portable ZIP folder. The executable is unsigned, so Windows SmartScreen may show a warning.
           files: |
-            ardirec-v0.2.0-alpha.7-windows-x64-portable.zip
+            ardirec-v0.2.0-alpha.8-windows-x64-portable.zip
             SHA256SUMS.txt
