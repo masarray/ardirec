@@ -73,9 +73,20 @@ Rectangle {
     function formatValue(channelIndex, value) {
         return document && Number.isFinite(value) ? document.formatChannelValue(channelIndex, value) : "—"
     }
-    function formatPercent(value) {
+    function percentDecimals(value) {
+        if (root.detailed) return 2
+        // Avoid a raw 4.95% being rendered as 5.0% while the abnormal threshold correctly
+        // remains false. Around the 5% investigation threshold, show enough precision to
+        // keep the displayed value and the filter/marker decision semantically consistent.
+        return Math.abs(value - 5.0) < 0.1 ? 2 : 1
+    }
+    function formatPercentNumber(value) {
         if (!Number.isFinite(value)) return "—"
-        return value.toFixed(root.detailed ? 2 : 1) + "%"
+        return value.toFixed(root.percentDecimals(value))
+    }
+    function formatPercent(value) {
+        const number = root.formatPercentNumber(value)
+        return number === "—" ? number : number + "%"
     }
     function relativeMs() {
         return document ? (cursorTime - document.triggerOffsetSeconds) * 1000.0 : 0
@@ -213,14 +224,14 @@ Rectangle {
                 Rectangle { width: 1; height: 13; color: "#d0d4d7" }
                 Label {
                     text: "Worst THD  " + root.channelSummary(root.summaryData.maxThdChannel,
-                                                              root.summaryData.maxThd.toFixed(1), "%")
+                                                              root.formatPercentNumber(root.summaryData.maxThd), "%")
                     color: root.summaryData.maxThd >= 5.0 ? "#8a5b00" : "#566069"
                     font.pixelSize: 8
                 }
                 Rectangle { width: 1; height: 13; color: "#d0d4d7" }
                 Label {
                     text: "Highest DC/H1  " + root.channelSummary(root.summaryData.maxDcChannel,
-                                                                 root.summaryData.maxDcPercent.toFixed(1), "%")
+                                                                 root.formatPercentNumber(root.summaryData.maxDcPercent), "%")
                     color: root.summaryData.maxDcPercent >= 5.0 ? "#8a5b00" : "#566069"
                     font.pixelSize: 8
                 }
