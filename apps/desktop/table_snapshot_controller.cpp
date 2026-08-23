@@ -2,6 +2,7 @@
 #include "table_snapshot_controller.hpp"
 
 #include "ardirec/power/harmonics.hpp"
+#include "ardirec/power/waveform_metrics.hpp"
 
 #include <QRegularExpression>
 
@@ -22,6 +23,12 @@ QString compact_name(QString value) {
     value = value.trimmed().toUpper();
     value.remove(QRegularExpression(QStringLiteral("[^A-Z0-9]")));
     return value;
+}
+
+double wrap_degrees(double angle) {
+    while (angle <= -180.0) angle += 360.0;
+    while (angle > 180.0) angle -= 360.0;
+    return angle;
 }
 } // namespace
 
@@ -115,18 +122,13 @@ QVariantMap TableSnapshotController::snapshotAt(int channelIndex, double absolut
 
     const double scale = m_document->channelDisplayScale(channelIndex);
     long double sumSquares = 0.0L;
-    double extremum = 0.0;
-    double largestAbs = -1.0;
+    double cyclePeakAbs = 0.0;
     std::size_t finiteCount = 0;
     for (std::size_t i = first; i < cappedEnd; ++i) {
         const double value = samples[i];
         if (!std::isfinite(value)) continue;
         sumSquares += static_cast<long double>(value) * static_cast<long double>(value);
-        const double magnitude = std::abs(value);
-        if (magnitude > largestAbs) {
-            largestAbs = magnitude;
-            extremum = value;
-        }
+        cyclePeakAbs = std::max(cyclePeakAbs, std::abs(value));
         ++finiteCount;
     }
     if (finiteCount < 4) return {{QStringLiteral("valid"), false}};
@@ -139,7 +141,7 @@ QVariantMap TableSnapshotController::snapshotAt(int channelIndex, double absolut
         std::span<const double>(times.data() + first, count),
         frequency,
         25,
-        m_document->dataStartSeconds());
+        absoluteTimeSeconds);
 
     const auto nearestIt = std::lower_bound(times.begin(), times.end(), absoluteTimeSeconds);
     std::size_t sampleIndex = nearestIt == times.end()
@@ -156,12 +158,15 @@ QVariantMap TableSnapshotController::snapshotAt(int channelIndex, double absolut
     const double absScale = std::abs(scale);
     const double h1Recorded = spectrum.valid ? spectrum.fundamental_rms : 0.0;
     const double h1 = h1Recorded * absScale;
-    const double angle = spectrum.valid && !spectrum.bins.empty() ? spectrum.bins.front().angle_degrees : 0.0;
+    double angle = spectrum.valid && !spectrum.bins.empty() ? spectrum.bins.front().angle_degrees : 0.0;
+    if (scale < 0.0) angle = wrap_degrees(angle + 180.0);
     const double dcRecorded = spectrum.valid ? spectrum.dc_component : 0.0;
     const double dcPercent = h1Recorded > kMinimumMagnitude ? std::abs(dcRecorded) / h1Recorded * 100.0 : 0.0;
     const double displayedRms = recordedRms * absScale;
-    const double displayedExtremum = extremum * scale;
-    const double crestFactor = displayedRms > kMinimumMagnitude ? std::abs(displayedExtremum) / displayedRms : 0.0;
+    const auto lastExtremeRecorded = ardirec::power::last_extreme_value(samples, times, absoluteTimeSeconds);
+    const double displayedExtremum = lastExtremeRecorded.value_or(0.0) * scale;
+    const double displayedCyclePeak = cyclePeakAbs * absScale;
+    const double crestFactor = displayedRms > kMinimumMagnitude ? displayedCyclePeak / displayedRms : 0.0;
 
     auto harmonicPercent = [&spectrum](int order) {
         if (!spectrum.valid || spectrum.fundamental_rms <= kMinimumMagnitude) return 0.0;
@@ -186,10 +191,13 @@ QVariantMap TableSnapshotController::snapshotAt(int channelIndex, double absolut
                        {QStringLiteral("fundamental"), h1},
                        {QStringLiteral("angle"), angle},
                        {QStringLiteral("extremum"), displayedExtremum},
+                       {QStringLiteral("cyclePeak"), displayedCyclePeak},
                        {QStringLiteral("crestFactor"), crestFactor},
                        {QStringLiteral("dc"), dcRecorded * scale},
                        {QStringLiteral("dcPercent"), dcPercent},
                        {QStringLiteral("thd"), thd},
+                       {QStringLiteral("maxHarmonicOrder"), spectrum.maximum_resolvable_order},
+                       {QStringLiteral("sampleRate"), spectrum.estimated_sample_rate_hz},
                        {QStringLiteral("h2"), harmonicPercent(2)},
                        {QStringLiteral("h3"), harmonicPercent(3)},
                        {QStringLiteral("h5"), harmonicPercent(5)},
@@ -273,6 +281,8 @@ QVariantMap TableSnapshotController::summaryAt(const QVariantList& channelIndexe
     double maxCurrentRms = -1.0;
     int validCount = 0;
     int abnormalCount = 0;
+    int maxHarmonicOrder = 0;
+    double sampleRate = 0.0;
 
     for (const QVariant& value : channelIndexes) {
         const int channel = value.toInt();
@@ -285,6 +295,9 @@ QVariantMap TableSnapshotController::summaryAt(const QVariantList& channelIndexe
         const double crest = snapshot.value(QStringLiteral("crestFactor")).toDouble();
         const double rms = snapshot.value(QStringLiteral("rms")).toDouble();
         const QString role = snapshot.value(QStringLiteral("role")).toString();
+        maxHarmonicOrder = std::max(maxHarmonicOrder,
+                                    snapshot.value(QStringLiteral("maxHarmonicOrder")).toInt());
+        sampleRate = std::max(sampleRate, snapshot.value(QStringLiteral("sampleRate")).toDouble());
         if (thd > maxThd) { maxThd = thd; maxThdChannel = channel; }
         if (dcPercent > maxDcPercent) { maxDcPercent = dcPercent; maxDcChannel = channel; }
         if (crest > maxCrestFactor) { maxCrestFactor = crest; maxCrestChannel = channel; }
@@ -309,5 +322,7 @@ QVariantMap TableSnapshotController::summaryAt(const QVariantList& channelIndexe
             {QStringLiteral("maxVoltageRmsChannel"), maxVoltageRmsChannel},
             {QStringLiteral("maxVoltageRms"), std::max(0.0, maxVoltageRms)},
             {QStringLiteral("maxCurrentRmsChannel"), maxCurrentRmsChannel},
-            {QStringLiteral("maxCurrentRms"), std::max(0.0, maxCurrentRms)}};
+            {QStringLiteral("maxCurrentRms"), std::max(0.0, maxCurrentRms)},
+            {QStringLiteral("maxHarmonicOrder"), maxHarmonicOrder},
+            {QStringLiteral("sampleRate"), sampleRate}};
 }
