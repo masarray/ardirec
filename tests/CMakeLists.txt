@@ -10,3 +10,23 @@ target_link_libraries(ardirec_power_tests PRIVATE ardirec::core)
 ardirec_set_warnings(ardirec_power_tests)
 ardirec_enable_sanitizers(ardirec_power_tests)
 add_test(NAME ardirec_power_tests COMMAND ardirec_power_tests)
+
+add_executable(ardirec_distance_tests test_distance.cpp)
+target_link_libraries(ardirec_distance_tests PRIVATE ardirec::core)
+ardirec_set_warnings(ardirec_distance_tests)
+ardirec_enable_sanitizers(ardirec_distance_tests)
+add_test(NAME ardirec_distance_tests COMMAND ardirec_distance_tests)
+
+if(TARGET Qt6::Core)
+    qt_add_executable(ardirec_xrio_tests
+        test_xrio.cpp
+        ../apps/desktop/distance_zone_controller.cpp
+        ../apps/desktop/distance_zone_controller.hpp
+    )
+    set_target_properties(ardirec_xrio_tests PROPERTIES AUTOMOC ON)
+    target_include_directories(ardirec_xrio_tests PRIVATE ../apps/desktop)
+    target_link_libraries(ardirec_xrio_tests PRIVATE ardirec::core Qt6::Core)
+    ardirec_set_warnings(ardirec_xrio_tests)
+    ardirec_enable_sanitizers(ardirec_xrio_tests)
+    add_test(NAME ardirec_xrio_tests COMMAND ardirec_xrio_tests)
+endif()

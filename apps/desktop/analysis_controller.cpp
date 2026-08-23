@@ -64,6 +64,15 @@ QVariantMap invalid_phasor() {
             {QStringLiteral("real"), 0.0},
             {QStringLiteral("imag"), 0.0}};
 }
+
+QVariantMap invalid_distance() {
+    return {{QStringLiteral("valid"), false},
+            {QStringLiteral("r"), 0.0},
+            {QStringLiteral("x"), 0.0},
+            {QStringLiteral("magnitude"), 0.0},
+            {QStringLiteral("angle"), 0.0},
+            {QStringLiteral("measuringCurrent"), 0.0}};
+}
 } // namespace
 
 AnalysisController::AnalysisController(DocumentController* document, QObject* parent)
@@ -296,4 +305,103 @@ QVariantMap AnalysisController::impedanceAt(int voltageChannelIndex,
             {QStringLiteral("x"), impedance.imag()},
             {QStringLiteral("magnitude"), std::abs(impedance)},
             {QStringLiteral("angle"), std::atan2(impedance.imag(), impedance.real()) * 180.0 / kPi}};
+}
+
+bool AnalysisController::distanceLoopAvailable(const QString& loopId) const {
+    if (!m_document) return false;
+    const auto loop = ardirec::distance::fault_loop_from_id(loopId.toStdString());
+    const int v1 = phaseChannel(QStringLiteral("Voltage"), QStringLiteral("L1"));
+    const int v2 = phaseChannel(QStringLiteral("Voltage"), QStringLiteral("L2"));
+    const int v3 = phaseChannel(QStringLiteral("Voltage"), QStringLiteral("L3"));
+    const int i1 = phaseChannel(QStringLiteral("Current"), QStringLiteral("L1"));
+    const int i2 = phaseChannel(QStringLiteral("Current"), QStringLiteral("L2"));
+    const int i3 = phaseChannel(QStringLiteral("Current"), QStringLiteral("L3"));
+
+    switch (loop) {
+    case ardirec::distance::FaultLoop::L1E: return v1 >= 0 && i1 >= 0 && i2 >= 0 && i3 >= 0;
+    case ardirec::distance::FaultLoop::L2E: return v2 >= 0 && i1 >= 0 && i2 >= 0 && i3 >= 0;
+    case ardirec::distance::FaultLoop::L3E: return v3 >= 0 && i1 >= 0 && i2 >= 0 && i3 >= 0;
+    case ardirec::distance::FaultLoop::L1L2: return v1 >= 0 && v2 >= 0 && i1 >= 0 && i2 >= 0;
+    case ardirec::distance::FaultLoop::L2L3: return v2 >= 0 && v3 >= 0 && i2 >= 0 && i3 >= 0;
+    case ardirec::distance::FaultLoop::L3L1: return v3 >= 0 && v1 >= 0 && i3 >= 0 && i1 >= 0;
+    }
+    return false;
+}
+
+bool AnalysisController::distancePhasors(ardirec::distance::FaultLoop loop,
+                                         double absoluteTimeSeconds,
+                                         ardirec::distance::ThreePhasePhasors& phasors) const {
+    if (!m_document || !distanceLoopAvailable(QString::fromUtf8(ardirec::distance::fault_loop_id(loop).data(),
+                                                                static_cast<qsizetype>(ardirec::distance::fault_loop_id(loop).size())))) {
+        return false;
+    }
+
+    for (int phase = 0; phase < 3; ++phase) {
+        const QString phaseName = QStringLiteral("L%1").arg(phase + 1);
+        const int voltageChannel = phaseChannel(QStringLiteral("Voltage"), phaseName);
+        const int currentChannel = phaseChannel(QStringLiteral("Current"), phaseName);
+        if (voltageChannel >= 0) {
+            phasors.voltage[static_cast<std::size_t>(phase)] = phasorComplex(voltageChannel, absoluteTimeSeconds, 1)
+                                                                  * unitScaleToSi(voltageChannel);
+        }
+        if (currentChannel >= 0) {
+            phasors.current[static_cast<std::size_t>(phase)] = phasorComplex(currentChannel, absoluteTimeSeconds, 1)
+                                                                  * unitScaleToSi(currentChannel);
+        }
+    }
+    return true;
+}
+
+QVariantMap AnalysisController::distanceLoopAt(const QString& loopId,
+                                               double absoluteTimeSeconds,
+                                               double groundingFactorMagnitude,
+                                               double groundingFactorAngleDegrees) const {
+    if (!m_document || !std::isfinite(groundingFactorMagnitude) || !std::isfinite(groundingFactorAngleDegrees)) {
+        return invalid_distance();
+    }
+    const auto loop = ardirec::distance::fault_loop_from_id(loopId.toStdString());
+    ardirec::distance::ThreePhasePhasors phasors;
+    if (!distancePhasors(loop, absoluteTimeSeconds, phasors)) return invalid_distance();
+
+    const double angleRadians = groundingFactorAngleDegrees * kPi / 180.0;
+    const std::complex<double> groundingFactor = std::polar(std::max(0.0, groundingFactorMagnitude), angleRadians);
+    const auto result = ardirec::distance::distance_impedance(loop, phasors, groundingFactor);
+    if (!result.valid) return invalid_distance();
+
+    const auto impedance = result.impedance;
+    return {{QStringLiteral("valid"), true},
+            {QStringLiteral("r"), impedance.real()},
+            {QStringLiteral("x"), impedance.imag()},
+            {QStringLiteral("magnitude"), std::abs(impedance)},
+            {QStringLiteral("angle"), std::atan2(impedance.imag(), impedance.real()) * 180.0 / kPi},
+            {QStringLiteral("measuringCurrent"), std::abs(result.measuring_current)},
+            {QStringLiteral("loop"), loopId}};
+}
+
+QVariantList AnalysisController::distanceLocus(const QString& loopId,
+                                               double viewStartSeconds,
+                                               double visibleDurationSeconds,
+                                               int steps,
+                                               double groundingFactorMagnitude,
+                                               double groundingFactorAngleDegrees) const {
+    QVariantList points;
+    if (!m_document || visibleDurationSeconds <= 0.0 || !std::isfinite(viewStartSeconds)
+        || !std::isfinite(visibleDurationSeconds)) {
+        return points;
+    }
+    steps = std::clamp(steps, 16, 240);
+    points.reserve(steps);
+    for (int index = 0; index < steps; ++index) {
+        const double fraction = static_cast<double>(index) / static_cast<double>(std::max(1, steps - 1));
+        const double time = viewStartSeconds + visibleDurationSeconds * fraction;
+        const QVariantMap value = distanceLoopAt(loopId,
+                                                 time,
+                                                 groundingFactorMagnitude,
+                                                 groundingFactorAngleDegrees);
+        if (!value.value(QStringLiteral("valid")).toBool()) continue;
+        QVariantMap point = value;
+        point.insert(QStringLiteral("time"), time);
+        points.push_back(point);
+    }
+    return points;
 }
