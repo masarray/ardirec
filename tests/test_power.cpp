@@ -49,6 +49,7 @@ int main() {
         const auto spectrum = ardirec::power::harmonic_spectrum(mixed, times, frequency, 15, 0.0);
         require(spectrum.valid, "known harmonic spectrum is valid");
         require(spectrum.bins.size() == 15, "requested harmonic bin count");
+        require_near(spectrum.dc_component, 0.0, 1.0e-9, "zero-mean waveform DC");
         require_near(spectrum.fundamental_rms, 100.0, 1.0e-9, "H1 RMS magnitude");
         require_near(spectrum.bins[2].magnitude_rms, 10.0, 1.0e-9, "H3 RMS magnitude");
         require_near(spectrum.bins[4].magnitude_rms, 5.0, 1.0e-9, "H5 RMS magnitude");
@@ -57,6 +58,21 @@ int main() {
         require_near(spectrum.dominant_rms, 10.0, 1.0e-9, "dominant harmonic RMS");
         require_near(spectrum.dominant_percent, 10.0, 1.0e-9, "dominant harmonic percent H1");
 
+        std::vector<double> withDc;
+        withDc.reserve(sampleCount);
+        for (const double t : times) {
+            withDc.push_back(12.5
+                             + std::sqrt(2.0)
+                                   * (70.0 * std::cos(2.0 * kPi * frequency * t)
+                                      + 7.0 * std::cos(2.0 * kPi * 2.0 * frequency * t)));
+        }
+        const auto dcSpectrum = ardirec::power::harmonic_spectrum(withDc, times, frequency, 10, 0.0);
+        require(dcSpectrum.valid, "DC harmonic spectrum is valid");
+        require_near(dcSpectrum.dc_component, 12.5, 1.0e-9, "H0 DC uses arithmetic mean without sqrt(2)");
+        require_near(dcSpectrum.fundamental_rms, 70.0, 1.0e-9, "DC fixture H1 RMS");
+        require_near(dcSpectrum.bins[1].magnitude_rms, 7.0, 1.0e-9, "DC fixture H2 RMS");
+        require_near(dcSpectrum.thd_percent, 10.0, 1.0e-9, "THD excludes DC and H1");
+
         std::vector<double> clean;
         clean.reserve(sampleCount);
         for (const double t : times) {
@@ -64,6 +80,7 @@ int main() {
         }
         const auto cleanSpectrum = ardirec::power::harmonic_spectrum(clean, times, frequency, 15, 0.0);
         require(cleanSpectrum.valid, "clean sine spectrum is valid");
+        require_near(cleanSpectrum.dc_component, 0.0, 1.0e-9, "clean sine DC is zero");
         require_near(cleanSpectrum.fundamental_rms, 80.0, 1.0e-9, "clean sine H1 RMS");
         require(cleanSpectrum.thd_percent < 1.0e-9, "clean sine has near-zero THD");
         require(cleanSpectrum.dominant_order == 0, "clean sine has no meaningful dominant distortion harmonic");
@@ -72,6 +89,7 @@ int main() {
         withMissing[17] = std::numeric_limits<double>::quiet_NaN();
         const auto missingSpectrum = ardirec::power::harmonic_spectrum(withMissing, times, frequency, 15, 0.0);
         require(missingSpectrum.valid, "spectrum tolerates isolated non-finite sample");
+        require(std::isfinite(missingSpectrum.dc_component), "missing-sample DC remains finite");
         require(std::isfinite(missingSpectrum.fundamental_rms), "missing-sample fundamental remains finite");
         require(std::isfinite(missingSpectrum.thd_percent), "missing-sample THD remains finite");
 
