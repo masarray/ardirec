@@ -13,12 +13,17 @@
 #include <vector>
 
 namespace {
+constexpr double kMinimumMagnitude = 1.0e-12;
+constexpr double kAbnormalThdPercent = 5.0;
+constexpr double kAbnormalDcPercent = 5.0;
+constexpr double kAbnormalCrestFactor = 2.0;
+
 QString compact_name(QString value) {
     value = value.trimmed().toUpper();
     value.remove(QRegularExpression(QStringLiteral("[^A-Z0-9]")));
     return value;
 }
-}
+} // namespace
 
 TableSnapshotController::TableSnapshotController(DocumentController* document, QObject* parent)
     : QObject(parent), m_document(document) {
@@ -68,18 +73,28 @@ QString TableSnapshotController::cacheKey(int channelIndex, double absoluteTimeS
 }
 
 QString TableSnapshotController::channelPhase(int channelIndex) const {
-    if (!m_document || channelIndex < 0 || channelIndex >= m_document->analogCount()) return QStringLiteral("Other");
+    if (!m_document || channelIndex < 0 || channelIndex >= m_document->analogCount()) {
+        return QStringLiteral("Other");
+    }
     const QString name = compact_name(m_document->channelName(channelIndex));
     if (name.contains(QStringLiteral("L1")) || name.endsWith(QStringLiteral("IA"))
-        || name.endsWith(QStringLiteral("VA")) || name.endsWith(QStringLiteral("UA"))) return QStringLiteral("L1");
+        || name.endsWith(QStringLiteral("VA")) || name.endsWith(QStringLiteral("UA"))) {
+        return QStringLiteral("L1");
+    }
     if (name.contains(QStringLiteral("L2")) || name.endsWith(QStringLiteral("IB"))
-        || name.endsWith(QStringLiteral("VB")) || name.endsWith(QStringLiteral("UB"))) return QStringLiteral("L2");
+        || name.endsWith(QStringLiteral("VB")) || name.endsWith(QStringLiteral("UB"))) {
+        return QStringLiteral("L2");
+    }
     if (name.contains(QStringLiteral("L3")) || name.endsWith(QStringLiteral("IC"))
-        || name.endsWith(QStringLiteral("VC")) || name.endsWith(QStringLiteral("UC"))) return QStringLiteral("L3");
+        || name.endsWith(QStringLiteral("VC")) || name.endsWith(QStringLiteral("UC"))) {
+        return QStringLiteral("L3");
+    }
     if (name.contains(QStringLiteral("3I0")) || name.contains(QStringLiteral("3V0"))
         || name.contains(QStringLiteral("3U0")) || name.contains(QStringLiteral("RES"))
         || name.contains(QStringLiteral("NEUTRAL")) || name.contains(QStringLiteral("EARTH"))
-        || name.contains(QStringLiteral("GROUND"))) return QStringLiteral("E");
+        || name.contains(QStringLiteral("GROUND"))) {
+        return QStringLiteral("E");
+    }
     return QStringLiteral("Other");
 }
 
@@ -139,14 +154,26 @@ QVariantMap TableSnapshotController::snapshotAt(int channelIndex, double absolut
     const double instantaneous = std::isfinite(samples[sampleIndex]) ? samples[sampleIndex] * scale : 0.0;
 
     const double absScale = std::abs(scale);
-    const double h1 = spectrum.valid ? spectrum.fundamental_rms * absScale : 0.0;
+    const double h1Recorded = spectrum.valid ? spectrum.fundamental_rms : 0.0;
+    const double h1 = h1Recorded * absScale;
     const double angle = spectrum.valid && !spectrum.bins.empty() ? spectrum.bins.front().angle_degrees : 0.0;
+    const double dcRecorded = spectrum.valid ? spectrum.dc_component : 0.0;
+    const double dcPercent = h1Recorded > kMinimumMagnitude ? std::abs(dcRecorded) / h1Recorded * 100.0 : 0.0;
+    const double displayedRms = recordedRms * absScale;
+    const double displayedExtremum = extremum * scale;
+    const double crestFactor = displayedRms > kMinimumMagnitude ? std::abs(displayedExtremum) / displayedRms : 0.0;
+
     auto harmonicPercent = [&spectrum](int order) {
-        if (!spectrum.valid || spectrum.fundamental_rms <= 1.0e-12) return 0.0;
+        if (!spectrum.valid || spectrum.fundamental_rms <= kMinimumMagnitude) return 0.0;
         const auto it = std::find_if(spectrum.bins.begin(), spectrum.bins.end(),
                                      [order](const auto& bin) { return bin.order == order; });
         return it == spectrum.bins.end() ? 0.0 : it->magnitude_rms / spectrum.fundamental_rms * 100.0;
     };
+
+    const double thd = spectrum.valid ? spectrum.thd_percent : 0.0;
+    const bool abnormal = thd >= kAbnormalThdPercent
+                          || dcPercent >= kAbnormalDcPercent
+                          || crestFactor >= kAbnormalCrestFactor;
 
     QVariantMap result{{QStringLiteral("valid"), true},
                        {QStringLiteral("channelIndex"), channelIndex},
@@ -155,15 +182,18 @@ QVariantMap TableSnapshotController::snapshotAt(int channelIndex, double absolut
                        {QStringLiteral("phase"), channelPhase(channelIndex)},
                        {QStringLiteral("unit"), m_document->channelUnit(channelIndex)},
                        {QStringLiteral("instant"), instantaneous},
-                       {QStringLiteral("rms"), recordedRms * absScale},
+                       {QStringLiteral("rms"), displayedRms},
                        {QStringLiteral("fundamental"), h1},
                        {QStringLiteral("angle"), angle},
-                       {QStringLiteral("extremum"), extremum * scale},
-                       {QStringLiteral("dc"), spectrum.valid ? spectrum.dc_component * scale : 0.0},
-                       {QStringLiteral("thd"), spectrum.valid ? spectrum.thd_percent : 0.0},
+                       {QStringLiteral("extremum"), displayedExtremum},
+                       {QStringLiteral("crestFactor"), crestFactor},
+                       {QStringLiteral("dc"), dcRecorded * scale},
+                       {QStringLiteral("dcPercent"), dcPercent},
+                       {QStringLiteral("thd"), thd},
                        {QStringLiteral("h2"), harmonicPercent(2)},
                        {QStringLiteral("h3"), harmonicPercent(3)},
-                       {QStringLiteral("h5"), harmonicPercent(5)}};
+                       {QStringLiteral("h5"), harmonicPercent(5)},
+                       {QStringLiteral("abnormal"), abnormal}};
 
     if (m_cache.size() >= 512) m_cache.clear();
     m_cache.insert(key, result);
@@ -172,14 +202,18 @@ QVariantMap TableSnapshotController::snapshotAt(int channelIndex, double absolut
 
 QVariantList TableSnapshotController::sortedChannels(const QVariantList& channelIndexes,
                                                       double absoluteTimeSeconds,
-                                                      const QString& sortMode) {
+                                                      const QString& sortMode,
+                                                      bool abnormalOnly) {
     struct Entry { int channel{}; QVariantMap snapshot; };
     std::vector<Entry> entries;
     entries.reserve(static_cast<std::size_t>(channelIndexes.size()));
     for (const QVariant& value : channelIndexes) {
         const int channel = value.toInt();
         if (channel < 0 || !m_document || channel >= m_document->analogCount()) continue;
-        entries.push_back({channel, snapshotAt(channel, absoluteTimeSeconds)});
+        QVariantMap snapshot = snapshotAt(channel, absoluteTimeSeconds);
+        if (!snapshot.value(QStringLiteral("valid")).toBool()) continue;
+        if (abnormalOnly && !snapshot.value(QStringLiteral("abnormal")).toBool()) continue;
+        entries.push_back({channel, std::move(snapshot)});
     }
 
     const QString mode = sortMode.trimmed().toLower();
@@ -207,6 +241,16 @@ QVariantList TableSnapshotController::sortedChannels(const QVariantList& channel
             return a.snapshot.value(QStringLiteral("thd")).toDouble()
                    > b.snapshot.value(QStringLiteral("thd")).toDouble();
         });
+    } else if (mode == QStringLiteral("dc")) {
+        std::stable_sort(entries.begin(), entries.end(), [](const Entry& a, const Entry& b) {
+            return a.snapshot.value(QStringLiteral("dcPercent")).toDouble()
+                   > b.snapshot.value(QStringLiteral("dcPercent")).toDouble();
+        });
+    } else if (mode == QStringLiteral("crest")) {
+        std::stable_sort(entries.begin(), entries.end(), [](const Entry& a, const Entry& b) {
+            return a.snapshot.value(QStringLiteral("crestFactor")).toDouble()
+                   > b.snapshot.value(QStringLiteral("crestFactor")).toDouble();
+        });
     }
 
     QVariantList result;
@@ -218,22 +262,32 @@ QVariantList TableSnapshotController::sortedChannels(const QVariantList& channel
 QVariantMap TableSnapshotController::summaryAt(const QVariantList& channelIndexes,
                                                 double absoluteTimeSeconds) {
     int maxThdChannel = -1;
+    int maxDcChannel = -1;
+    int maxCrestChannel = -1;
     int maxVoltageRmsChannel = -1;
     int maxCurrentRmsChannel = -1;
     double maxThd = -1.0;
+    double maxDcPercent = -1.0;
+    double maxCrestFactor = -1.0;
     double maxVoltageRms = -1.0;
     double maxCurrentRms = -1.0;
     int validCount = 0;
+    int abnormalCount = 0;
 
     for (const QVariant& value : channelIndexes) {
         const int channel = value.toInt();
         const QVariantMap snapshot = snapshotAt(channel, absoluteTimeSeconds);
         if (!snapshot.value(QStringLiteral("valid")).toBool()) continue;
         ++validCount;
+        if (snapshot.value(QStringLiteral("abnormal")).toBool()) ++abnormalCount;
         const double thd = snapshot.value(QStringLiteral("thd")).toDouble();
+        const double dcPercent = snapshot.value(QStringLiteral("dcPercent")).toDouble();
+        const double crest = snapshot.value(QStringLiteral("crestFactor")).toDouble();
         const double rms = snapshot.value(QStringLiteral("rms")).toDouble();
         const QString role = snapshot.value(QStringLiteral("role")).toString();
         if (thd > maxThd) { maxThd = thd; maxThdChannel = channel; }
+        if (dcPercent > maxDcPercent) { maxDcPercent = dcPercent; maxDcChannel = channel; }
+        if (crest > maxCrestFactor) { maxCrestFactor = crest; maxCrestChannel = channel; }
         if (role == QStringLiteral("Voltage") && rms > maxVoltageRms) {
             maxVoltageRms = rms;
             maxVoltageRmsChannel = channel;
@@ -245,8 +299,13 @@ QVariantMap TableSnapshotController::summaryAt(const QVariantList& channelIndexe
     }
 
     return {{QStringLiteral("count"), validCount},
+            {QStringLiteral("abnormalCount"), abnormalCount},
             {QStringLiteral("maxThdChannel"), maxThdChannel},
             {QStringLiteral("maxThd"), std::max(0.0, maxThd)},
+            {QStringLiteral("maxDcChannel"), maxDcChannel},
+            {QStringLiteral("maxDcPercent"), std::max(0.0, maxDcPercent)},
+            {QStringLiteral("maxCrestChannel"), maxCrestChannel},
+            {QStringLiteral("maxCrestFactor"), std::max(0.0, maxCrestFactor)},
             {QStringLiteral("maxVoltageRmsChannel"), maxVoltageRmsChannel},
             {QStringLiteral("maxVoltageRms"), std::max(0.0, maxVoltageRms)},
             {QStringLiteral("maxCurrentRmsChannel"), maxCurrentRmsChannel},
