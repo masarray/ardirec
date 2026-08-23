@@ -27,8 +27,13 @@ The current desktop alpha contains:
 - Automatic sibling-file discovery (`.cfg/.dat/.hdr/.inf/.dmf`).
 - `ardirec-cli inspect` for deterministic parser smoke tests.
 - Qt Quick disturbance stack with synchronized voltage, current, other analog and digital-event tracks.
-- Custom `QQuickItem` / Qt Scene Graph rendering, min/max display decimation, shared timebase, trigger marker, pan/zoom and dual measurement cursors.
+- Custom `QQuickItem` / Qt Scene Graph waveform rendering, min/max display decimation, shared timebase, fixed trigger reference, pan/zoom and dual measurement cursors.
 - Cursor hover feedback plus snapping to nearby rising/falling COMTRADE digital transitions for protection timing measurements.
+- Standard electrical phase identity across voltage/current views: L1 red, L2 yellow, L3 blue, E/N green.
+- Time Signals with Instantaneous / one-cycle RMS switching that preserves the same investigation context.
+- Synchronized Phasor, raw R-X Locus, Harmonics and Value Table views.
+- Global **Secondary / Primary** value representation driven by COMTRADE transformer-ratio and recorded-side metadata; the same representation is consumed by waveform, RMS, phasor, harmonics, table and raw impedance calculations.
+- Compact cursor-analysis header with C1, C2, C2-C1 and C2+C1 plus simultaneous instantaneous/RMS values.
 - Windows CI plus a portable ZIP development distribution.
 - Product, compatibility, performance and validation specifications.
 
@@ -38,7 +43,7 @@ The alpha deliberately caps desktop preview loading at **500,000 frames**. A lat
 
 During alpha/beta development, Windows builds are distributed as a transparent portable ZIP folder, for example:
 
-`ardirec-v0.2.0-alpha.5-windows-x64-portable.zip`
+`ardirec-v0.2.0-alpha.7-windows-x64-portable.zip`
 
 Extract the archive anywhere and run `ardirec.exe` from the extracted folder. No installer is required and ardirec does not install itself into Windows. The folder intentionally contains Qt runtime DLLs/plugins produced by `windeployqt`; keeping these files visible makes development packaging fast and predictable.
 
