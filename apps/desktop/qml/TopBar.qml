@@ -11,6 +11,7 @@ Rectangle {
 
     property string recordTitle: "No record open"
     property string recordMetadata: ""
+    property string currentViewLabel: "TIME SIGNALS"
     property bool hasRecord: false
     signal openRequested()
     signal signalsRequested()
@@ -87,7 +88,7 @@ Rectangle {
                 enabled: root.hasRecord
                 onClicked: root.triggerRequested()
                 ToolTip.visible: hovered
-                ToolTip.text: "Center time view around COMTRADE trigger"
+                ToolTip.text: "Center common time view around COMTRADE trigger"
             }
             ToolButton {
                 text: "Zoom +"
@@ -125,7 +126,7 @@ Rectangle {
             }
             Item { Layout.fillWidth: true }
             Label {
-                text: "TIME SIGNALS"
+                text: root.currentViewLabel
                 color: "#555555"
                 font.pixelSize: 9
                 font.letterSpacing: 0.6
