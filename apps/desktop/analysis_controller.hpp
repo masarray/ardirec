@@ -56,7 +56,8 @@ private:
     [[nodiscard]] ardirec::power::HarmonicSpectrum harmonicSpectrum(int channelIndex,
                                                                     double absoluteTimeSeconds,
                                                                     int maximumOrder) const;
-    [[nodiscard]] bool distancePhasors(double absoluteTimeSeconds,
+    [[nodiscard]] bool distancePhasors(ardirec::distance::FaultLoop loop,
+                                       double absoluteTimeSeconds,
                                        ardirec::distance::ThreePhasePhasors& phasors) const;
     [[nodiscard]] double unitScaleToSi(int channelIndex) const;
     [[nodiscard]] QString formatEngineeringValue(double value, int channelIndex) const;
