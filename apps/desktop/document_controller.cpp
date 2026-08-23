@@ -267,9 +267,6 @@ void DocumentController::setValueRepresentation(const QString& representation) {
     rebuildSelectedSamples();
     emit representationChanged();
     emit waveformChanged();
-    // Existing QML analysis surfaces and renderers listen to documentChanged; keep the event
-    // intentionally broad until InvestigationContext becomes its own QObject.
-    emit documentChanged();
 }
 
 QString DocumentController::channelName(int index) const {
@@ -329,8 +326,10 @@ QString DocumentController::channelRatioText(int index) const {
                                  ? QStringLiteral("P")
                                  : QStringLiteral("S");
     return QStringLiteral("Pri %1 / Sec %2%3 · recorded %4")
-        .arg(compact_ratio_value(*channel.primary), compact_ratio_value(*channel.secondary),
-             unit.isEmpty() ? QString{} : QStringLiteral(" ") + unit, recorded);
+        .arg(compact_ratio_value(*channel.primary))
+        .arg(compact_ratio_value(*channel.secondary))
+        .arg(unit.isEmpty() ? QString{} : QStringLiteral(" ") + unit)
+        .arg(recorded);
 }
 
 std::size_t DocumentController::nearestSampleIndex(double absoluteTimeSeconds) const {
