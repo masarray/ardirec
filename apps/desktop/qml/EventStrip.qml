@@ -15,7 +15,6 @@ Rectangle {
     property real axisWidth: 170
     property color cursorAColor: "#2466b3"
     property color cursorBColor: "#c78100"
-    property color triggerColor: "#10a05a"
 
     Rectangle {
         anchors.left: parent.left
@@ -38,7 +37,7 @@ Rectangle {
                 font.letterSpacing: 0.8
             }
             Label {
-                text: "Trigger reference"
+                text: "Trigger reference · fixed"
                 color: "#7a828a"
                 font.pixelSize: 8
             }
@@ -73,14 +72,14 @@ Rectangle {
             }
         }
 
-        Rectangle {
+        TriggerReference {
             visible: root.document && root.visibleDuration > 0
                      && root.document.triggerOffsetSeconds >= root.viewStart
                      && root.document.triggerOffsetSeconds <= root.viewStart + root.visibleDuration
             x: (root.document.triggerOffsetSeconds - root.viewStart) / root.visibleDuration * plot.width
-            width: 2
             height: plot.height
-            color: root.triggerColor
+            lineColor: "#7f968c"
+            lineOpacity: 0.65
         }
 
         Label {
@@ -91,9 +90,9 @@ Rectangle {
                         Math.max(4, (root.document.triggerOffsetSeconds - root.viewStart)
                                  / root.visibleDuration * plot.width + 5))
             anchors.verticalCenter: parent.verticalCenter
-            text: "Trigger  ·  0 ms"
-            color: "#167447"
-            font.pixelSize: 9
+            text: "Trigger reference · 0 ms"
+            color: "#708078"
+            font.pixelSize: 8
             font.weight: Font.DemiBold
         }
 
