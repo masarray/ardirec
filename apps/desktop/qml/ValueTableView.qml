@@ -255,7 +255,7 @@ Rectangle {
                         color: index % 2 ? "#fafbfc" : "#ffffff"
                         border.color: "#e1e4e7"
 
-                        readonly property var data: {
+                        readonly property var rowSnapshot: {
                             const representationDependency = root.valueRepresentation
                             return root.snapshot ? root.snapshot.snapshotAt(modelData, root.cursorTime) : ({valid:false})
                         }
@@ -273,29 +273,29 @@ Rectangle {
                                 text: root.document ? root.document.channelName(modelData) : "—"
                                 color: "#2f363b"; font.pixelSize: 8; font.weight: Font.DemiBold; elide: Text.ElideRight
                             }
-                            Label { width: root.phaseWidth; height: parent.height; verticalAlignment: Text.AlignVCenter; text: data.phase || "—"; color: phaseColor; font.pixelSize: 8; font.weight: Font.DemiBold }
-                            Label { width: root.instantWidth; height: parent.height; verticalAlignment: Text.AlignVCenter; text: data.valid ? root.formatValue(modelData, data.instant) : "—"; color: "#343b40"; font.pixelSize: 8 }
-                            Label { width: root.rmsWidth; height: parent.height; verticalAlignment: Text.AlignVCenter; text: data.valid ? root.formatValue(modelData, data.rms) : "—"; color: "#343b40"; font.pixelSize: 8 }
-                            Label { width: root.h1Width; height: parent.height; verticalAlignment: Text.AlignVCenter; text: data.valid ? root.formatValue(modelData, data.fundamental) : "—"; color: "#343b40"; font.pixelSize: 8 }
-                            Label { width: root.angleWidth; height: parent.height; verticalAlignment: Text.AlignVCenter; text: data.valid ? data.angle.toFixed(1) + "°" : "—"; color: "#343b40"; font.pixelSize: 8 }
-                            Label { width: root.extremumWidth; height: parent.height; verticalAlignment: Text.AlignVCenter; text: data.valid ? root.formatValue(modelData, data.extremum) : "—"; color: "#343b40"; font.pixelSize: 8 }
-                            Label { width: root.dcWidth; height: parent.height; verticalAlignment: Text.AlignVCenter; text: data.valid ? root.formatValue(modelData, data.dc) : "—"; color: Math.abs(data.dc || 0) > Math.max(1e-12, Math.abs(data.fundamental || 0) * 0.05) ? "#8a5b00" : "#343b40"; font.pixelSize: 8 }
+                            Label { width: root.phaseWidth; height: parent.height; verticalAlignment: Text.AlignVCenter; text: rowSnapshot.phase || "—"; color: phaseColor; font.pixelSize: 8; font.weight: Font.DemiBold }
+                            Label { width: root.instantWidth; height: parent.height; verticalAlignment: Text.AlignVCenter; text: rowSnapshot.valid ? root.formatValue(modelData, rowSnapshot.instant) : "—"; color: "#343b40"; font.pixelSize: 8 }
+                            Label { width: root.rmsWidth; height: parent.height; verticalAlignment: Text.AlignVCenter; text: rowSnapshot.valid ? root.formatValue(modelData, rowSnapshot.rms) : "—"; color: "#343b40"; font.pixelSize: 8 }
+                            Label { width: root.h1Width; height: parent.height; verticalAlignment: Text.AlignVCenter; text: rowSnapshot.valid ? root.formatValue(modelData, rowSnapshot.fundamental) : "—"; color: "#343b40"; font.pixelSize: 8 }
+                            Label { width: root.angleWidth; height: parent.height; verticalAlignment: Text.AlignVCenter; text: rowSnapshot.valid ? rowSnapshot.angle.toFixed(1) + "°" : "—"; color: "#343b40"; font.pixelSize: 8 }
+                            Label { width: root.extremumWidth; height: parent.height; verticalAlignment: Text.AlignVCenter; text: rowSnapshot.valid ? root.formatValue(modelData, rowSnapshot.extremum) : "—"; color: "#343b40"; font.pixelSize: 8 }
+                            Label { width: root.dcWidth; height: parent.height; verticalAlignment: Text.AlignVCenter; text: rowSnapshot.valid ? root.formatValue(modelData, rowSnapshot.dc) : "—"; color: Math.abs(rowSnapshot.dc || 0) > Math.max(1e-12, Math.abs(rowSnapshot.fundamental || 0) * 0.05) ? "#8a5b00" : "#343b40"; font.pixelSize: 8 }
 
                             Rectangle {
                                 width: root.percentWidth; height: parent.height
-                                color: data.valid && data.thd >= 5.0 ? "#fff2cf" : "transparent"
-                                Label { anchors.fill: parent; verticalAlignment: Text.AlignVCenter; text: data.valid ? data.thd.toFixed(2) + "%" : "—"; color: data.valid && data.thd >= 5.0 ? "#8a5b00" : "#343b40"; font.pixelSize: 8; font.weight: data.valid && data.thd >= 5.0 ? Font.DemiBold : Font.Normal }
+                                color: rowSnapshot.valid && rowSnapshot.thd >= 5.0 ? "#fff2cf" : "transparent"
+                                Label { anchors.fill: parent; verticalAlignment: Text.AlignVCenter; text: rowSnapshot.valid ? rowSnapshot.thd.toFixed(2) + "%" : "—"; color: rowSnapshot.valid && rowSnapshot.thd >= 5.0 ? "#8a5b00" : "#343b40"; font.pixelSize: 8; font.weight: rowSnapshot.valid && rowSnapshot.thd >= 5.0 ? Font.DemiBold : Font.Normal }
                             }
-                            Label { width: root.percentWidth; height: parent.height; verticalAlignment: Text.AlignVCenter; text: data.valid ? data.h2.toFixed(2) + "%" : "—"; color: "#343b40"; font.pixelSize: 8 }
-                            Label { width: root.percentWidth; height: parent.height; verticalAlignment: Text.AlignVCenter; text: data.valid ? data.h3.toFixed(2) + "%" : "—"; color: "#343b40"; font.pixelSize: 8 }
-                            Label { width: root.percentWidth; height: parent.height; verticalAlignment: Text.AlignVCenter; text: data.valid ? data.h5.toFixed(2) + "%" : "—"; color: "#343b40"; font.pixelSize: 8 }
+                            Label { width: root.percentWidth; height: parent.height; verticalAlignment: Text.AlignVCenter; text: rowSnapshot.valid ? rowSnapshot.h2.toFixed(2) + "%" : "—"; color: "#343b40"; font.pixelSize: 8 }
+                            Label { width: root.percentWidth; height: parent.height; verticalAlignment: Text.AlignVCenter; text: rowSnapshot.valid ? rowSnapshot.h3.toFixed(2) + "%" : "—"; color: "#343b40"; font.pixelSize: 8 }
+                            Label { width: root.percentWidth; height: parent.height; verticalAlignment: Text.AlignVCenter; text: rowSnapshot.valid ? rowSnapshot.h5.toFixed(2) + "%" : "—"; color: "#343b40"; font.pixelSize: 8 }
                         }
 
                         ToolTip.visible: rowMouse.containsMouse
-                        ToolTip.text: data.valid
-                                      ? (root.document.channelName(modelData) + " · " + data.role + " · "
+                        ToolTip.text: rowSnapshot.valid
+                                      ? (root.document.channelName(modelData) + " · " + rowSnapshot.role + " · "
                                          + (root.valueRepresentation === "primary" ? "PRIMARY" : "SECONDARY")
-                                         + "\nCursor " + root.relativeMs().toFixed(3) + " ms · THD " + data.thd.toFixed(2) + "%")
+                                         + "\nCursor " + root.relativeMs().toFixed(3) + " ms · THD " + rowSnapshot.thd.toFixed(2) + "%")
                                       : "No valid one-cycle snapshot"
                         MouseArea { id: rowMouse; anchors.fill: parent; hoverEnabled: true; acceptedButtons: Qt.NoButton }
                     }
