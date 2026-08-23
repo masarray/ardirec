@@ -40,7 +40,10 @@ Rectangle {
     }
     function dominantText(spectrum) {
         if (!spectrum || !spectrum.valid || spectrum.dominantOrder <= 0) return "—"
-        return "H" + spectrum.dominantOrder + " · " + spectrum.dominantPercent.toFixed(2) + "%"
+        const detail = displayMode === "rms"
+                       ? (document ? document.formatChannelValue(channelIndex, spectrum.dominantMagnitude) : spectrum.dominantMagnitude.toFixed(3))
+                       : spectrum.dominantPercent.toFixed(2) + "%"
+        return "H" + spectrum.dominantOrder + " · " + detail
     }
 
     Rectangle {
@@ -101,8 +104,8 @@ Rectangle {
             Label { width: 70; text: root.spectrumB.valid ? root.spectrumB.thdPercent.toFixed(2) + "%" : "—"; color: "#252b30"; font.pixelSize: 7 }
 
             Label { width: 52; text: "Dominant"; color: "#697178"; font.pixelSize: 7 }
-            Label { width: 70; text: root.dominantText(root.spectrumA); color: "#252b30"; font.pixelSize: 7 }
-            Label { width: 70; text: root.dominantText(root.spectrumB); color: "#252b30"; font.pixelSize: 7 }
+            Label { width: 70; text: root.dominantText(root.spectrumA); color: "#252b30"; font.pixelSize: 7; elide: Text.ElideRight }
+            Label { width: 70; text: root.dominantText(root.spectrumB); color: "#252b30"; font.pixelSize: 7; elide: Text.ElideRight }
         }
     }
 
