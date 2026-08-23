@@ -42,7 +42,7 @@ jobs:
       - name: Stage Qt application
         shell: pwsh
         run: |
-          $folder = 'ardirec-v0.2.0-alpha.13-windows-x64'
+          $folder = 'ardirec-v0.2.0-alpha.14-windows-x64'
           New-Item -ItemType Directory -Force -Path $folder | Out-Null
           Copy-Item build/apps/desktop/Release/ardirec.exe "$folder/ardirec.exe"
           windeployqt --release --compiler-runtime --no-translations --qmldir apps/desktop/qml "$folder/ardirec.exe"
@@ -51,8 +51,8 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $folder = 'ardirec-v0.2.0-alpha.13-windows-x64'
-          $zip = 'ardirec-v0.2.0-alpha.13-windows-x64-portable.zip'
+          $folder = 'ardirec-v0.2.0-alpha.14-windows-x64'
+          $zip = 'ardirec-v0.2.0-alpha.14-windows-x64-portable.zip'
           if (Test-Path $zip) { Remove-Item $zip -Force }
           Compress-Archive -Path $folder -DestinationPath $zip -CompressionLevel Optimal
           (Get-FileHash $zip -Algorithm SHA256).Hash + '  ' + $zip | Set-Content SHA256SUMS.txt
@@ -60,30 +60,26 @@ jobs:
       - name: Publish GitHub prerelease
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v0.2.0-alpha.13
-          name: ardirec v0.2.0-alpha.13 — Calculation Parity Hotfix
+          tag_name: v0.2.0-alpha.14
+          name: ardirec v0.2.0-alpha.14 — Table UX Finalization
           prerelease: true
           make_latest: false
           generate_release_notes: true
           body: |
-            alpha.13 is a calculation-parity hotfix driven by a side-by-side check against the SIGRA line1.CFG sample at the same trigger cursor.
+            alpha.14 finalizes the Engineering Table UX after alpha.13 achieved numerical parity with the SIGRA line1.CFG reference.
 
-            What the audit proved:
-            - COMTRADE decoding/scaling was already sound: H1 RMS and H2/H3/H5 ratios matched the reference values.
-            - Phase-angle presentation used the wrong reference convention.
-            - Table Extremum used max-absolute-in-cycle instead of the last completed turning point.
-            - Compact DC was shown as absolute V/A while the reference table was configured for DC percent of H1.
-            - THD could be grossly inflated when a user requested harmonic orders above the record Nyquist limit.
+            Table UX changes:
+            - Record sorting now preserves the actual COMTRADE CFG analog-channel order instead of silently grouping voltage before current.
+            - Table-specific top chrome is collapsed so more engineering rows remain visible while Open, Signals, view switching and Primary/Secondary remain accessible.
+            - Analysis rows are denser and use one-decimal percentages for fast scanning; Detailed mode and hover tooltips preserve additional precision.
+            - Column semantics are explicit: DC/H1 and THD H2-Hn make the percentage reference and Nyquist-safe THD range unambiguous.
+            - Abnormal investigation cues use restrained amber markers instead of large filled warning cells; they remain heuristics, not relay-operate verdicts.
+            - Summary wording is more direct: Worst THD, Highest DC/H1, Max V RMS and Max I RMS.
+            - Detailed mode keeps nearest sample, true RMS, crest factor and signed DC without changing the single-cursor investigation context.
 
-            Fixes:
-            - Phase is now sine-wave phase position at the cursor/reference instant for Table/Harmonics and the vector display.
-            - Harmonic requests are automatically clipped to the physically resolvable Nyquist order. A 1 kHz / 50 Hz record stops at H10, so aliased H11+ can no longer be double-counted in THD.
-            - Table uses Last extremum semantics: the latest completed local max/min before the cursor.
-            - Default Table DC presentation is percent of H1; signed absolute DC remains available in Detailed mode.
-            - Table exposes the sample rate and actual THD harmonic limit for auditability.
-            - Deterministic tests cover phase reference, Nyquist clipping, alias-safe THD and last-extreme selection.
+            Calculation behavior from alpha.13 is intentionally unchanged: cursor-referenced phase, Last extremum, DC/H1, Nyquist-safe harmonics and THD remain the validated baseline.
 
             Windows development distribution remains a portable ZIP folder. The executable is unsigned, so Windows SmartScreen may show a warning.
           files: |
-            ardirec-v0.2.0-alpha.13-windows-x64-portable.zip
+            ardirec-v0.2.0-alpha.14-windows-x64-portable.zip
             SHA256SUMS.txt
