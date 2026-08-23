@@ -62,6 +62,12 @@ void WaveformItem::reloadSamples() {
         m_times.clear();
     } else {
         m_samples = m_document->analogSamples(m_channelIndex);
+        const double representationScale = m_document->channelDisplayScale(m_channelIndex);
+        if (!qFuzzyCompare(representationScale, 1.0)) {
+            for (double& value : m_samples) {
+                if (std::isfinite(value)) value *= representationScale;
+            }
+        }
         m_times = m_document->timeSeconds();
         if (m_times.size() > m_samples.size()) m_times.resize(m_samples.size());
         if (m_samples.size() > m_times.size()) m_samples.resize(m_times.size());
