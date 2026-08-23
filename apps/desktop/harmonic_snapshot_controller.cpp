@@ -88,7 +88,7 @@ QVariantMap HarmonicSnapshotController::spectrumAt(int channelIndex,
         std::span<const double>(times.data() + first, count),
         frequency,
         maximumOrder,
-        m_document->dataStartSeconds());
+        absoluteTimeSeconds);
     if (!spectrum.valid) {
         return {{QStringLiteral("valid"), false}, {QStringLiteral("bins"), bins}};
     }
@@ -125,6 +125,9 @@ QVariantMap HarmonicSnapshotController::spectrumAt(int channelIndex,
                        {QStringLiteral("dominantOrder"), spectrum.dominant_order},
                        {QStringLiteral("dominantMagnitude"), spectrum.dominant_rms * representationScale},
                        {QStringLiteral("dominantPercent"), spectrum.dominant_percent},
+                       {QStringLiteral("maximumResolvableOrder"), spectrum.maximum_resolvable_order},
+                       {QStringLiteral("sampleRate"), spectrum.estimated_sample_rate_hz},
+                       {QStringLiteral("requestedOrder"), maximumOrder},
                        {QStringLiteral("bins"), bins},
                        {QStringLiteral("unit"), m_document->channelUnit(channelIndex)},
                        {QStringLiteral("name"), m_document->channelName(channelIndex)},
