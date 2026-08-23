@@ -121,7 +121,7 @@ QVariantMap TableSnapshotController::snapshotAt(int channelIndex, double absolut
         std::span<const double>(samples.data() + first, count),
         std::span<const double>(times.data() + first, count),
         frequency,
-        5,
+        25,
         m_document->dataStartSeconds());
 
     const auto nearestIt = std::lower_bound(times.begin(), times.end(), absoluteTimeSeconds);
