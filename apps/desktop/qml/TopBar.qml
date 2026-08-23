@@ -13,7 +13,7 @@ Rectangle {
     property string recordMetadata: ""
     property string currentViewLabel: "TIME SIGNALS"
     property bool hasRecord: false
-    property bool compactMode: false
+    readonly property bool compactMode: currentViewLabel === "ENGINEERING TABLE"
     signal openRequested()
     signal signalsRequested()
     signal fitRequested()
