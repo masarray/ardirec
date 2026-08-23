@@ -4,6 +4,7 @@
 #include "ardirec/comtrade/bundle.hpp"
 #include "ardirec/comtrade/dat_reader.hpp"
 #include "ardirec/comtrade/parser.hpp"
+#include "ardirec/comtrade/value_representation.hpp"
 
 #include <QDate>
 #include <QDateTime>
@@ -69,6 +70,11 @@ QString normalized_unit(QString unit) {
     unit = unit.trimmed().toUpper();
     unit.remove(' ');
     return unit;
+}
+
+QString compact_ratio_value(double value) {
+    if (!std::isfinite(value)) return QStringLiteral("—");
+    return QString::number(value, 'g', 7);
 }
 } // namespace
 
@@ -151,6 +157,8 @@ void DocumentController::openCfg(const QUrl& url) {
         m_channelNames.clear();
         m_channelUnits.clear();
         m_statusNames.clear();
+        m_channelConfigs = cfg.analog_channels;
+        m_valueRepresentation = QStringLiteral("secondary");
         m_analogCount = static_cast<int>(cfg.analog_channels.size());
         m_digitalCount = static_cast<int>(cfg.status_channels.size());
         for (const auto& ch : cfg.analog_channels) {
@@ -165,6 +173,7 @@ void DocumentController::openCfg(const QUrl& url) {
             m_channels << QStringLiteral("D  %1").arg(name);
             m_statusNames << name;
         }
+        rebuildTransformerSummary();
 
         m_analogSamples.assign(cfg.analog_channels.size(), {});
         for (auto& values : m_analogSamples) values.reserve(frames.size());
@@ -193,7 +202,7 @@ void DocumentController::openCfg(const QUrl& url) {
             for (const double value : m_analogSamples[channel]) {
                 if (std::isfinite(value)) peak = std::max(peak, std::abs(value));
             }
-            m_channelPeaks[channel] = nice_peak(peak);
+            m_channelPeaks[channel] = peak;
         }
 
         m_statusActive.assign(m_statusSamples.size(), false);
@@ -233,6 +242,7 @@ void DocumentController::openCfg(const QUrl& url) {
         m_error.clear();
         emit documentChanged();
         emit waveformChanged();
+        emit representationChanged();
         emit errorChanged();
     } catch (const std::exception& ex) {
         m_error = QString::fromUtf8(ex.what());
@@ -247,6 +257,19 @@ void DocumentController::selectChannel(int index) {
     m_selectedSignal = m_channelNames.value(index);
     rebuildSelectedSamples();
     emit waveformChanged();
+}
+
+void DocumentController::setValueRepresentation(const QString& representation) {
+    const QString normalized = representation.trimmed().toLower();
+    if (normalized != QStringLiteral("primary") && normalized != QStringLiteral("secondary")) return;
+    if (m_valueRepresentation == normalized) return;
+    m_valueRepresentation = normalized;
+    rebuildSelectedSamples();
+    emit representationChanged();
+    emit waveformChanged();
+    // Existing QML analysis surfaces and renderers listen to documentChanged; keep the event
+    // intentionally broad until InvestigationContext becomes its own QObject.
+    emit documentChanged();
 }
 
 QString DocumentController::channelName(int index) const {
@@ -283,9 +306,31 @@ QString DocumentController::analogRole(int index) const {
     return QStringLiteral("Other");
 }
 
+double DocumentController::channelDisplayScale(int index) const {
+    if (index < 0 || index >= static_cast<int>(m_channelConfigs.size())) return 1.0;
+    const auto target = m_valueRepresentation == QStringLiteral("primary")
+                            ? ardirec::comtrade::ValueRepresentation::Primary
+                            : ardirec::comtrade::ValueRepresentation::Secondary;
+    return ardirec::comtrade::representation_scale(m_channelConfigs[static_cast<std::size_t>(index)], target);
+}
+
 double DocumentController::channelPeak(int index) const {
     if (index < 0 || index >= static_cast<int>(m_channelPeaks.size())) return 1.0;
-    return m_channelPeaks[static_cast<std::size_t>(index)];
+    return nice_peak(m_channelPeaks[static_cast<std::size_t>(index)] * std::abs(channelDisplayScale(index)));
+}
+
+QString DocumentController::channelRatioText(int index) const {
+    if (index < 0 || index >= static_cast<int>(m_channelConfigs.size())) return QStringLiteral("—");
+    const auto& channel = m_channelConfigs[static_cast<std::size_t>(index)];
+    if (!ardirec::comtrade::has_valid_transformer_ratio(channel)) return QStringLiteral("1:1 / unavailable");
+    const QString unit = channelUnit(index);
+    const QString recorded = ardirec::comtrade::recorded_representation(channel)
+                                     == ardirec::comtrade::ValueRepresentation::Primary
+                                 ? QStringLiteral("P")
+                                 : QStringLiteral("S");
+    return QStringLiteral("Pri %1 / Sec %2%3 · recorded %4")
+        .arg(compact_ratio_value(*channel.primary), compact_ratio_value(*channel.secondary),
+             unit.isEmpty() ? QString{} : QStringLiteral(" ") + unit, recorded);
 }
 
 std::size_t DocumentController::nearestSampleIndex(double absoluteTimeSeconds) const {
@@ -309,20 +354,25 @@ double DocumentController::sampleValue(int channelIndex, double absoluteTimeSeco
     const auto& samples = m_analogSamples[static_cast<std::size_t>(channelIndex)];
     if (samples.empty()) return std::numeric_limits<double>::quiet_NaN();
     const std::size_t index = std::min(nearestSampleIndex(absoluteTimeSeconds), samples.size() - 1);
-    return samples[index];
+    return samples[index] * channelDisplayScale(channelIndex);
 }
 
-QString DocumentController::sampleValueText(int channelIndex, double absoluteTimeSeconds) const {
-    const double value = sampleValue(channelIndex, absoluteTimeSeconds);
+QString DocumentController::formatChannelValue(int channelIndex, double value) const {
     if (!std::isfinite(value)) return QStringLiteral("—");
     const double magnitude = std::abs(value);
     int decimals = 4;
-    if (magnitude >= 1000.0) decimals = 1;
+    if (magnitude >= 100000.0) decimals = 0;
+    else if (magnitude >= 10000.0) decimals = 1;
+    else if (magnitude >= 1000.0) decimals = 1;
     else if (magnitude >= 100.0) decimals = 2;
     else if (magnitude >= 10.0) decimals = 3;
     const QString unit = channelUnit(channelIndex);
     return unit.isEmpty() ? QString::number(value, 'f', decimals)
                           : QStringLiteral("%1 %2").arg(QString::number(value, 'f', decimals), unit);
+}
+
+QString DocumentController::sampleValueText(int channelIndex, double absoluteTimeSeconds) const {
+    return formatChannelValue(channelIndex, sampleValue(channelIndex, absoluteTimeSeconds));
 }
 
 QString DocumentController::digitalName(int index) const {
@@ -388,10 +438,36 @@ void DocumentController::rebuildDigitalEdges() {
                              m_digitalEdgeTimes.end());
 }
 
+void DocumentController::rebuildTransformerSummary() {
+    QString voltageRatio;
+    QString currentRatio;
+    for (int index = 0; index < static_cast<int>(m_channelConfigs.size()); ++index) {
+        const auto& channel = m_channelConfigs[static_cast<std::size_t>(index)];
+        if (!ardirec::comtrade::has_valid_transformer_ratio(channel)) continue;
+        const QString ratio = QStringLiteral("%1/%2")
+                                  .arg(compact_ratio_value(*channel.primary),
+                                       compact_ratio_value(*channel.secondary));
+        const QString role = analogRole(index);
+        if (role == QStringLiteral("Voltage") && voltageRatio.isEmpty()) voltageRatio = ratio;
+        if (role == QStringLiteral("Current") && currentRatio.isEmpty()) currentRatio = ratio;
+    }
+
+    QStringList parts;
+    if (!voltageRatio.isEmpty()) parts << QStringLiteral("PT %1").arg(voltageRatio);
+    if (!currentRatio.isEmpty()) parts << QStringLiteral("CT %1").arg(currentRatio);
+    m_transformerRatiosAvailable = !parts.isEmpty();
+    m_transformerRatioSummary = parts.isEmpty() ? QStringLiteral("No CT/PT ratio metadata")
+                                                : parts.join(QStringLiteral(" · "));
+}
+
 void DocumentController::rebuildSelectedSamples() {
     if (m_selectedAnalogIndex < 0 || m_selectedAnalogIndex >= static_cast<int>(m_analogSamples.size())) {
         m_selectedSamples.clear();
         return;
     }
     m_selectedSamples = m_analogSamples[static_cast<std::size_t>(m_selectedAnalogIndex)];
+    const double scale = channelDisplayScale(m_selectedAnalogIndex);
+    for (double& value : m_selectedSamples) {
+        if (std::isfinite(value)) value *= scale;
+    }
 }
