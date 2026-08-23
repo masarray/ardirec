@@ -42,7 +42,7 @@ jobs:
       - name: Stage Qt application
         shell: pwsh
         run: |
-          $folder = 'ardirec-v0.2.0-alpha.8-windows-x64'
+          $folder = 'ardirec-v0.2.0-alpha.9-windows-x64'
           New-Item -ItemType Directory -Force -Path $folder | Out-Null
           Copy-Item build/apps/desktop/Release/ardirec.exe "$folder/ardirec.exe"
           windeployqt --release --compiler-runtime --no-translations --qmldir apps/desktop/qml "$folder/ardirec.exe"
@@ -51,8 +51,8 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $folder = 'ardirec-v0.2.0-alpha.8-windows-x64'
-          $zip = 'ardirec-v0.2.0-alpha.8-windows-x64-portable.zip'
+          $folder = 'ardirec-v0.2.0-alpha.9-windows-x64'
+          $zip = 'ardirec-v0.2.0-alpha.9-windows-x64-portable.zip'
           if (Test-Path $zip) { Remove-Item $zip -Force }
           Compress-Archive -Path $folder -DestinationPath $zip -CompressionLevel Optimal
           (Get-FileHash $zip -Algorithm SHA256).Hash + '  ' + $zip | Set-Content SHA256SUMS.txt
@@ -60,27 +60,28 @@ jobs:
       - name: Publish GitHub prerelease
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v0.2.0-alpha.8
-          name: ardirec v0.2.0-alpha.8 — Stacked Harmonic Analysis
+          tag_name: v0.2.0-alpha.9
+          name: ardirec v0.2.0-alpha.9 — Protection Distance Locus
           prerelease: true
           make_latest: false
           generate_release_notes: true
           body: |
-            ardirec alpha.8 delivers the P1 harmonic-analysis workflow on top of the P0 investigation foundation.
+            ardirec alpha.9 delivers the P2 manual distance-protection analysis foundation.
 
             Highlights:
-            - Harmonics is now a stacked engineering workspace instead of a single-channel proof chart.
-            - Selecting a Voltage or Current measuring signal automatically presents mapped L1/L2/L3/E spectra together for fast phase comparison.
-            - C1 and C2 are visible simultaneously in every harmonic row; the active cursor uses the solid treatment while the comparison remains visible without losing phase-color identity.
-            - Each signal has a compact summary rail with H1 RMS, THD and dominant non-fundamental harmonic for both cursors.
-            - Distortion plots focus on H2..Hn so useful harmonic detail is not flattened by the always-100% fundamental reference.
-            - Display can switch between relative %H1 and absolute RMS engineering units.
-            - Harmonic-order presets cover H15, H25 and H50.
-            - A new pure C++ harmonic-spectrum engine computes all requested orders from one one-cycle sample window using a complex recurrence, replacing repeated per-order window scans.
-            - Deterministic tests validate a known H1=100 RMS, H3=10 RMS, H5=5 RMS waveform with THD=11.1803398875%, clean-sine near-zero THD, and isolated non-finite sample handling.
-            - Primary/Secondary representation from alpha.7 continues to scale absolute harmonic magnitudes while %H1 and THD remain invariant.
+            - Locus now uses explicit protection measuring loops: L1-E, L2-E, L3-E, L1-L2, L2-L3 and L3-L1.
+            - Phase-phase loops use differential voltage/current; phase-earth loops support complex residual-current grounding compensation kL.
+            - kL can be entered manually or imported from RIO/XRIO KL, Z0/Z1, or RE/RL-XE/XL settings where available.
+            - C1 and C2 remain synchronized with the shared investigation context and are displayed as filled/outlined impedance markers.
+            - The selected Time-view window drives the R-X trajectory, keeping fault timing and impedance behavior aligned.
+            - Classic RIO distance zones are imported with fault-loop filtering, trip metadata and supported generic polygon/mho geometry.
+            - Standardized XRIO RIO Distance sections are adapted without evaluating vendor-specific Custom formulas/scripts; unsupported content is reported explicitly.
+            - Imported zone impedance bases follow the global Primary/Secondary representation when CT/VT metadata permits verified conversion.
+            - Pure C++ distance and RIO seams have deterministic regression tests for LL/LN loop equations, complex kL conversion, RIO geometry/filtering and XRIO adaptation.
+
+            P2 is manual analysis infrastructure, not automatic fault classification or distance-to-fault estimation. Unsupported proprietary XRIO converter logic is never guessed.
 
             Windows development distribution remains a portable ZIP folder. The executable is unsigned, so Windows SmartScreen may show a warning.
           files: |
-            ardirec-v0.2.0-alpha.8-windows-x64-portable.zip
+            ardirec-v0.2.0-alpha.9-windows-x64-portable.zip
             SHA256SUMS.txt
