@@ -12,10 +12,12 @@ Rectangle {
     property string role: "Voltage"
     property string title: "VOLTAGE PHASORS"
     property real cursorTime: 0.0
+    property string valueRepresentation: document ? document.valueRepresentation : "secondary"
 
     function requestRepaint() { phasorCanvas.requestPaint() }
     onCursorTimeChanged: requestRepaint()
     onRoleChanged: requestRepaint()
+    onValueRepresentationChanged: requestRepaint()
     Connections {
         target: root.document
         function onDocumentChanged() { root.requestRepaint() }
@@ -27,7 +29,7 @@ Rectangle {
         anchors.top: parent.top
         anchors.leftMargin: 10
         anchors.topMargin: 8
-        text: root.title
+        text: root.title + " · " + (root.valueRepresentation === "primary" ? "PRIMARY" : "SECONDARY")
         color: "#3d464d"
         font.pixelSize: 9
         font.weight: Font.DemiBold
@@ -117,7 +119,10 @@ Rectangle {
                 Rectangle { width: 12; height: 2; anchors.verticalCenter: parent.verticalCenter; color: root.analysis ? root.analysis.phaseColorForName(modelData) : "#777" }
                 Label {
                     readonly property int channelIndex: root.analysis ? root.analysis.phaseChannel(root.role, modelData) : -1
-                    readonly property var phasor: channelIndex >= 0 && root.analysis ? root.analysis.phasorAt(channelIndex, root.cursorTime) : ({valid:false})
+                    readonly property var phasor: {
+                        const representationDependency = root.valueRepresentation
+                        return channelIndex >= 0 && root.analysis ? root.analysis.phasorAt(channelIndex, root.cursorTime) : ({valid:false})
+                    }
                     text: modelData + (phasor.valid ? "  " + phasor.magnitude.toFixed(2) + " " + phasor.unit + "  ∠" + phasor.angle.toFixed(1) + "°" : "")
                     color: "#4e565c"
                     font.pixelSize: 8
