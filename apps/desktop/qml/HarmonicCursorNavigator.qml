@@ -16,6 +16,8 @@ Rectangle {
     property real hoverRadius: 8
     property real snapRadius: 12
     property color cursorColor: "#244f9e"
+    property string labelText: "HARMONIC CURSOR"
+    property string detailText: "1-cycle trailing DFT"
 
     signal cursorRequested(real timeSeconds)
 
@@ -55,8 +57,8 @@ Rectangle {
         Column {
             anchors.centerIn: parent
             spacing: 1
-            Label { text: "HARMONIC CURSOR"; color: "#4c545b"; font.pixelSize: 8; font.weight: Font.DemiBold }
-            Label { text: "1-cycle trailing DFT"; color: "#747d84"; font.pixelSize: 7 }
+            Label { text: root.labelText; color: "#4c545b"; font.pixelSize: 8; font.weight: Font.DemiBold }
+            Label { text: root.detailText; color: "#747d84"; font.pixelSize: 7 }
         }
     }
 
