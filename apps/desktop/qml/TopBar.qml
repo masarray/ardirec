@@ -5,7 +5,7 @@ import QtQuick.Layouts
 
 Rectangle {
     id: root
-    height: 62
+    height: compactMode ? 38 : 62
     color: "#f2f2f2"
     border.color: "#b7b7b7"
 
@@ -13,6 +13,7 @@ Rectangle {
     property string recordMetadata: ""
     property string currentViewLabel: "TIME SIGNALS"
     property bool hasRecord: false
+    property bool compactMode: false
     signal openRequested()
     signal signalsRequested()
     signal fitRequested()
@@ -26,7 +27,8 @@ Rectangle {
 
         Rectangle {
             Layout.fillWidth: true
-            Layout.preferredHeight: 24
+            Layout.preferredHeight: root.compactMode ? 0 : 24
+            visible: !root.compactMode
             color: "#fafafa"
             border.color: "#d0d0d0"
             RowLayout {
@@ -62,19 +64,20 @@ Rectangle {
 
             ToolButton {
                 text: "Open"
-                font.pixelSize: 10
+                font.pixelSize: root.compactMode ? 9 : 10
                 onClicked: root.openRequested()
                 ToolTip.visible: hovered
                 ToolTip.text: "Open COMTRADE CFG"
             }
             ToolButton {
                 text: "Signals"
-                font.pixelSize: 10
+                font.pixelSize: root.compactMode ? 9 : 10
                 enabled: root.hasRecord
                 onClicked: root.signalsRequested()
             }
-            Rectangle { width: 1; height: 24; color: "#c8c8c8" }
+            Rectangle { width: 1; height: root.compactMode ? 18 : 24; color: "#c8c8c8" }
             ToolButton {
+                visible: !root.compactMode
                 text: "Fit"
                 font.pixelSize: 10
                 enabled: root.hasRecord
@@ -83,6 +86,7 @@ Rectangle {
                 ToolTip.text: "Fit complete record"
             }
             ToolButton {
+                visible: !root.compactMode
                 text: "Trigger"
                 font.pixelSize: 10
                 enabled: root.hasRecord
@@ -91,19 +95,20 @@ Rectangle {
                 ToolTip.text: "Center common time view around COMTRADE trigger"
             }
             ToolButton {
+                visible: !root.compactMode
                 text: "Zoom +"
                 font.pixelSize: 10
                 enabled: root.hasRecord
                 onClicked: root.zoomInRequested()
             }
             ToolButton {
+                visible: !root.compactMode
                 text: "Zoom −"
                 font.pixelSize: 10
                 enabled: root.hasRecord
                 onClicked: root.zoomOutRequested()
             }
-
-            Rectangle { width: 1; height: 24; color: "#c8c8c8" }
+            Rectangle { visible: !root.compactMode; width: 1; height: 24; color: "#c8c8c8" }
 
             ColumnLayout {
                 Layout.leftMargin: 5
@@ -111,12 +116,13 @@ Rectangle {
                 Label {
                     text: root.recordTitle
                     color: "#1d1d1d"
-                    font.pixelSize: 10
+                    font.pixelSize: root.compactMode ? 9 : 10
                     font.weight: Font.DemiBold
                     elide: Text.ElideRight
-                    Layout.maximumWidth: 300
+                    Layout.maximumWidth: root.compactMode ? 360 : 300
                 }
                 Label {
+                    visible: !root.compactMode
                     text: root.recordMetadata
                     color: "#696969"
                     font.pixelSize: 8
@@ -129,7 +135,14 @@ Rectangle {
                 text: root.currentViewLabel
                 color: "#555555"
                 font.pixelSize: 9
+                font.weight: root.compactMode ? Font.DemiBold : Font.Normal
                 font.letterSpacing: 0.6
+            }
+            Label {
+                visible: root.compactMode
+                text: "ardirec"
+                color: "#747b81"
+                font.pixelSize: 8
             }
         }
     }
