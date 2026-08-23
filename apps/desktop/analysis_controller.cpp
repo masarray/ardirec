@@ -119,7 +119,6 @@ std::pair<std::size_t, std::size_t> AnalysisController::oneCycleWindow(double ab
     std::size_t end = static_cast<std::size_t>(std::distance(times.begin(), endIt));
     end = std::min(end, times.size());
 
-    // A perfect one-cycle window must not count the same electrical phase twice at both boundaries.
     if (end > first + 2 && times[end - 1] - times[first] >= period * (1.0 - 1.0e-8)) ++first;
     if (end <= first) return {0, 0};
     return {first, end};
@@ -143,19 +142,12 @@ double AnalysisController::rmsValue(int channelIndex, double absoluteTimeSeconds
         ++count;
     }
     if (count == 0) return std::numeric_limits<double>::quiet_NaN();
-    return std::sqrt(static_cast<double>(sumSquares / static_cast<long double>(count)));
+    const double recordedRms = std::sqrt(static_cast<double>(sumSquares / static_cast<long double>(count)));
+    return recordedRms * std::abs(m_document->channelDisplayScale(channelIndex));
 }
 
 QString AnalysisController::formatEngineeringValue(double value, int channelIndex) const {
-    if (!m_document || !std::isfinite(value)) return QStringLiteral("—");
-    const double magnitude = std::abs(value);
-    int decimals = 4;
-    if (magnitude >= 1000.0) decimals = 1;
-    else if (magnitude >= 100.0) decimals = 2;
-    else if (magnitude >= 10.0) decimals = 3;
-    const QString unit = m_document->channelUnit(channelIndex);
-    return unit.isEmpty() ? QString::number(value, 'f', decimals)
-                          : QStringLiteral("%1 %2").arg(QString::number(value, 'f', decimals), unit);
+    return m_document ? m_document->formatChannelValue(channelIndex, value) : QStringLiteral("—");
 }
 
 QString AnalysisController::rmsValueText(int channelIndex, double absoluteTimeSeconds) const {
@@ -191,8 +183,8 @@ std::complex<double> AnalysisController::phasorComplex(int channelIndex,
     }
     if (count < 4) return {};
 
-    const long double scale = std::sqrt(2.0L) / static_cast<long double>(count);
-    accumulator *= scale;
+    const long double dftScale = std::sqrt(2.0L) / static_cast<long double>(count);
+    accumulator *= dftScale * static_cast<long double>(m_document->channelDisplayScale(channelIndex));
     return {static_cast<double>(accumulator.real()), static_cast<double>(accumulator.imag())};
 }
 
