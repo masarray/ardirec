@@ -26,6 +26,24 @@ int main() {
         require(cfg.data_format == ardirec::comtrade::DataFormat::Ascii, "format parse");
         require(std::abs(cfg.analog_channels[0].a - 0.1) < 1e-12, "scale parse");
 
+        using ardirec::comtrade::AnalogChannel;
+        using ardirec::comtrade::ValueRepresentation;
+        using ardirec::comtrade::recorded_representation;
+        using ardirec::comtrade::representation_scale;
+
+        require(cfg.analog_channels[0].primary.has_value()
+                    && std::abs(*cfg.analog_channels[0].primary - 2000.0) < 1e-12,
+                "parsed primary transformer value");
+        require(cfg.analog_channels[0].secondary.has_value()
+                    && std::abs(*cfg.analog_channels[0].secondary - 1.0) < 1e-12,
+                "parsed secondary transformer value");
+        require(recorded_representation(cfg.analog_channels[0]) == ValueRepresentation::Primary,
+                "parsed recorded-side P metadata");
+        require(std::abs(representation_scale(cfg.analog_channels[0], ValueRepresentation::Primary) - 1.0) < 1e-12,
+                "parsed primary-recorded data stays primary");
+        require(std::abs(representation_scale(cfg.analog_channels[0], ValueRepresentation::Secondary) - 0.0005) < 1e-12,
+                "parsed primary-recorded data scales to secondary");
+
         const auto frames = ardirec::comtrade::DatReader{}.read(cfg, dir / "minimal_1999.dat");
         require(frames.size() == 4, "DAT frame count");
         require(std::abs(frames[1].analog[0] - 10.0) < 1e-12, "analog scaling");
@@ -38,10 +56,6 @@ int main() {
             require(std::abs(binary_frames[1].analog[0] - 10.0) < 1e-5, "binary-family analog scaling");
             require(binary_frames[1].status[0] && binary_frames[1].status[1], "packed status decode");
         }
-
-        using ardirec::comtrade::AnalogChannel;
-        using ardirec::comtrade::ValueRepresentation;
-        using ardirec::comtrade::representation_scale;
 
         AnalogChannel secondary_recorded;
         secondary_recorded.primary = 500000.0;
