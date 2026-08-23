@@ -20,7 +20,7 @@ void RmsWaveformItem::setDocument(QObject* document) {
     m_document = controller;
     if (m_document) {
         connect(m_document, &DocumentController::documentChanged, this, &RmsWaveformItem::reloadSamples);
-        connect(m_document, &DocumentController::representationChanged, this, &RmsWaveformItem::reloadSamples);
+        connect(m_document, &DocumentController::representationChanged, this, &RmsWaveformItem::refreshRepresentation);
     }
     reloadSamples();
     emit documentChanged();
@@ -61,19 +61,20 @@ void RmsWaveformItem::reloadSamples() {
         m_samples.clear();
         m_times.clear();
         m_rmsSamples.clear();
+        m_displayScale = 1.0;
     } else {
         m_samples = m_document->analogSamples(m_channelIndex);
-        const double representationScale = m_document->channelDisplayScale(m_channelIndex);
-        if (!qFuzzyCompare(representationScale, 1.0)) {
-            for (double& value : m_samples) {
-                if (std::isfinite(value)) value *= representationScale;
-            }
-        }
         m_times = m_document->timeSeconds();
         if (m_times.size() > m_samples.size()) m_times.resize(m_samples.size());
         if (m_samples.size() > m_times.size()) m_samples.resize(m_times.size());
+        m_displayScale = m_document->channelDisplayScale(m_channelIndex);
         rebuildRms();
     }
+    update();
+}
+
+void RmsWaveformItem::refreshRepresentation() {
+    m_displayScale = m_document ? m_document->channelDisplayScale(m_channelIndex) : 1.0;
     update();
 }
 
@@ -140,8 +141,10 @@ QSGNode* RmsWaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*
 
     double scalePeak = m_document ? m_document->channelPeak(m_channelIndex) / std::sqrt(2.0) : 1.0;
     if (!std::isfinite(scalePeak) || scalePeak < 1.0e-12) scalePeak = 1.0;
+    const double absoluteScale = std::abs(m_displayScale);
     for (std::size_t i = start; i < end; ++i) {
-        if (std::isfinite(m_rmsSamples[i])) scalePeak = std::max(scalePeak, m_rmsSamples[i] * 1.03);
+        const double displayed = m_rmsSamples[i] * absoluteScale;
+        if (std::isfinite(displayed)) scalePeak = std::max(scalePeak, displayed * 1.03);
     }
 
     const std::size_t pixelWidth = std::clamp<std::size_t>(static_cast<std::size_t>(width()), 64, 4096);
@@ -183,12 +186,12 @@ QSGNode* RmsWaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*
 
     std::size_t out = 0;
     for (std::size_t i = start; i < end && out < pointCount; i += stride) {
-        const double value = m_rmsSamples[i];
+        const double value = m_rmsSamples[i] * absoluteScale;
         vertices[out++].set(xForTime(m_times[i]), std::isfinite(value) ? yFor(value) : h * 0.9F);
     }
     while (out < pointCount) {
         const std::size_t i = end - 1;
-        const double value = m_rmsSamples[i];
+        const double value = m_rmsSamples[i] * absoluteScale;
         vertices[out++].set(xForTime(m_times[i]), std::isfinite(value) ? yFor(value) : h * 0.9F);
     }
 
