@@ -9,6 +9,7 @@ Rectangle {
     border.color: "#c8c8c8"
 
     property var document
+    property var analysis
     property int channelIndex: -1
     property real zoomFactor: 1.0
     property real panFraction: 0.0
@@ -16,13 +17,14 @@ Rectangle {
     property real visibleDuration: 1.0
     property real cursorATime: 0.0
     property real cursorBTime: 0.0
+    property string displayMode: "instantaneous"
     property color traceColor: "#315f8d"
     property real axisWidth: 92
     property color cursorAColor: "#244f9e"
     property color cursorBColor: "#b77900"
-    property color triggerColor: "#00a846"
 
-    readonly property real peak: document && channelIndex >= 0 ? document.channelPeak(channelIndex) : 1.0
+    readonly property real rawPeak: document && channelIndex >= 0 ? document.channelPeak(channelIndex) : 1.0
+    readonly property real displayPeak: displayMode === "rms" ? rawPeak / Math.sqrt(2.0) : rawPeak
 
     function formatAxis(value) {
         const magnitude = Math.abs(value)
@@ -61,7 +63,8 @@ Rectangle {
             anchors.top: parent.top
             anchors.leftMargin: 5
             anchors.topMargin: 19
-            text: root.document ? root.document.channelUnit(root.channelIndex) : ""
+            text: (root.document ? root.document.channelUnit(root.channelIndex) : "")
+                  + (root.displayMode === "rms" ? "  RMS" : "")
             color: "#707070"
             font.pixelSize: 8
         }
@@ -70,7 +73,7 @@ Rectangle {
             anchors.right: parent.right
             anchors.rightMargin: 5
             y: Math.max(30, parent.height * 0.10 - height * 0.5)
-            text: root.formatAxis(root.peak)
+            text: root.formatAxis(root.displayPeak)
             color: "#5c5c5c"
             font.pixelSize: 8
         }
@@ -78,7 +81,7 @@ Rectangle {
             anchors.right: parent.right
             anchors.rightMargin: 5
             y: parent.height * 0.50 - height * 0.5
-            text: "0"
+            text: root.displayMode === "rms" ? root.formatAxis(root.displayPeak * 0.5) : "0"
             color: "#777777"
             font.pixelSize: 8
         }
@@ -86,7 +89,7 @@ Rectangle {
             anchors.right: parent.right
             anchors.rightMargin: 5
             y: parent.height * 0.90 - height * 0.5
-            text: root.formatAxis(-root.peak)
+            text: root.displayMode === "rms" ? "0" : root.formatAxis(-root.displayPeak)
             color: "#5c5c5c"
             font.pixelSize: 8
         }
@@ -120,13 +123,14 @@ Rectangle {
                 x: 0
                 y: chart.height * modelData
                 width: chart.width
-                height: modelData === 0.50 ? 1 : 1
+                height: 1
                 color: modelData === 0.50 ? "#b8b8b8" : "#e1e1e1"
             }
         }
 
         WaveformItem {
             anchors.fill: parent
+            visible: root.displayMode !== "rms"
             document: root.document
             channelIndex: root.channelIndex
             traceColor: root.traceColor
@@ -134,16 +138,22 @@ Rectangle {
             panFraction: root.panFraction
         }
 
-        Rectangle {
+        RmsWaveformItem {
+            anchors.fill: parent
+            visible: root.displayMode === "rms"
+            document: root.document
+            channelIndex: root.channelIndex
+            traceColor: root.traceColor
+            zoomFactor: root.zoomFactor
+            panFraction: root.panFraction
+        }
+
+        TriggerReference {
             visible: root.document && root.visibleDuration > 0
                      && root.document.triggerOffsetSeconds >= root.viewStart
                      && root.document.triggerOffsetSeconds <= root.viewStart + root.visibleDuration
             x: (root.document.triggerOffsetSeconds - root.viewStart) / root.visibleDuration * chart.width
-            y: 0
-            width: 1
             height: chart.height
-            color: root.triggerColor
-            opacity: 0.85
         }
 
         Rectangle {
