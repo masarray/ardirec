@@ -34,6 +34,7 @@ qt_add_qml_module(ardirec
         qml/PhasorDiagram.qml
         qml/PhasorView.qml
         qml/LocusView.qml
+        qml/HarmonicDiagram.qml
         qml/HarmonicsView.qml
         qml/ValueTableView.qml
 )
