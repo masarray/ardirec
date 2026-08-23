@@ -26,12 +26,12 @@ ApplicationWindow {
     property int measurementChannel: -1
     property int maximumTracks: 24
     property string digitalDisplayMode: "active"
+    property string viewMode: "time"
+    property string timeDisplayMode: "instantaneous"
+    property int activeAnalysisCursor: 1
     property real axisWidth: 170
     property real analogTrackHeight: 148
     property real digitalTrackHeight: 28
-    property real cursorHoverRadius: 8
-    property real cursorSnapRadius: 12
-    property var tracePalette: ["#a5751b", "#315b8a", "#2b8b82", "#8a4f63", "#556f32", "#70528d", "#a05935", "#4f6f79"]
 
     readonly property bool hasRecord: documentController.sampleCount > 1 && documentController.analogCount > 0
     readonly property real fullDuration: documentController.durationSeconds
@@ -40,12 +40,13 @@ ApplicationWindow {
     readonly property real viewStart: documentController.dataStartSeconds + waveformPan * movableDuration
     readonly property real viewEnd: viewStart + visibleDuration
 
-    function clamp(value, lo, hi) {
-        return Math.max(lo, Math.min(hi, value))
-    }
-
-    function timeAtFraction(fraction) {
-        return viewStart + clamp(fraction, 0, 1) * visibleDuration
+    function clamp(value, lo, hi) { return Math.max(lo, Math.min(hi, value)) }
+    function viewLabel() {
+        if (viewMode === "phasor") return "PHASOR DIAGRAM"
+        if (viewMode === "locus") return "LOCUS / R-X"
+        if (viewMode === "harmonics") return "HARMONICS"
+        if (viewMode === "table") return "VALUE TABLE"
+        return timeDisplayMode === "rms" ? "TIME SIGNALS · RMS" : "TIME SIGNALS"
     }
 
     function defaultVisibleChannels() {
@@ -105,7 +106,7 @@ ApplicationWindow {
         rebuildAnalogGroups()
         rebuildDigitalGroup()
         focusTrigger()
-        signalFlick.contentY = 0
+        timeSignals.resetScroll()
     }
 
     function fitRecord() {
@@ -180,6 +181,11 @@ ApplicationWindow {
 
     Shortcut { sequence: StandardKey.Open; onActivated: openDialog.open() }
     Shortcut { sequence: "Ctrl+0"; onActivated: fitRecord() }
+    Shortcut { sequence: "1"; onActivated: if (hasRecord) viewMode = "time" }
+    Shortcut { sequence: "2"; onActivated: if (hasRecord) viewMode = "phasor" }
+    Shortcut { sequence: "3"; onActivated: if (hasRecord) viewMode = "locus" }
+    Shortcut { sequence: "4"; onActivated: if (hasRecord) viewMode = "harmonics" }
+    Shortcut { sequence: "5"; onActivated: if (hasRecord) viewMode = "table" }
 
     Connections {
         target: documentController
@@ -215,6 +221,7 @@ ApplicationWindow {
             Layout.fillWidth: true
             recordTitle: documentController.title
             recordMetadata: documentController.metadata
+            currentViewLabel: window.viewLabel()
             hasRecord: window.hasRecord
             onOpenRequested: openDialog.open()
             onSignalsRequested: signalDrawer.open()
@@ -222,6 +229,17 @@ ApplicationWindow {
             onTriggerRequested: window.focusTrigger()
             onZoomInRequested: window.zoomAround(1.4, 0.5)
             onZoomOutRequested: window.zoomAround(1.0 / 1.4, 0.5)
+        }
+
+        ViewModeBar {
+            Layout.fillWidth: true
+            currentView: window.viewMode
+            timeDisplayMode: window.timeDisplayMode
+            activeAnalysisCursor: window.activeAnalysisCursor
+            hasRecord: window.hasRecord
+            onViewRequested: viewName => window.viewMode = viewName
+            onTimeDisplayModeRequested: mode => window.timeDisplayMode = mode
+            onActiveAnalysisCursorRequested: cursorNumber => window.activeAnalysisCursor = cursorNumber
         }
 
         MeasurementPanel {
@@ -235,8 +253,22 @@ ApplicationWindow {
             onMeasurementChannelRequested: channelIndex => window.measurementChannel = channelIndex
         }
 
+        CursorNavigator {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 32
+            visible: window.hasRecord
+            document: documentController
+            viewStart: window.viewStart
+            visibleDuration: window.visibleDuration
+            cursorATime: window.cursorATime
+            cursorBTime: window.cursorBTime
+            axisWidth: window.axisWidth
+            onCursorARequested: timeSeconds => window.cursorATime = timeSeconds
+            onCursorBRequested: timeSeconds => window.cursorBTime = timeSeconds
+        }
+
         Rectangle {
-            id: analysisArea
+            id: workspace
             Layout.fillWidth: true
             Layout.fillHeight: true
             color: "#ffffff"
@@ -248,352 +280,79 @@ ApplicationWindow {
                 visible: !window.hasRecord
                 text: documentController.error.length
                       ? documentController.error
-                      : "Open a COMTRADE CFG/DAT record to begin waveform analysis"
+                      : "Open a COMTRADE CFG/DAT record to begin disturbance analysis"
                 color: documentController.error.length ? "#a62a2a" : "#666666"
                 font.pixelSize: 12
             }
 
-            Column {
+            TimeSignalsView {
+                id: timeSignals
                 anchors.fill: parent
-                visible: window.hasRecord
-                spacing: 0
-
-                TimeRuler {
-                    id: timeRuler
-                    width: parent.width
-                    height: 30
-                    document: documentController
-                    viewStart: window.viewStart
-                    visibleDuration: window.visibleDuration
-                    cursorATime: window.cursorATime
-                    cursorBTime: window.cursorBTime
-                    axisWidth: window.axisWidth
-                }
-
-                Flickable {
-                    id: signalFlick
-                    width: parent.width
-                    height: parent.height - timeRuler.height
-                    clip: true
-                    contentWidth: width
-                    contentHeight: signalStack.implicitHeight
-                    boundsBehavior: Flickable.StopAtBounds
-                    interactive: false
-
-                    ScrollBar.vertical: ScrollBar {
-                        policy: ScrollBar.AsNeeded
-                        width: 12
-                    }
-
-                    Column {
-                        id: signalStack
-                        width: signalFlick.width
-                        spacing: 0
-
-                        EventStrip {
-                            width: parent.width
-                            height: 46
-                            document: documentController
-                            viewStart: window.viewStart
-                            visibleDuration: window.visibleDuration
-                            cursorATime: window.cursorATime
-                            cursorBTime: window.cursorBTime
-                            axisWidth: window.axisWidth
-                        }
-
-                        SectionHeader {
-                            width: parent.width
-                            height: window.voltageChannels.length ? 25 : 0
-                            visible: window.voltageChannels.length > 0
-                            title: "VOLTAGE"
-                            count: window.voltageChannels.length
-                            detail: "instantaneous"
-                            accent: "#a5751b"
-                        }
-                        Repeater {
-                            model: window.voltageChannels
-                            TrackView {
-                                required property int index
-                                required property int modelData
-                                width: signalStack.width
-                                height: window.analogTrackHeight
-                                document: documentController
-                                channelIndex: modelData
-                                zoomFactor: window.waveformZoom
-                                panFraction: window.waveformPan
-                                viewStart: window.viewStart
-                                visibleDuration: window.visibleDuration
-                                cursorATime: window.cursorATime
-                                cursorBTime: window.cursorBTime
-                                axisWidth: window.axisWidth
-                                traceColor: window.tracePalette[index % 3]
-                            }
-                        }
-
-                        SectionHeader {
-                            width: parent.width
-                            height: window.currentChannels.length ? 25 : 0
-                            visible: window.currentChannels.length > 0
-                            title: "CURRENT"
-                            count: window.currentChannels.length
-                            detail: "instantaneous"
-                            accent: "#315b8a"
-                        }
-                        Repeater {
-                            model: window.currentChannels
-                            TrackView {
-                                required property int index
-                                required property int modelData
-                                width: signalStack.width
-                                height: window.analogTrackHeight
-                                document: documentController
-                                channelIndex: modelData
-                                zoomFactor: window.waveformZoom
-                                panFraction: window.waveformPan
-                                viewStart: window.viewStart
-                                visibleDuration: window.visibleDuration
-                                cursorATime: window.cursorATime
-                                cursorBTime: window.cursorBTime
-                                axisWidth: window.axisWidth
-                                traceColor: window.tracePalette[index % 3]
-                            }
-                        }
-
-                        SectionHeader {
-                            width: parent.width
-                            height: window.otherChannels.length ? 25 : 0
-                            visible: window.otherChannels.length > 0
-                            title: "OTHER ANALOG"
-                            count: window.otherChannels.length
-                            detail: "recorded channels"
-                            accent: "#70528d"
-                        }
-                        Repeater {
-                            model: window.otherChannels
-                            TrackView {
-                                required property int index
-                                required property int modelData
-                                width: signalStack.width
-                                height: window.analogTrackHeight
-                                document: documentController
-                                channelIndex: modelData
-                                zoomFactor: window.waveformZoom
-                                panFraction: window.waveformPan
-                                viewStart: window.viewStart
-                                visibleDuration: window.visibleDuration
-                                cursorATime: window.cursorATime
-                                cursorBTime: window.cursorBTime
-                                axisWidth: window.axisWidth
-                                traceColor: window.tracePalette[(index + 5) % window.tracePalette.length]
-                            }
-                        }
-
-                        Rectangle {
-                            width: parent.width
-                            height: documentController.digitalCount > 0 ? 30 : 0
-                            visible: documentController.digitalCount > 0
-                            color: "#eceff2"
-                            border.color: "#c8cdd2"
-
-                            RowLayout {
-                                anchors.fill: parent
-                                anchors.leftMargin: 8
-                                anchors.rightMargin: 12
-                                spacing: 7
-
-                                Rectangle { width: 3; height: 13; radius: 1; color: "#d5942b" }
-                                Label {
-                                    text: "DIGITAL EVENTS"
-                                    color: "#30363c"
-                                    font.pixelSize: 9
-                                    font.weight: Font.DemiBold
-                                    font.letterSpacing: 0.7
-                                }
-                                Label {
-                                    text: window.displayedDigitalChannels.length + " / " + documentController.digitalCount
-                                    color: "#6c757d"
-                                    font.pixelSize: 8
-                                }
-                                Label {
-                                    text: documentController.activeDigitalCount + " active"
-                                    color: "#7b8187"
-                                    font.pixelSize: 8
-                                }
-                                Item { Layout.fillWidth: true }
-                                ToolButton {
-                                    text: "Active"
-                                    checkable: true
-                                    checked: window.digitalDisplayMode === "active"
-                                    font.pixelSize: 8
-                                    onClicked: window.digitalDisplayMode = "active"
-                                }
-                                ToolButton {
-                                    text: "All"
-                                    checkable: true
-                                    checked: window.digitalDisplayMode === "all"
-                                    font.pixelSize: 8
-                                    onClicked: window.digitalDisplayMode = "all"
-                                }
-                            }
-                        }
-
-                        Repeater {
-                            model: window.displayedDigitalChannels
-                            DigitalTrackView {
-                                required property int modelData
-                                width: signalStack.width
-                                height: window.digitalTrackHeight
-                                document: documentController
-                                channelIndex: modelData
-                                zoomFactor: window.waveformZoom
-                                panFraction: window.waveformPan
-                                viewStart: window.viewStart
-                                visibleDuration: window.visibleDuration
-                                cursorATime: window.cursorATime
-                                cursorBTime: window.cursorBTime
-                                axisWidth: window.axisWidth
-                            }
-                        }
-
-                        Rectangle {
-                            width: parent.width
-                            height: 14
-                            color: "#f4f5f6"
-                        }
-                    }
-                }
+                visible: window.hasRecord && window.viewMode === "time"
+                document: documentController
+                analysis: analysisController
+                voltageChannels: window.voltageChannels
+                currentChannels: window.currentChannels
+                otherChannels: window.otherChannels
+                displayedDigitalChannels: window.displayedDigitalChannels
+                digitalDisplayMode: window.digitalDisplayMode
+                displayMode: window.timeDisplayMode
+                zoomFactor: window.waveformZoom
+                panFraction: window.waveformPan
+                viewStart: window.viewStart
+                visibleDuration: window.visibleDuration
+                cursorATime: window.cursorATime
+                cursorBTime: window.cursorBTime
+                axisWidth: window.axisWidth
+                analogTrackHeight: window.analogTrackHeight
+                digitalTrackHeight: window.digitalTrackHeight
+                onCursorARequested: timeSeconds => window.cursorATime = timeSeconds
+                onCursorBRequested: timeSeconds => window.cursorBTime = timeSeconds
+                onPanRequested: value => window.waveformPan = value
+                onZoomRequested: (factor, anchorFraction) => window.zoomAround(factor, anchorFraction)
+                onDigitalDisplayModeRequested: mode => window.digitalDisplayMode = mode
             }
 
-            MouseArea {
-                id: analysisMouse
-                visible: window.hasRecord && window.visibleChannels.length > 0
-                x: window.axisWidth
-                y: 30
-                width: Math.max(1, analysisArea.width - window.axisWidth - 14)
-                height: Math.max(1, analysisArea.height - 30)
-                z: 50
-                hoverEnabled: true
-                acceptedButtons: Qt.LeftButton | Qt.RightButton
-                preventStealing: true
+            PhasorView {
+                anchors.fill: parent
+                visible: window.hasRecord && window.viewMode === "phasor"
+                document: documentController
+                analysis: analysisController
+                cursorATime: window.cursorATime
+                cursorBTime: window.cursorBTime
+                activeCursor: window.activeAnalysisCursor
+            }
 
-                property bool movingCursorA: false
-                property bool movingCursorB: false
-                property bool panning: false
-                property bool hoverCursorA: false
-                property bool hoverCursorB: false
-                property real pressX: 0
-                property real panStartTime: 0
+            LocusView {
+                anchors.fill: parent
+                visible: window.hasRecord && window.viewMode === "locus"
+                document: documentController
+                analysis: analysisController
+                viewStart: window.viewStart
+                visibleDuration: window.visibleDuration
+                cursorATime: window.cursorATime
+                cursorBTime: window.cursorBTime
+            }
 
-                cursorShape: movingCursorA || movingCursorB || hoverCursorA || hoverCursorB
-                             ? Qt.SizeHorCursor
-                             : (panning ? Qt.ClosedHandCursor : Qt.ArrowCursor)
+            HarmonicsView {
+                anchors.fill: parent
+                visible: window.hasRecord && window.viewMode === "harmonics"
+                document: documentController
+                analysis: analysisController
+                channelIndex: window.measurementChannel
+                cursorATime: window.cursorATime
+                cursorBTime: window.cursorBTime
+                activeCursor: window.activeAnalysisCursor
+            }
 
-                function cursorPixel(timeSeconds) {
-                    return (timeSeconds - window.viewStart)
-                           / Math.max(1e-12, window.visibleDuration) * width
-                }
-
-                function updateCursorHover(mouseX) {
-                    const ax = cursorPixel(window.cursorATime)
-                    const bx = cursorPixel(window.cursorBTime)
-                    hoverCursorA = window.cursorATime >= window.viewStart
-                                   && window.cursorATime <= window.viewEnd
-                                   && Math.abs(mouseX - ax) <= window.cursorHoverRadius
-                    hoverCursorB = window.cursorBTime >= window.viewStart
-                                   && window.cursorBTime <= window.viewEnd
-                                   && Math.abs(mouseX - bx) <= window.cursorHoverRadius
-                }
-
-                function snapCursorTime(targetTime) {
-                    const clamped = window.clamp(targetTime,
-                                                 documentController.dataStartSeconds,
-                                                 documentController.dataEndSeconds)
-                    if (documentController.digitalCount <= 0 || window.visibleDuration <= 0) return clamped
-                    const thresholdSeconds = window.visibleDuration
-                                             * window.cursorSnapRadius / Math.max(1, width)
-                    return documentController.snapToDigitalEdge(clamped, thresholdSeconds)
-                }
-
-                onPressed: mouse => {
-                    const fraction = window.clamp(mouse.x / Math.max(1, width), 0, 1)
-                    const targetTime = window.timeAtFraction(fraction)
-                    movingCursorA = false
-                    movingCursorB = false
-                    panning = false
-                    updateCursorHover(mouse.x)
-
-                    if (mouse.button === Qt.RightButton) {
-                        window.cursorBTime = snapCursorTime(targetTime)
-                        movingCursorB = true
-                        hoverCursorB = true
-                        return
-                    }
-
-                    const ax = cursorPixel(window.cursorATime)
-                    const bx = cursorPixel(window.cursorBTime)
-                    const distanceA = Math.abs(mouse.x - ax)
-                    const distanceB = Math.abs(mouse.x - bx)
-                    if (distanceA <= window.cursorHoverRadius || distanceB <= window.cursorHoverRadius) {
-                        if (distanceA <= distanceB) movingCursorA = true
-                        else movingCursorB = true
-                    } else {
-                        panning = true
-                        pressX = mouse.x
-                        panStartTime = window.viewStart
-                    }
-                }
-
-                onPositionChanged: mouse => {
-                    updateCursorHover(mouse.x)
-                    if (!(mouse.buttons & (Qt.LeftButton | Qt.RightButton))) return
-                    const fraction = window.clamp(mouse.x / Math.max(1, width), 0, 1)
-                    const targetTime = window.timeAtFraction(fraction)
-                    if (movingCursorA) {
-                        window.cursorATime = snapCursorTime(targetTime)
-                    } else if (movingCursorB) {
-                        window.cursorBTime = snapCursorTime(targetTime)
-                    } else if (panning && window.waveformZoom > 1.0) {
-                        const deltaTime = (mouse.x - pressX) / Math.max(1, width) * window.visibleDuration
-                        const desiredStart = panStartTime - deltaTime
-                        window.waveformPan = window.movableDuration > 0
-                                             ? window.clamp((desiredStart - documentController.dataStartSeconds)
-                                                            / window.movableDuration, 0, 1)
-                                             : 0
-                    }
-                }
-
-                onReleased: mouse => {
-                    movingCursorA = false
-                    movingCursorB = false
-                    panning = false
-                    updateCursorHover(mouse.x)
-                }
-
-                onCanceled: {
-                    movingCursorA = false
-                    movingCursorB = false
-                    panning = false
-                    hoverCursorA = false
-                    hoverCursorB = false
-                }
-
-                onExited: {
-                    if (!movingCursorA && !movingCursorB) {
-                        hoverCursorA = false
-                        hoverCursorB = false
-                    }
-                }
-
-                onWheel: wheel => {
-                    if (wheel.modifiers & Qt.ControlModifier) {
-                        const factor = wheel.angleDelta.y > 0 ? 1.4 : (1.0 / 1.4)
-                        window.zoomAround(factor, window.clamp(wheel.x / Math.max(1, width), 0, 1))
-                    } else {
-                        const maxY = Math.max(0, signalFlick.contentHeight - signalFlick.height)
-                        signalFlick.contentY = window.clamp(signalFlick.contentY - wheel.angleDelta.y * 0.75, 0, maxY)
-                    }
-                    wheel.accepted = true
-                }
+            ValueTableView {
+                anchors.fill: parent
+                visible: window.hasRecord && window.viewMode === "table"
+                document: documentController
+                analysis: analysisController
+                visibleChannels: window.visibleChannels
+                cursorATime: window.cursorATime
+                cursorBTime: window.cursorBTime
             }
         }
 
@@ -625,7 +384,9 @@ ApplicationWindow {
                 }
                 Item { Layout.fillWidth: true }
                 Label {
-                    text: "Wheel scrolls signals · Ctrl+wheel zooms time · drag cursor ↔ snaps to digital edges · right-click places Cursor 2"
+                    text: window.viewMode === "time"
+                          ? "Wheel scrolls signals · Ctrl+wheel zooms time · cursor ↔ snaps to digital edges"
+                          : "Drag C1/C2 on the common time ruler · every analysis view follows the cursor context"
                     color: "#666666"
                     font.pixelSize: 8
                 }
