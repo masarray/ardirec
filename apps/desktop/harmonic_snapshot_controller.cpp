@@ -7,6 +7,14 @@
 #include <cmath>
 #include <span>
 
+namespace {
+double wrap_degrees(double angle) {
+    while (angle <= -180.0) angle += 360.0;
+    while (angle > 180.0) angle -= 360.0;
+    return angle;
+}
+} // namespace
+
 HarmonicSnapshotController::HarmonicSnapshotController(DocumentController* document, QObject* parent)
     : QObject(parent), m_document(document) {
     if (m_document) {
@@ -88,12 +96,14 @@ QVariantMap HarmonicSnapshotController::spectrumAt(int channelIndex,
         std::span<const double>(times.data() + first, count),
         frequency,
         maximumOrder,
-        m_document->dataStartSeconds());
+        absoluteTimeSeconds);
     if (!spectrum.valid) {
         return {{QStringLiteral("valid"), false}, {QStringLiteral("bins"), bins}};
     }
 
-    const double representationScale = std::abs(m_document->channelDisplayScale(channelIndex));
+    const double signedScale = m_document->channelDisplayScale(channelIndex);
+    const double representationScale = std::abs(signedScale);
+    const double phaseOffset = signedScale < 0.0 ? 180.0 : 0.0;
     const double recordedFundamental = spectrum.fundamental_rms;
     const double dcMagnitude = std::abs(spectrum.dc_component) * representationScale;
     const double dcPercent = recordedFundamental > 1.0e-12
@@ -102,7 +112,7 @@ QVariantMap HarmonicSnapshotController::spectrumAt(int channelIndex,
 
     bins.push_back(QVariantMap{{QStringLiteral("order"), 0},
                                {QStringLiteral("magnitude"), dcMagnitude},
-                               {QStringLiteral("signedMagnitude"), spectrum.dc_component * representationScale},
+                               {QStringLiteral("signedMagnitude"), spectrum.dc_component * signedScale},
                                {QStringLiteral("percent"), dcPercent},
                                {QStringLiteral("angle"), 0.0}});
 
@@ -114,17 +124,20 @@ QVariantMap HarmonicSnapshotController::spectrumAt(int channelIndex,
                                    {QStringLiteral("magnitude"), bin.magnitude_rms * representationScale},
                                    {QStringLiteral("signedMagnitude"), bin.magnitude_rms * representationScale},
                                    {QStringLiteral("percent"), percent},
-                                   {QStringLiteral("angle"), bin.angle_degrees}});
+                                   {QStringLiteral("angle"), wrap_degrees(bin.angle_degrees + phaseOffset)}});
     }
 
     QVariantMap result{{QStringLiteral("valid"), true},
-                       {QStringLiteral("dc"), spectrum.dc_component * representationScale},
+                       {QStringLiteral("dc"), spectrum.dc_component * signedScale},
                        {QStringLiteral("dcPercent"), dcPercent},
                        {QStringLiteral("fundamental"), spectrum.fundamental_rms * representationScale},
                        {QStringLiteral("thdPercent"), spectrum.thd_percent},
                        {QStringLiteral("dominantOrder"), spectrum.dominant_order},
                        {QStringLiteral("dominantMagnitude"), spectrum.dominant_rms * representationScale},
                        {QStringLiteral("dominantPercent"), spectrum.dominant_percent},
+                       {QStringLiteral("maximumResolvableOrder"), spectrum.maximum_resolvable_order},
+                       {QStringLiteral("sampleRate"), spectrum.estimated_sample_rate_hz},
+                       {QStringLiteral("requestedOrder"), maximumOrder},
                        {QStringLiteral("bins"), bins},
                        {QStringLiteral("unit"), m_document->channelUnit(channelIndex)},
                        {QStringLiteral("name"), m_document->channelName(channelIndex)},

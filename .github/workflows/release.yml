@@ -42,7 +42,7 @@ jobs:
       - name: Stage Qt application
         shell: pwsh
         run: |
-          $folder = 'ardirec-v0.2.0-alpha.12-windows-x64'
+          $folder = 'ardirec-v0.2.0-alpha.13-windows-x64'
           New-Item -ItemType Directory -Force -Path $folder | Out-Null
           Copy-Item build/apps/desktop/Release/ardirec.exe "$folder/ardirec.exe"
           windeployqt --release --compiler-runtime --no-translations --qmldir apps/desktop/qml "$folder/ardirec.exe"
@@ -51,8 +51,8 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $folder = 'ardirec-v0.2.0-alpha.12-windows-x64'
-          $zip = 'ardirec-v0.2.0-alpha.12-windows-x64-portable.zip'
+          $folder = 'ardirec-v0.2.0-alpha.13-windows-x64'
+          $zip = 'ardirec-v0.2.0-alpha.13-windows-x64-portable.zip'
           if (Test-Path $zip) { Remove-Item $zip -Force }
           Compress-Archive -Path $folder -DestinationPath $zip -CompressionLevel Optimal
           (Get-FileHash $zip -Algorithm SHA256).Hash + '  ' + $zip | Set-Content SHA256SUMS.txt
@@ -60,23 +60,30 @@ jobs:
       - name: Publish GitHub prerelease
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v0.2.0-alpha.12
-          name: ardirec v0.2.0-alpha.12 — Table Investigation Polish
+          tag_name: v0.2.0-alpha.13
+          name: ardirec v0.2.0-alpha.13 — Calculation Parity Hotfix
           prerelease: true
           make_latest: false
           generate_release_notes: true
           body: |
-            ardirec alpha.12 sharpens the Engineering Table into an abnormal-first investigation surface.
+            alpha.13 is a calculation-parity hotfix driven by a side-by-side check against the SIGRA line1.CFG sample at the same trigger cursor.
 
-            Highlights:
-            - Compact Analysis columns prioritize H1 RMS/angle, cycle extremum, DC/H1, THD and H2/H3/H5 ratios; Detailed mode adds Instant, true RMS, crest factor and signed DC.
-            - Only abnormal filters channels using transparent investigation heuristics: THD >= 5%, |DC|/H1 >= 5%, or crest factor >= 2.0. These are not standards or relay-operate verdicts.
-            - New sort modes rank DC bias and crest factor in addition to Record, Signal, RMS and THD.
-            - Summary strip reports abnormal count, worst THD, strongest DC bias and highest crest factor while retaining dimension-safe Max V/Max I summaries.
-            - Clicking a row selects that signal in the shared document context, so analysis can continue in other views without hunting for the channel again.
-            - Table remains single-cursor, snap-capable, cached, virtualized and Primary/Secondary aware.
+            What the audit proved:
+            - COMTRADE decoding/scaling was already sound: H1 RMS and H2/H3/H5 ratios matched the reference values.
+            - Phase-angle presentation used the wrong reference convention.
+            - Table Extremum used max-absolute-in-cycle instead of the last completed turning point.
+            - Compact DC was shown as absolute V/A while the reference table was configured for DC percent of H1.
+            - THD could be grossly inflated when a user requested harmonic orders above the record Nyquist limit.
+
+            Fixes:
+            - Phase is now sine-wave phase position at the cursor/reference instant for Table/Harmonics and the vector display.
+            - Harmonic requests are automatically clipped to the physically resolvable Nyquist order. A 1 kHz / 50 Hz record stops at H10, so aliased H11+ can no longer be double-counted in THD.
+            - Table uses Last extremum semantics: the latest completed local max/min before the cursor.
+            - Default Table DC presentation is percent of H1; signed absolute DC remains available in Detailed mode.
+            - Table exposes the sample rate and actual THD harmonic limit for auditability.
+            - Deterministic tests cover phase reference, Nyquist clipping, alias-safe THD and last-extreme selection.
 
             Windows development distribution remains a portable ZIP folder. The executable is unsigned, so Windows SmartScreen may show a warning.
           files: |
-            ardirec-v0.2.0-alpha.12-windows-x64-portable.zip
+            ardirec-v0.2.0-alpha.13-windows-x64-portable.zip
             SHA256SUMS.txt

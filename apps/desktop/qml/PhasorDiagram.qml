@@ -14,6 +14,17 @@ Rectangle {
     property real cursorTime: 0.0
     property string valueRepresentation: document ? document.valueRepresentation : "secondary"
 
+    function phasorForChannel(index) {
+        const representationDependency = root.valueRepresentation
+        if (index < 0 || !tableSnapshotController) return ({valid:false})
+        const row = tableSnapshotController.snapshotAt(index, root.cursorTime)
+        if (!row.valid) return ({valid:false})
+        return ({valid:true,
+                 magnitude: row.fundamental,
+                 angle: row.angle,
+                 unit: root.document ? root.document.channelUnit(index) : ""})
+    }
+
     function requestRepaint() { phasorCanvas.requestPaint() }
     onCursorTimeChanged: requestRepaint()
     onRoleChanged: requestRepaint()
@@ -56,7 +67,7 @@ Rectangle {
             for (let phase of phases) {
                 const index = root.analysis.phaseChannel(root.role, phase)
                 if (index < 0) continue
-                const p = root.analysis.phasorAt(index, root.cursorTime)
+                const p = root.phasorForChannel(index)
                 if (!p.valid) continue
                 vectors.push({phase: phase, index: index, p: p})
                 maxMag = Math.max(maxMag, p.magnitude)
@@ -119,10 +130,7 @@ Rectangle {
                 Rectangle { width: 12; height: 2; anchors.verticalCenter: parent.verticalCenter; color: root.analysis ? root.analysis.phaseColorForName(modelData) : "#777" }
                 Label {
                     readonly property int channelIndex: root.analysis ? root.analysis.phaseChannel(root.role, modelData) : -1
-                    readonly property var phasor: {
-                        const representationDependency = root.valueRepresentation
-                        return channelIndex >= 0 && root.analysis ? root.analysis.phasorAt(channelIndex, root.cursorTime) : ({valid:false})
-                    }
+                    readonly property var phasor: root.phasorForChannel(channelIndex)
                     text: modelData + (phasor.valid ? "  " + phasor.magnitude.toFixed(2) + " " + phasor.unit + "  ∠" + phasor.angle.toFixed(1) + "°" : "")
                     color: "#4e565c"
                     font.pixelSize: 8

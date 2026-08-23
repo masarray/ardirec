@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "ardirec/power/harmonics.hpp"
+#include "ardirec/power/waveform_metrics.hpp"
 
 #include <cmath>
 #include <iostream>
@@ -92,6 +93,52 @@ int main() {
         require(std::isfinite(missingSpectrum.dc_component), "missing-sample DC remains finite");
         require(std::isfinite(missingSpectrum.fundamental_rms), "missing-sample fundamental remains finite");
         require(std::isfinite(missingSpectrum.thd_percent), "missing-sample THD remains finite");
+
+        // SIGRA-compatible phase position: sine phase at the cursor/reference instant.
+        // 1 kHz / 50 Hz gives 20 samples/cycle and therefore a Nyquist limit of H10.
+        const auto lowRateTimes = cycle_times(20, frequency);
+        std::vector<double> lowRate;
+        lowRate.reserve(lowRateTimes.size());
+        const double h1Phase = 30.0 * kPi / 180.0;
+        const double h2Phase = -20.0 * kPi / 180.0;
+        for (const double t : lowRateTimes) {
+            lowRate.push_back(std::sqrt(2.0)
+                              * (100.0 * std::sin(2.0 * kPi * frequency * t + h1Phase)
+                                 + 10.0 * std::sin(2.0 * kPi * 2.0 * frequency * t + h2Phase)));
+        }
+        const auto lowRateSpectrum = ardirec::power::harmonic_spectrum(lowRate, lowRateTimes,
+                                                                        frequency, 25, 0.0);
+        require(lowRateSpectrum.valid, "low-rate spectrum is valid");
+        require_near(lowRateSpectrum.estimated_sample_rate_hz, 1000.0, 1.0e-6,
+                     "sample rate estimated from timestamps");
+        require(lowRateSpectrum.maximum_resolvable_order == 10, "Nyquist supports only H10");
+        require(lowRateSpectrum.bins.size() == 10, "requested H25 is clipped to H10 at 1 kHz / 50 Hz");
+        require_near(lowRateSpectrum.fundamental_rms, 100.0, 1.0e-9, "low-rate H1 RMS");
+        require_near(lowRateSpectrum.bins[1].magnitude_rms, 10.0, 1.0e-9, "low-rate H2 RMS");
+        require_near(lowRateSpectrum.bins[0].angle_degrees, 30.0, 1.0e-9,
+                     "H1 sine phase at reference instant");
+        require_near(lowRateSpectrum.bins[1].angle_degrees, -20.0, 1.0e-9,
+                     "H2 sine phase at reference instant");
+        require_near(lowRateSpectrum.thd_percent, 10.0, 1.0e-8,
+                     "THD does not double-count aliased H11-H25");
+
+        const auto shiftedPhase = ardirec::power::harmonic_spectrum(lowRate, lowRateTimes,
+                                                                     frequency, 10, 0.005);
+        require_near(shiftedPhase.bins[0].angle_degrees, 120.0, 1.0e-9,
+                     "H1 phase advances 90 degrees over 5 ms at 50 Hz");
+        require_near(shiftedPhase.bins[1].angle_degrees, 160.0, 1.0e-9,
+                     "H2 phase advances twice the fundamental phase");
+
+        // Table 'Extremum' parity is the last turning point before the cursor,
+        // not the largest absolute sample in the entire one-cycle window.
+        const std::vector<double> extremeTimes{0.000, 0.001, 0.002, 0.003, 0.004, 0.005, 0.006};
+        const std::vector<double> extremeSamples{0.0, 2.0, 0.5, -4.0, -1.0, 3.0, 2.0};
+        const auto lastExtreme = ardirec::power::last_extreme_value(extremeSamples, extremeTimes, 0.006);
+        require(lastExtreme.has_value(), "last extreme is available");
+        require_near(*lastExtreme, 3.0, 1.0e-12, "last local maximum is returned instead of absolute-cycle max");
+        const auto earlierExtreme = ardirec::power::last_extreme_value(extremeSamples, extremeTimes, 0.004);
+        require(earlierExtreme.has_value(), "earlier extreme is available");
+        require_near(*earlierExtreme, -4.0, 1.0e-12, "cursor selects the most recent completed turning point");
 
         std::cout << "ardirec power tests: PASS\n";
         return 0;
