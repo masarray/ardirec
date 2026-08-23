@@ -28,6 +28,7 @@ HarmonicSpectrum harmonic_spectrum(std::span<const double> samples,
     std::vector<std::complex<long double>> accumulators(static_cast<std::size_t>(maximum_order),
                                                          std::complex<long double>{0.0L, 0.0L});
     std::size_t finite_count = 0;
+    long double dc_sum = 0.0L;
     const long double omega = 2.0L * kPi * static_cast<long double>(nominal_frequency_hz);
 
     for (std::size_t sample_index = 0; sample_index < sample_count; ++sample_index) {
@@ -35,6 +36,7 @@ HarmonicSpectrum harmonic_spectrum(std::span<const double> samples,
         const double time = times_seconds[sample_index];
         if (!std::isfinite(sample) || !std::isfinite(time)) continue;
 
+        dc_sum += static_cast<long double>(sample);
         const long double angle = -omega
                                   * static_cast<long double>(time - reference_time_seconds);
         const std::complex<long double> fundamental_basis{std::cos(angle), std::sin(angle)};
@@ -50,6 +52,7 @@ HarmonicSpectrum harmonic_spectrum(std::span<const double> samples,
 
     if (finite_count < 4) return result;
 
+    result.dc_component = static_cast<double>(dc_sum / static_cast<long double>(finite_count));
     const long double rms_scale = std::sqrt(2.0L) / static_cast<long double>(finite_count);
     result.bins.reserve(static_cast<std::size_t>(maximum_order));
     for (int order = 1; order <= maximum_order; ++order) {
