@@ -3,6 +3,7 @@
 
 #include "ardirec/distance/rio.hpp"
 
+#include <QByteArray>
 #include <QObject>
 #include <QString>
 #include <QUrl>
