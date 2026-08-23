@@ -45,7 +45,7 @@ ApplicationWindow {
         if (viewMode === "phasor") return "PHASOR DIAGRAM"
         if (viewMode === "locus") return "LOCUS / R-X"
         if (viewMode === "harmonics") return "HARMONICS"
-        if (viewMode === "table") return "VALUE TABLE"
+        if (viewMode === "table") return "ENGINEERING TABLE"
         return timeDisplayMode === "rms" ? "TIME SIGNALS · RMS" : "TIME SIGNALS · INSTANT"
     }
 
@@ -171,7 +171,7 @@ ApplicationWindow {
     }
 
     onDigitalDisplayModeChanged: rebuildDigitalGroup()
-    onViewModeChanged: if (viewMode === "harmonics") activeAnalysisCursor = 1
+    onViewModeChanged: if (viewMode === "harmonics" || viewMode === "table") activeAnalysisCursor = 1
 
     FileDialog {
         id: openDialog
@@ -249,7 +249,7 @@ ApplicationWindow {
 
         MeasurementPanel {
             Layout.fillWidth: true
-            visible: window.viewMode !== "harmonics"
+            visible: window.viewMode !== "harmonics" && window.viewMode !== "table"
             Layout.preferredHeight: visible ? 128 : 0
             document: documentController
             analysis: analysisController
@@ -264,7 +264,7 @@ ApplicationWindow {
         CursorNavigator {
             Layout.fillWidth: true
             Layout.preferredHeight: visible ? 32 : 0
-            visible: window.hasRecord && window.viewMode !== "harmonics"
+            visible: window.hasRecord && window.viewMode !== "harmonics" && window.viewMode !== "table"
             document: documentController
             viewStart: window.viewStart
             visibleDuration: window.visibleDuration
@@ -278,12 +278,14 @@ ApplicationWindow {
         HarmonicCursorNavigator {
             Layout.fillWidth: true
             Layout.preferredHeight: visible ? 32 : 0
-            visible: window.hasRecord && window.viewMode === "harmonics"
+            visible: window.hasRecord && (window.viewMode === "harmonics" || window.viewMode === "table")
             document: documentController
             viewStart: window.viewStart
             visibleDuration: window.visibleDuration
             cursorTime: window.cursorATime
             axisWidth: window.axisWidth
+            labelText: window.viewMode === "table" ? "TABLE CURSOR" : "HARMONIC CURSOR"
+            detailText: window.viewMode === "table" ? "1-cycle engineering snapshot" : "1-cycle trailing DFT"
             onCursorRequested: timeSeconds => window.cursorATime = timeSeconds
         }
 
@@ -370,9 +372,9 @@ ApplicationWindow {
                 visible: window.hasRecord && window.viewMode === "table"
                 document: documentController
                 analysis: analysisController
+                snapshot: tableSnapshotController
                 visibleChannels: window.visibleChannels
-                cursorATime: window.cursorATime
-                cursorBTime: window.cursorBTime
+                cursorTime: window.cursorATime
                 valueRepresentation: documentController.valueRepresentation
             }
         }
@@ -419,7 +421,9 @@ ApplicationWindow {
                           ? "Wheel scroll · Ctrl+wheel zoom · C1/C2 snap to digital edges"
                           : window.viewMode === "harmonics"
                             ? "Single Harmonic Cursor · snap to digital edges · full H0/H1/Hn spectra"
-                            : "C1/C2 use one shared investigation context across every view"
+                            : window.viewMode === "table"
+                              ? "Single Table Cursor · cached one-cycle snapshot · sort/filter without losing time context"
+                              : "C1/C2 use one shared investigation context across every view"
                     color: "#666666"
                     font.pixelSize: 8
                 }
