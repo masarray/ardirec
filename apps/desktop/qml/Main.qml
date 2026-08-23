@@ -376,6 +376,11 @@ ApplicationWindow {
                 visibleChannels: window.visibleChannels
                 cursorTime: window.cursorATime
                 valueRepresentation: documentController.valueRepresentation
+                selectedChannel: window.measurementChannel
+                onSignalActivated: channelIndex => {
+                    window.measurementChannel = channelIndex
+                    documentController.selectChannel(channelIndex)
+                }
             }
         }
 
@@ -422,7 +427,7 @@ ApplicationWindow {
                           : window.viewMode === "harmonics"
                             ? "Single Harmonic Cursor · snap to digital edges · full H0/H1/Hn spectra"
                             : window.viewMode === "table"
-                              ? "Single Table Cursor · cached one-cycle snapshot · sort/filter without losing time context"
+                              ? "Single Table Cursor · cached one-cycle snapshot · abnormal-first sort/filter · click row to carry signal context"
                               : "C1/C2 use one shared investigation context across every view"
                     color: "#666666"
                     font.pixelSize: 8

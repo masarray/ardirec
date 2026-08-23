@@ -21,7 +21,8 @@ public:
     Q_INVOKABLE QVariantMap snapshotAt(int channelIndex, double absoluteTimeSeconds);
     Q_INVOKABLE QVariantList sortedChannels(const QVariantList& channelIndexes,
                                             double absoluteTimeSeconds,
-                                            const QString& sortMode);
+                                            const QString& sortMode,
+                                            bool abnormalOnly = false);
     Q_INVOKABLE QVariantMap summaryAt(const QVariantList& channelIndexes,
                                       double absoluteTimeSeconds);
     Q_INVOKABLE void clearCache();
