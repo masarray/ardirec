@@ -6,6 +6,8 @@ qt_add_executable(ardirec WIN32 MACOSX_BUNDLE
     document_controller.hpp
     analysis_controller.cpp
     analysis_controller.hpp
+    distance_zone_controller.cpp
+    distance_zone_controller.hpp
     waveform_item.cpp
     waveform_item.hpp
     rms_waveform_item.cpp
