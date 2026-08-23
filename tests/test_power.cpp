@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "ardirec/power/harmonics.hpp"
+#include "ardirec/power/waveform_metrics.hpp"
 
 #include <cmath>
 #include <iostream>
@@ -127,6 +128,17 @@ int main() {
                      "H1 phase advances 90 degrees over 5 ms at 50 Hz");
         require_near(shiftedPhase.bins[1].angle_degrees, 160.0, 1.0e-9,
                      "H2 phase advances twice the fundamental phase");
+
+        // Table 'Extremum' parity is the last turning point before the cursor,
+        // not the largest absolute sample in the entire one-cycle window.
+        const std::vector<double> extremeTimes{0.000, 0.001, 0.002, 0.003, 0.004, 0.005, 0.006};
+        const std::vector<double> extremeSamples{0.0, 2.0, 0.5, -4.0, -1.0, 3.0, 2.0};
+        const auto lastExtreme = ardirec::power::last_extreme_value(extremeSamples, extremeTimes, 0.006);
+        require(lastExtreme.has_value(), "last extreme is available");
+        require_near(*lastExtreme, 3.0, 1.0e-12, "last local maximum is returned instead of absolute-cycle max");
+        const auto earlierExtreme = ardirec::power::last_extreme_value(extremeSamples, extremeTimes, 0.004);
+        require(earlierExtreme.has_value(), "earlier extreme is available");
+        require_near(*earlierExtreme, -4.0, 1.0e-12, "cursor selects the most recent completed turning point");
 
         std::cout << "ardirec power tests: PASS\n";
         return 0;
