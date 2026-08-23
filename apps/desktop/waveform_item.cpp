@@ -20,6 +20,7 @@ void WaveformItem::setDocument(QObject* document) {
     m_document = controller;
     if (m_document) {
         connect(m_document, &DocumentController::documentChanged, this, &WaveformItem::reloadSamples);
+        connect(m_document, &DocumentController::representationChanged, this, &WaveformItem::reloadSamples);
     }
     reloadSamples();
     emit documentChanged();
