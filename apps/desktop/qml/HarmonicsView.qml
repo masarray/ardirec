@@ -138,16 +138,14 @@ Rectangle {
                 id: spectrumStack
                 width: spectrumFlick.width
                 spacing: 4
-                topPadding: 5
-                bottomPadding: 5
-                leftPadding: 5
-                rightPadding: 16
 
+                Item { width: 1; height: 5 }
                 Repeater {
                     model: root.displayedChannels
                     HarmonicDiagram {
                         required property int modelData
-                        width: spectrumStack.width - spectrumStack.leftPadding - spectrumStack.rightPadding
+                        width: spectrumStack.width - 21
+                        x: 5
                         height: 176
                         document: root.document
                         analysis: root.analysis
@@ -160,6 +158,7 @@ Rectangle {
                         valueRepresentation: root.valueRepresentation
                     }
                 }
+                Item { width: 1; height: 5 }
             }
         }
     }
