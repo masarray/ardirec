@@ -11,11 +11,15 @@ Rectangle {
 
     property string currentView: "time"
     property string timeDisplayMode: "instantaneous"
+    property string valueRepresentation: "secondary"
+    property string ratioSummary: ""
     property int activeAnalysisCursor: 1
     property bool hasRecord: false
+    property bool transformerRatiosAvailable: false
 
     signal viewRequested(string viewName)
     signal timeDisplayModeRequested(string mode)
+    signal valueRepresentationRequested(string representation)
     signal activeAnalysisCursorRequested(int cursorNumber)
 
     function viewButtonText(viewName) {
@@ -61,7 +65,7 @@ Rectangle {
             spacing: 2
             Label { text: "Waveform"; color: "#6b7279"; font.pixelSize: 8; Layout.rightMargin: 3 }
             ToolButton {
-                text: "Sinusoidal"
+                text: "Instant"
                 checkable: true
                 checked: root.timeDisplayMode === "instantaneous"
                 enabled: root.hasRecord
@@ -101,15 +105,50 @@ Rectangle {
         }
 
         Item { Layout.fillWidth: true }
+
+        RowLayout {
+            spacing: 2
+            Label {
+                text: "VALUES"
+                color: "#626a71"
+                font.pixelSize: 8
+                font.weight: Font.DemiBold
+                font.letterSpacing: 0.6
+                Layout.rightMargin: 2
+            }
+            ToolButton {
+                text: "Secondary"
+                checkable: true
+                checked: root.valueRepresentation === "secondary"
+                enabled: root.hasRecord
+                font.pixelSize: 8
+                onClicked: root.valueRepresentationRequested("secondary")
+                ToolTip.visible: hovered
+                ToolTip.text: root.transformerRatiosAvailable ? root.ratioSummary : "No valid CT/PT ratio metadata; values remain 1:1"
+            }
+            ToolButton {
+                text: "Primary"
+                checkable: true
+                checked: root.valueRepresentation === "primary"
+                enabled: root.hasRecord
+                font.pixelSize: 8
+                onClicked: root.valueRepresentationRequested("primary")
+                ToolTip.visible: hovered
+                ToolTip.text: root.transformerRatiosAvailable ? root.ratioSummary : "No valid CT/PT ratio metadata; values remain 1:1"
+            }
+        }
+
+        Rectangle { width: 1; height: 22; color: "#c0c5c9"; Layout.leftMargin: 3; Layout.rightMargin: 3 }
+
         Label {
-            text: root.currentView === "time" ? (root.timeDisplayMode === "rms" ? "ONE-CYCLE SLIDING RMS" : "RECORDED SAMPLES")
+            text: root.currentView === "time" ? (root.timeDisplayMode === "rms" ? "ONE-CYCLE RMS" : "RECORDED SAMPLES")
                   : root.currentView === "phasor" ? "FUNDAMENTAL DFT"
-                  : root.currentView === "locus" ? "RAW PHASE V/I IMPEDANCE"
+                  : root.currentView === "locus" ? "RAW PHASE V/I"
                   : root.currentView === "harmonics" ? "FULL-CYCLE DFT"
-                  : "CURSOR VALUE TABLE"
+                  : "CURSOR TABLE"
             color: "#737b82"
             font.pixelSize: 8
-            font.letterSpacing: 0.5
+            font.letterSpacing: 0.4
         }
     }
 }
