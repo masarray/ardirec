@@ -20,7 +20,6 @@ Rectangle {
     property color activeColor: "#d99a32"
     property color cursorAColor: "#2466b3"
     property color cursorBColor: "#c78100"
-    property color triggerColor: "#10a05a"
 
     Rectangle {
         id: labelRail
@@ -101,15 +100,12 @@ Rectangle {
             activeColor: root.activeColor
         }
 
-        Rectangle {
+        TriggerReference {
             visible: root.document && root.visibleDuration > 0
                      && root.document.triggerOffsetSeconds >= root.viewStart
                      && root.document.triggerOffsetSeconds <= root.viewStart + root.visibleDuration
             x: (root.document.triggerOffsetSeconds - root.viewStart) / root.visibleDuration * chart.width
-            width: 1
             height: chart.height
-            color: root.triggerColor
-            opacity: 0.75
         }
 
         Rectangle {
