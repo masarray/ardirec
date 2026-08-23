@@ -17,18 +17,44 @@ Rectangle {
     property real cursorBTime: 0.0
     property string valueRepresentation: document ? document.valueRepresentation : "secondary"
     property string selectedLoop: "L1-E"
+    property string analysisMode: "distance"
 
-    readonly property bool earthLoop: selectedLoop.indexOf("-E") >= 0
+    readonly property bool distanceMode: analysisMode === "distance"
+    readonly property bool earthLoop: distanceMode && selectedLoop.indexOf("-E") >= 0
     readonly property real kLMagnitude: zoneController ? zoneController.groundingFactorMagnitude : 0.0
     readonly property real kLAngle: zoneController ? zoneController.groundingFactorAngle : 0.0
-    readonly property var cursorAValue: analysis ? analysis.distanceLoopAt(selectedLoop, cursorATime, kLMagnitude, kLAngle) : ({valid:false})
-    readonly property var cursorBValue: analysis ? analysis.distanceLoopAt(selectedLoop, cursorBTime, kLMagnitude, kLAngle) : ({valid:false})
-    readonly property var locusPoints: analysis ? analysis.distanceLocus(selectedLoop, viewStart, visibleDuration, 140, kLMagnitude, kLAngle) : []
+    readonly property var cursorAValue: distanceMode && analysis ? analysis.distanceLoopAt(selectedLoop, cursorATime, kLMagnitude, kLAngle) : ({valid:false})
+    readonly property var cursorBValue: distanceMode && analysis ? analysis.distanceLoopAt(selectedLoop, cursorBTime, kLMagnitude, kLAngle) : ({valid:false})
+    readonly property var locusPoints: distanceMode && analysis ? analysis.distanceLocus(selectedLoop, viewStart, visibleDuration, 140, kLMagnitude, kLAngle) : []
     readonly property var visibleZones: {
-        if (!zoneController) return []
+        if (!distanceMode || !zoneController) return []
         const reactiveCount = zoneController.zoneCount
         const reactiveSource = zoneController.sourceName
         return zoneController.zonesForLoop(selectedLoop, valueRepresentation)
+    }
+    readonly property var rawSeries: {
+        if (distanceMode || !analysis || visibleDuration <= 0) return []
+        let result = []
+        const phases = ["L1", "L2", "L3"]
+        const steps = 110
+        for (let phase of phases) {
+            const voltage = analysis.phaseChannel("Voltage", phase)
+            const current = analysis.phaseChannel("Current", phase)
+            if (voltage < 0 || current < 0) continue
+            let points = []
+            for (let n = 0; n < steps; ++n) {
+                const time = viewStart + visibleDuration * n / Math.max(1, steps - 1)
+                const z = analysis.impedanceAt(voltage, current, time)
+                if (z.valid && Number.isFinite(z.r) && Number.isFinite(z.x)) points.push({r:z.r, x:z.x})
+            }
+            result.push({
+                phase: phase,
+                points: points,
+                cursorA: analysis.impedanceAt(voltage, current, cursorATime),
+                cursorB: analysis.impedanceAt(voltage, current, cursorBTime)
+            })
+        }
+        return result
     }
     readonly property color loopColor: {
         if (!analysis) return "#6f7780"
@@ -55,8 +81,10 @@ Rectangle {
     function requestRepaint() { locusCanvas.requestPaint() }
     onLocusPointsChanged: requestRepaint()
     onVisibleZonesChanged: requestRepaint()
+    onRawSeriesChanged: requestRepaint()
     onCursorAValueChanged: requestRepaint()
     onCursorBValueChanged: requestRepaint()
+    onAnalysisModeChanged: requestRepaint()
     onWidthChanged: requestRepaint()
     onHeightChanged: requestRepaint()
 
@@ -102,11 +130,30 @@ Rectangle {
                 }
 
                 Rectangle { width: 1; height: 22; color: "#c1c6ca"; Layout.leftMargin: 4; Layout.rightMargin: 3 }
-                Label { text: "LOOP"; color: "#687078"; font.pixelSize: 7; font.weight: Font.DemiBold }
+                ToolButton {
+                    text: "Protection"
+                    checkable: true
+                    checked: root.distanceMode
+                    font.pixelSize: 8
+                    onClicked: root.analysisMode = "distance"
+                }
+                ToolButton {
+                    text: "Raw V/I"
+                    checkable: true
+                    checked: !root.distanceMode
+                    font.pixelSize: 8
+                    onClicked: root.analysisMode = "raw"
+                    ToolTip.visible: hovered
+                    ToolTip.text: "Diagnostic phase V/I only — not a compensated distance measuring loop"
+                }
+
+                Rectangle { visible: root.distanceMode; width: 1; height: 22; color: "#c1c6ca"; Layout.leftMargin: 4; Layout.rightMargin: 3 }
+                Label { visible: root.distanceMode; text: "LOOP"; color: "#687078"; font.pixelSize: 7; font.weight: Font.DemiBold }
                 Repeater {
                     model: ["L1-E", "L2-E", "L3-E", "L1-L2", "L2-L3", "L3-L1"]
                     ToolButton {
                         required property string modelData
+                        visible: root.distanceMode
                         text: modelData
                         checkable: true
                         checked: root.selectedLoop === modelData
@@ -118,14 +165,15 @@ Rectangle {
                     }
                 }
 
-                Rectangle { width: 1; height: 22; color: "#c1c6ca"; Layout.leftMargin: 3; Layout.rightMargin: 3 }
+                Rectangle { visible: root.distanceMode; width: 1; height: 22; color: "#c1c6ca"; Layout.leftMargin: 3; Layout.rightMargin: 3 }
                 ToolButton {
+                    visible: root.distanceMode
                     text: root.zoneController && root.zoneController.hasZones ? "Zones ✓" : "Load RIO/XRIO"
                     font.pixelSize: 8
                     onClicked: zoneDialog.open()
                 }
                 ToolButton {
-                    visible: root.zoneController && root.zoneController.hasZones
+                    visible: root.distanceMode && root.zoneController && root.zoneController.hasZones
                     text: "Clear"
                     font.pixelSize: 8
                     onClicked: root.zoneController.clearZones()
@@ -144,14 +192,22 @@ Rectangle {
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: 32
-            color: "#f5f6f7"
-            border.color: "#d3d7da"
+            color: root.distanceMode ? "#f5f6f7" : "#fff8e8"
+            border.color: root.distanceMode ? "#d3d7da" : "#e1c98d"
 
             RowLayout {
                 anchors.fill: parent
                 anchors.leftMargin: 8
                 anchors.rightMargin: 8
                 spacing: 7
+
+                Label {
+                    visible: !root.distanceMode
+                    text: "RAW DIAGNOSTIC · Va/Ia, Vb/Ib, Vc/Ic · relay zones hidden because these are not protection measuring loops"
+                    color: "#785b1a"
+                    font.pixelSize: 8
+                    font.weight: Font.DemiBold
+                }
 
                 Label {
                     text: "kL"
@@ -199,8 +255,9 @@ Rectangle {
                     font.weight: Font.DemiBold
                 }
 
-                Rectangle { visible: root.earthLoop; width: 1; height: 18; color: "#ccd0d3"; Layout.leftMargin: 4; Layout.rightMargin: 3 }
+                Rectangle { visible: root.distanceMode && root.earthLoop; width: 1; height: 18; color: "#ccd0d3"; Layout.leftMargin: 4; Layout.rightMargin: 3 }
                 Label {
+                    visible: root.distanceMode
                     text: root.zoneController ? root.zoneController.status : "No zone model"
                     color: "#687078"
                     font.pixelSize: 7
@@ -209,7 +266,7 @@ Rectangle {
                 }
                 Item { Layout.fillWidth: true }
                 Label {
-                    visible: root.zoneController && root.zoneController.hasZones
+                    visible: root.distanceMode && root.zoneController && root.zoneController.hasZones
                     text: root.zoneController.zoneBaseConversionAvailable
                           ? "zone base conversion verified"
                           : "zone base conversion 1:1 · verify CT/VT metadata"
@@ -226,6 +283,7 @@ Rectangle {
             border.color: "#c9ced2"
 
             GridLayout {
+                visible: root.distanceMode
                 anchors.fill: parent
                 anchors.leftMargin: 9
                 anchors.rightMargin: 9
@@ -251,11 +309,43 @@ Rectangle {
                 Label { text: root.cursorBValue.valid ? root.cursorBValue.measuringCurrent.toFixed(3) + " A" : "—"; color: "#505960"; font.pixelSize: 8 }
                 Rectangle { width: 10; height: 10; radius: 6; color: "transparent"; border.width: 2; border.color: root.loopColor }
             }
+
+            RowLayout {
+                visible: !root.distanceMode
+                anchors.fill: parent
+                anchors.leftMargin: 10
+                anchors.rightMargin: 10
+                spacing: 18
+                Label {
+                    text: "C1 " + (root.document ? ((root.cursorATime - root.document.triggerOffsetSeconds) * 1000).toFixed(3) + " ms" : "—")
+                    color: "#245ba7"
+                    font.pixelSize: 8
+                    font.weight: Font.DemiBold
+                }
+                Label {
+                    text: "C2 " + (root.document ? ((root.cursorBTime - root.document.triggerOffsetSeconds) * 1000).toFixed(3) + " ms" : "—")
+                    color: "#b77900"
+                    font.pixelSize: 8
+                    font.weight: Font.DemiBold
+                }
+                Rectangle { width: 1; height: 18; color: "#d0d4d7" }
+                Repeater {
+                    model: root.rawSeries
+                    Row {
+                        required property var modelData
+                        spacing: 5
+                        Rectangle { width: 14; height: 2; anchors.verticalCenter: parent.verticalCenter; color: root.analysis ? root.analysis.phaseColorForName(modelData.phase) : "#777" }
+                        Label { text: modelData.phase + " V/I"; color: "#4f585f"; font.pixelSize: 8 }
+                    }
+                }
+                Item { Layout.fillWidth: true }
+                Label { text: "● C1   ○ C2"; color: "#6d757c"; font.pixelSize: 8 }
+            }
         }
 
         Rectangle {
             Layout.fillWidth: true
-            Layout.preferredHeight: root.zoneController && root.zoneController.compatibilityWarning.length ? 23 : 0
+            Layout.preferredHeight: root.distanceMode && root.zoneController && root.zoneController.compatibilityWarning.length ? 23 : 0
             visible: height > 0
             color: "#fff8e8"
             border.color: "#e1c98d"
@@ -291,9 +381,15 @@ Rectangle {
 
                     const points = root.locusPoints || []
                     const zones = root.visibleZones || []
+                    const raw = root.rawSeries || []
                     let extent = 1.0
                     for (let p of points) {
                         if (Number.isFinite(p.r) && Number.isFinite(p.x)) extent = Math.max(extent, Math.abs(p.r), Math.abs(p.x))
+                    }
+                    for (let series of raw) {
+                        for (let p of series.points) extent = Math.max(extent, Math.abs(p.r), Math.abs(p.x))
+                        if (series.cursorA.valid) extent = Math.max(extent, Math.abs(series.cursorA.r), Math.abs(series.cursorA.x))
+                        if (series.cursorB.valid) extent = Math.max(extent, Math.abs(series.cursorB.r), Math.abs(series.cursorB.x))
                     }
                     for (let zone of zones) {
                         if (zone.kind === "circle") {
@@ -348,66 +444,90 @@ Rectangle {
                         ctx.fillText(value.toFixed(Math.abs(value) < 10 ? 2 : 1), cx + 7, mapY(value) + 3)
                     }
 
-                    const zoneStroke = ["#8e6b23", "#7b6a91", "#647f72", "#8a7272", "#6c7890", "#8a7d5e"]
-                    const zoneFill = ["rgba(205,166,75,0.09)", "rgba(133,108,162,0.07)", "rgba(83,135,110,0.07)", "rgba(155,104,104,0.06)", "rgba(92,111,150,0.06)", "rgba(151,129,80,0.06)"]
-                    for (let z = 0; z < zones.length; ++z) {
-                        const zone = zones[z]
-                        ctx.strokeStyle = zoneStroke[z % zoneStroke.length]
-                        ctx.fillStyle = zoneFill[z % zoneFill.length]
-                        ctx.lineWidth = 1.2
-                        if (zone.kind === "circle") {
-                            ctx.beginPath()
-                            ctx.arc(mapX(zone.centerR), mapY(zone.centerX), Math.abs(zone.radius * scale), 0, Math.PI * 2)
-                            ctx.fill(); ctx.stroke()
-                            ctx.fillStyle = zoneStroke[z % zoneStroke.length]
-                            const label = zone.label && zone.label.length ? zone.label : "Z" + zone.index
-                            ctx.fillText(label, mapX(zone.centerR) + 5, mapY(zone.centerX) - 5)
-                        } else if (zone.kind === "polygon" && zone.points.length >= 3) {
-                            ctx.beginPath()
-                            ctx.moveTo(mapX(zone.points[0].r), mapY(zone.points[0].x))
-                            for (let p = 1; p < zone.points.length; ++p) ctx.lineTo(mapX(zone.points[p].r), mapY(zone.points[p].x))
-                            ctx.closePath(); ctx.fill(); ctx.stroke()
-                            ctx.fillStyle = zoneStroke[z % zoneStroke.length]
-                            const label = zone.label && zone.label.length ? zone.label : "Z" + zone.index
-                            ctx.fillText(label, mapX(zone.points[0].r) + 5, mapY(zone.points[0].x) - 5)
+                    if (root.distanceMode) {
+                        const zoneStroke = ["#8e6b23", "#7b6a91", "#647f72", "#8a7272", "#6c7890", "#8a7d5e"]
+                        const zoneFill = ["rgba(205,166,75,0.09)", "rgba(133,108,162,0.07)", "rgba(83,135,110,0.07)", "rgba(155,104,104,0.06)", "rgba(92,111,150,0.06)", "rgba(151,129,80,0.06)"]
+                        for (let z = 0; z < zones.length; ++z) {
+                            const zone = zones[z]
+                            ctx.strokeStyle = zoneStroke[z % zoneStroke.length]
+                            ctx.fillStyle = zoneFill[z % zoneFill.length]
+                            ctx.lineWidth = 1.2
+                            if (zone.kind === "circle") {
+                                ctx.beginPath()
+                                ctx.arc(mapX(zone.centerR), mapY(zone.centerX), Math.abs(zone.radius * scale), 0, Math.PI * 2)
+                                ctx.fill(); ctx.stroke()
+                                ctx.fillStyle = zoneStroke[z % zoneStroke.length]
+                                const label = zone.label && zone.label.length ? zone.label : "Z" + zone.index
+                                ctx.fillText(label, mapX(zone.centerR) + 5, mapY(zone.centerX) - 5)
+                            } else if (zone.kind === "polygon" && zone.points.length >= 3) {
+                                ctx.beginPath()
+                                ctx.moveTo(mapX(zone.points[0].r), mapY(zone.points[0].x))
+                                for (let p = 1; p < zone.points.length; ++p) ctx.lineTo(mapX(zone.points[p].r), mapY(zone.points[p].x))
+                                ctx.closePath(); ctx.fill(); ctx.stroke()
+                                ctx.fillStyle = zoneStroke[z % zoneStroke.length]
+                                const label = zone.label && zone.label.length ? zone.label : "Z" + zone.index
+                                ctx.fillText(label, mapX(zone.points[0].r) + 5, mapY(zone.points[0].x) - 5)
+                            }
                         }
-                    }
 
-                    if (points.length >= 2) {
-                        ctx.strokeStyle = root.loopColor
-                        ctx.lineWidth = 2.0
-                        ctx.beginPath()
-                        let started = false
-                        for (let p of points) {
-                            if (!Number.isFinite(p.r) || !Number.isFinite(p.x)) continue
-                            if (!started) {
-                                ctx.moveTo(mapX(p.r), mapY(p.x)); started = true
-                            } else ctx.lineTo(mapX(p.r), mapY(p.x))
+                        if (points.length >= 2) {
+                            ctx.strokeStyle = root.loopColor
+                            ctx.lineWidth = 2.0
+                            ctx.beginPath()
+                            let started = false
+                            for (let p of points) {
+                                if (!Number.isFinite(p.r) || !Number.isFinite(p.x)) continue
+                                if (!started) { ctx.moveTo(mapX(p.r), mapY(p.x)); started = true }
+                                else ctx.lineTo(mapX(p.r), mapY(p.x))
+                            }
+                            if (started) ctx.stroke()
                         }
-                        if (started) ctx.stroke()
-                    }
 
-                    if (root.cursorAValue.valid) {
-                        ctx.fillStyle = root.loopColor
-                        ctx.beginPath(); ctx.arc(mapX(root.cursorAValue.r), mapY(root.cursorAValue.x), 5.0, 0, Math.PI * 2); ctx.fill()
-                    }
-                    if (root.cursorBValue.valid) {
-                        ctx.strokeStyle = root.loopColor
-                        ctx.lineWidth = 2.2
-                        ctx.beginPath(); ctx.arc(mapX(root.cursorBValue.r), mapY(root.cursorBValue.x), 7.0, 0, Math.PI * 2); ctx.stroke()
+                        if (root.cursorAValue.valid) {
+                            ctx.fillStyle = root.loopColor
+                            ctx.beginPath(); ctx.arc(mapX(root.cursorAValue.r), mapY(root.cursorAValue.x), 5.0, 0, Math.PI * 2); ctx.fill()
+                        }
+                        if (root.cursorBValue.valid) {
+                            ctx.strokeStyle = root.loopColor
+                            ctx.lineWidth = 2.2
+                            ctx.beginPath(); ctx.arc(mapX(root.cursorBValue.r), mapY(root.cursorBValue.x), 7.0, 0, Math.PI * 2); ctx.stroke()
+                        }
+                    } else {
+                        for (let series of raw) {
+                            const color = root.analysis.phaseColorForName(series.phase)
+                            if (series.points.length >= 2) {
+                                ctx.strokeStyle = color
+                                ctx.lineWidth = 1.8
+                                ctx.beginPath()
+                                ctx.moveTo(mapX(series.points[0].r), mapY(series.points[0].x))
+                                for (let p = 1; p < series.points.length; ++p) ctx.lineTo(mapX(series.points[p].r), mapY(series.points[p].x))
+                                ctx.stroke()
+                            }
+                            if (series.cursorA.valid) {
+                                ctx.fillStyle = color
+                                ctx.beginPath(); ctx.arc(mapX(series.cursorA.r), mapY(series.cursorA.x), 4.5, 0, Math.PI * 2); ctx.fill()
+                            }
+                            if (series.cursorB.valid) {
+                                ctx.strokeStyle = color
+                                ctx.lineWidth = 2
+                                ctx.beginPath(); ctx.arc(mapX(series.cursorB.r), mapY(series.cursorB.x), 6.5, 0, Math.PI * 2); ctx.stroke()
+                            }
+                        }
                     }
 
                     ctx.fillStyle = "#687078"
                     ctx.font = "8px sans-serif"
-                    ctx.fillText(root.selectedLoop + " · full-cycle fundamental RMS · "
-                                 + (root.valueRepresentation === "primary" ? "PRIMARY" : "SECONDARY"), left + 4, bottom + 25)
+                    const modeText = root.distanceMode
+                                   ? root.selectedLoop + " · protection measuring loop · full-cycle fundamental RMS"
+                                   : "RAW PHASE V/I · diagnostic only"
+                    ctx.fillText(modeText + " · " + (root.valueRepresentation === "primary" ? "PRIMARY" : "SECONDARY"), left + 4, bottom + 25)
                     ctx.fillText("● C1   ○ C2", right - 72, bottom + 25)
                 }
             }
 
             Label {
                 anchors.centerIn: parent
-                visible: root.analysis && !root.analysis.distanceLoopAvailable(root.selectedLoop)
+                visible: root.distanceMode && root.analysis && !root.analysis.distanceLoopAvailable(root.selectedLoop)
                 text: "Selected protection loop cannot be formed from mapped COMTRADE voltage/current channels"
                 color: "#8a5f2a"
                 font.pixelSize: 10
