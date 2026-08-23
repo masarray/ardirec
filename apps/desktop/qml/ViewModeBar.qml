@@ -83,7 +83,7 @@ Rectangle {
         }
 
         RowLayout {
-            visible: root.currentView !== "time" && root.currentView !== "locus" && root.currentView !== "table"
+            visible: root.currentView === "phasor"
             spacing: 2
             Label { text: "Analysis cursor"; color: "#6b7279"; font.pixelSize: 8; Layout.rightMargin: 3 }
             ToolButton {
@@ -143,8 +143,8 @@ Rectangle {
         Label {
             text: root.currentView === "time" ? (root.timeDisplayMode === "rms" ? "ONE-CYCLE RMS" : "RECORDED SAMPLES")
                   : root.currentView === "phasor" ? "FUNDAMENTAL DFT"
-                  : root.currentView === "locus" ? "RAW PHASE V/I"
-                  : root.currentView === "harmonics" ? "FULL-CYCLE DFT"
+                  : root.currentView === "locus" ? "PROTECTION R-X"
+                  : root.currentView === "harmonics" ? "TRAILING 1-CYCLE DFT"
                   : "CURSOR TABLE"
             color: "#737b82"
             font.pixelSize: 8
