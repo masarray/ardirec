@@ -29,15 +29,18 @@ Rectangle {
     }
 
     function formatValue(value) {
+        const representationDependency = root.valueRepresentation
         if (!document || measurementChannel < 0 || !Number.isFinite(value)) return "—"
         return document.formatChannelValue(measurementChannel, value)
     }
 
     function instantAt(timeSeconds) {
+        const representationDependency = root.valueRepresentation
         return document && measurementChannel >= 0 ? document.sampleValue(measurementChannel, timeSeconds) : NaN
     }
 
     function rmsAt(timeSeconds) {
+        const representationDependency = root.valueRepresentation
         return analysis && measurementChannel >= 0 ? analysis.rmsValue(measurementChannel, timeSeconds) : NaN
     }
 
