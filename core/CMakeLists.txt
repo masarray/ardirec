@@ -2,6 +2,7 @@ add_library(ardirec_core STATIC
     src/comtrade/parser.cpp
     src/comtrade/dat_reader.cpp
     src/comtrade/bundle.cpp
+    src/comtrade/value_representation.cpp
 )
 
 add_library(ardirec::core ALIAS ardirec_core)
