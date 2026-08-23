@@ -50,7 +50,9 @@ Rectangle {
                                                    : scopedChannels
     readonly property var summaryData: snapshot
                                            ? snapshot.summaryAt(scopedChannels, cursorTime)
-                                           : ({count: 0, maxThdChannel: -1, maxThd: 0, maxRmsChannel: -1, maxRms: 0})
+                                           : ({count: 0, maxThdChannel: -1, maxThd: 0,
+                                               maxVoltageRmsChannel: -1, maxVoltageRms: 0,
+                                               maxCurrentRmsChannel: -1, maxCurrentRms: 0})
 
     function formatValue(channelIndex, value) {
         return document && Number.isFinite(value) ? document.formatChannelValue(channelIndex, value) : "—"
@@ -154,7 +156,7 @@ Rectangle {
                 anchors.fill: parent
                 anchors.leftMargin: 9
                 anchors.rightMargin: 9
-                spacing: 12
+                spacing: 10
 
                 Label {
                     text: "Cursor  " + root.relativeMs().toFixed(3) + " ms"
@@ -174,17 +176,28 @@ Rectangle {
                 }
                 Rectangle { width: 1; height: 15; color: "#d0d4d7" }
                 Label {
-                    text: "Highest RMS  "
-                          + (root.summaryData.maxRmsChannel >= 0 && root.document
-                             ? root.document.channelName(root.summaryData.maxRmsChannel) + "  "
-                               + root.formatValue(root.summaryData.maxRmsChannel, root.summaryData.maxRms)
-                             : "—")
+                    visible: root.summaryData.maxVoltageRmsChannel >= 0
+                    text: "Max V RMS  " + (root.document
+                          ? root.document.channelName(root.summaryData.maxVoltageRmsChannel) + "  "
+                            + root.formatValue(root.summaryData.maxVoltageRmsChannel, root.summaryData.maxVoltageRms)
+                          : "—")
+                    color: "#566069"
+                    font.pixelSize: 8
+                }
+                Rectangle { visible: root.summaryData.maxVoltageRmsChannel >= 0 && root.summaryData.maxCurrentRmsChannel >= 0; width: 1; height: 15; color: "#d0d4d7" }
+                Label {
+                    visible: root.summaryData.maxCurrentRmsChannel >= 0
+                    text: "Max I RMS  " + (root.document
+                          ? root.document.channelName(root.summaryData.maxCurrentRmsChannel) + "  "
+                            + root.formatValue(root.summaryData.maxCurrentRmsChannel, root.summaryData.maxCurrentRms)
+                          : "—")
                     color: "#566069"
                     font.pixelSize: 8
                 }
                 Item { Layout.fillWidth: true }
                 Label {
-                    text: "Extremum = signed max |sample| in trailing cycle · H2/H3/H5 = %H1"
+                    visible: root.width > 1300
+                    text: "Extremum = signed max |sample| · H2/H3/H5 = %H1"
                     color: "#747c82"
                     font.pixelSize: 7
                 }
