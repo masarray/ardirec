@@ -145,7 +145,7 @@ Rectangle {
                   : root.currentView === "phasor" ? "FUNDAMENTAL DFT"
                   : root.currentView === "locus" ? "PROTECTION R-X"
                   : root.currentView === "harmonics" ? "TRAILING 1-CYCLE DFT"
-                  : "CURSOR TABLE"
+                  : "1-CYCLE SNAPSHOT"
             color: "#737b82"
             font.pixelSize: 8
             font.letterSpacing: 0.4
