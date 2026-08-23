@@ -10,9 +10,6 @@ Rectangle {
     property var document
     property var analysis
     property int channelIndex: -1
-    property var voltageChannels: []
-    property var currentChannels: []
-    property var otherChannels: []
     property real cursorATime: 0.0
     property real cursorBTime: 0.0
     property int activeCursor: 1
@@ -22,11 +19,14 @@ Rectangle {
 
     readonly property string activeRole: document && channelIndex >= 0 ? document.analogRole(channelIndex) : "Other"
     readonly property var displayedChannels: {
-        if (!document || channelIndex < 0) return []
-        if (activeRole === "Voltage" && voltageChannels.length) return voltageChannels
-        if (activeRole === "Current" && currentChannels.length) return currentChannels
-        if (activeRole === "Other" && otherChannels.indexOf(channelIndex) >= 0) return [channelIndex]
-        return [channelIndex]
+        if (!document || !analysis || channelIndex < 0) return []
+        if (activeRole !== "Voltage" && activeRole !== "Current") return [channelIndex]
+        let channels = []
+        for (let phase of ["L1", "L2", "L3", "E"]) {
+            const index = analysis.phaseChannel(activeRole, phase)
+            if (index >= 0 && channels.indexOf(index) < 0) channels.push(index)
+        }
+        return channels.length ? channels : [channelIndex]
     }
 
     ColumnLayout {
