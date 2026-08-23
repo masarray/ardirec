@@ -2,6 +2,7 @@
 #include "ardirec/comtrade/bundle.hpp"
 #include "ardirec/comtrade/dat_reader.hpp"
 #include "ardirec/comtrade/parser.hpp"
+#include "ardirec/comtrade/value_representation.hpp"
 
 #include <cmath>
 #include <filesystem>
@@ -37,6 +38,31 @@ int main() {
             require(std::abs(binary_frames[1].analog[0] - 10.0) < 1e-5, "binary-family analog scaling");
             require(binary_frames[1].status[0] && binary_frames[1].status[1], "packed status decode");
         }
+
+        using ardirec::comtrade::AnalogChannel;
+        using ardirec::comtrade::ValueRepresentation;
+        using ardirec::comtrade::representation_scale;
+
+        AnalogChannel secondary_recorded;
+        secondary_recorded.primary = 500000.0;
+        secondary_recorded.secondary = 100.0;
+        secondary_recorded.primary_secondary = "S";
+        require(std::abs(representation_scale(secondary_recorded, ValueRepresentation::Secondary) - 1.0) < 1e-12,
+                "secondary-recorded data stays unchanged in secondary representation");
+        require(std::abs(representation_scale(secondary_recorded, ValueRepresentation::Primary) - 5000.0) < 1e-12,
+                "secondary-recorded data scales to primary ratio");
+
+        AnalogChannel primary_recorded = secondary_recorded;
+        primary_recorded.primary_secondary = "P";
+        require(std::abs(representation_scale(primary_recorded, ValueRepresentation::Primary) - 1.0) < 1e-12,
+                "primary-recorded data stays unchanged in primary representation");
+        require(std::abs(representation_scale(primary_recorded, ValueRepresentation::Secondary) - 0.0002) < 1e-12,
+                "primary-recorded data scales down to secondary ratio");
+
+        AnalogChannel no_ratio;
+        no_ratio.primary_secondary = "S";
+        require(std::abs(representation_scale(no_ratio, ValueRepresentation::Primary) - 1.0) < 1e-12,
+                "missing ratio safely falls back to one-to-one");
 
         const auto bundle = ardirec::comtrade::locate_bundle(dir / "minimal_1999.cfg");
         require(!bundle.dat.empty(), "bundle auto-location");
