@@ -42,7 +42,7 @@ jobs:
       - name: Stage Qt application
         shell: pwsh
         run: |
-          $folder = 'ardirec-v0.2.0-alpha.12-windows-x64'
+          $folder = 'ardirec-v0.2.0-alpha.13-windows-x64'
           New-Item -ItemType Directory -Force -Path $folder | Out-Null
           Copy-Item build/apps/desktop/Release/ardirec.exe "$folder/ardirec.exe"
           windeployqt --release --compiler-runtime --no-translations --qmldir apps/desktop/qml "$folder/ardirec.exe"
@@ -51,8 +51,8 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $folder = 'ardirec-v0.2.0-alpha.12-windows-x64'
-          $zip = 'ardirec-v0.2.0-alpha.12-windows-x64-portable.zip'
+          $folder = 'ardirec-v0.2.0-alpha.13-windows-x64'
+          $zip = 'ardirec-v0.2.0-alpha.13-windows-x64-portable.zip'
           if (Test-Path $zip) { Remove-Item $zip -Force }
           Compress-Archive -Path $folder -DestinationPath $zip -CompressionLevel Optimal
           (Get-FileHash $zip -Algorithm SHA256).Hash + '  ' + $zip | Set-Content SHA256SUMS.txt
@@ -60,13 +60,13 @@ jobs:
       - name: Publish GitHub prerelease
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v0.2.0-alpha.12
-          name: ardirec v0.2.0-alpha.12 — Calculation Parity Hotfix
+          tag_name: v0.2.0-alpha.13
+          name: ardirec v0.2.0-alpha.13 — Calculation Parity Hotfix
           prerelease: true
           make_latest: false
           generate_release_notes: true
           body: |
-            alpha.12 is a calculation-parity hotfix driven by a side-by-side check against the SIGRA line1.CFG sample at the same trigger cursor.
+            alpha.13 is a calculation-parity hotfix driven by a side-by-side check against the SIGRA line1.CFG sample at the same trigger cursor.
 
             What the audit proved:
             - COMTRADE decoding/scaling was already sound: H1 RMS and H2/H3/H5 ratios matched the reference values.
@@ -85,5 +85,5 @@ jobs:
 
             Windows development distribution remains a portable ZIP folder. The executable is unsigned, so Windows SmartScreen may show a warning.
           files: |
-            ardirec-v0.2.0-alpha.12-windows-x64-portable.zip
+            ardirec-v0.2.0-alpha.13-windows-x64-portable.zip
             SHA256SUMS.txt
