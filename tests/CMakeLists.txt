@@ -23,6 +23,7 @@ if(TARGET Qt6::Core)
         ../apps/desktop/distance_zone_controller.cpp
         ../apps/desktop/distance_zone_controller.hpp
     )
+    set_target_properties(ardirec_xrio_tests PROPERTIES AUTOMOC ON)
     target_include_directories(ardirec_xrio_tests PRIVATE ../apps/desktop)
     target_link_libraries(ardirec_xrio_tests PRIVATE ardirec::core Qt6::Core)
     ardirec_set_warnings(ardirec_xrio_tests)
