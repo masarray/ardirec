@@ -20,6 +20,7 @@ void RmsWaveformItem::setDocument(QObject* document) {
     m_document = controller;
     if (m_document) {
         connect(m_document, &DocumentController::documentChanged, this, &RmsWaveformItem::reloadSamples);
+        connect(m_document, &DocumentController::representationChanged, this, &RmsWaveformItem::reloadSamples);
     }
     reloadSamples();
     emit documentChanged();
