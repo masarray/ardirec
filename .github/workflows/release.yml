@@ -42,7 +42,7 @@ jobs:
       - name: Stage Qt application
         shell: pwsh
         run: |
-          $folder = 'ardirec-v0.2.0-alpha.10-windows-x64'
+          $folder = 'ardirec-v0.2.0-alpha.11-windows-x64'
           New-Item -ItemType Directory -Force -Path $folder | Out-Null
           Copy-Item build/apps/desktop/Release/ardirec.exe "$folder/ardirec.exe"
           windeployqt --release --compiler-runtime --no-translations --qmldir apps/desktop/qml "$folder/ardirec.exe"
@@ -51,8 +51,8 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $folder = 'ardirec-v0.2.0-alpha.10-windows-x64'
-          $zip = 'ardirec-v0.2.0-alpha.10-windows-x64-portable.zip'
+          $folder = 'ardirec-v0.2.0-alpha.11-windows-x64'
+          $zip = 'ardirec-v0.2.0-alpha.11-windows-x64-portable.zip'
           if (Test-Path $zip) { Remove-Item $zip -Force }
           Compress-Archive -Path $folder -DestinationPath $zip -CompressionLevel Optimal
           (Get-FileHash $zip -Algorithm SHA256).Hash + '  ' + $zip | Set-Content SHA256SUMS.txt
@@ -60,29 +60,27 @@ jobs:
       - name: Publish GitHub prerelease
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v0.2.0-alpha.10
-          name: ardirec v0.2.0-alpha.10 — Harmonics Workstation
+          tag_name: v0.2.0-alpha.11
+          name: ardirec v0.2.0-alpha.11 — Engineering Table Workstation
           prerelease: true
           make_latest: false
           generate_release_notes: true
           body: |
-            ardirec alpha.10 upgrades Harmonics from a role-switched proof view into a dense full-record investigation workspace.
+            ardirec alpha.11 turns Table into a dense single-cursor engineering snapshot workspace.
 
             Highlights:
-            - Harmonics now defaults to all recognized Voltage + Current analog signals in one vertically scrollable workspace; no measuring-signal switch is required to reveal Current after Voltage.
-            - Harmonics uses one dedicated analysis cursor only. Time/Phasor/Locus/Table retain dual C1/C2 workflows.
-            - The single Harmonic Cursor keeps the same shared timebase and digital-edge snapping behavior.
-            - Full spectrum mode now shows H0/DC, H1 fundamental and H2..Hn. Distortion-only H2..Hn remains available as an optional view.
-            - H0/DC is calculated as the arithmetic mean of the same one-cycle trailing window and is never multiplied by sqrt(2).
-            - Compact 128 px virtualized rows expose substantially more signals per screen and keep large analog records responsive while scrolling.
-            - Direct bar annotations show %H1 and engineering magnitude when spacing permits; hover reveals order, frequency, magnitude, %H1 and phase.
+            - Table now uses one dedicated shared cursor, matching the fast point-in-time analysis workflow while Time/Phasor/Locus retain dual C1/C2 measurement workflows.
+            - Default Electrical scope shows all recognized Voltage + Current channels without relying on Time-view visibility.
+            - Each row exposes Instantaneous, true one-cycle RMS, H1 fundamental RMS, H1 phase angle, signed cycle extremum, signed DC, THD, H2/H1, H3/H1 and H5/H1.
             - Scope controls provide Electrical, Voltage, Current, Visible and All Analog views.
-            - H10/H15/H25/H50 and %H1/RMS controls remain available without changing the cursor or scroll context.
-            - Cached harmonic snapshots avoid recomputing spectra merely because a row scrolls out and back into view.
-            - Primary/Secondary continues to scale absolute magnitudes while %H1 and THD remain invariant.
-            - Core regression tests now validate a known DC + H1 + H2 waveform and confirm DC is excluded from THD.
+            - Sort controls provide Record, Signal, RMS descending and THD descending workflows without moving the cursor.
+            - A compact summary strip immediately surfaces the highest-THD channel and strongest-RMS channel at the selected time.
+            - THD >= 5% receives a restrained engineering highlight; phase identity remains a thin color strip rather than full-row coloring.
+            - Rows are virtualized and engineering snapshots are cached by channel/cursor/representation so scrolling does not repeat unchanged DFT/RMS work.
+            - Primary/Secondary scales all absolute quantities while phase angle, THD and harmonic ratios remain invariant.
+            - Table cursor keeps the common timebase and digital-edge snapping behavior.
 
             Windows development distribution remains a portable ZIP folder. The executable is unsigned, so Windows SmartScreen may show a warning.
           files: |
-            ardirec-v0.2.0-alpha.10-windows-x64-portable.zip
+            ardirec-v0.2.0-alpha.11-windows-x64-portable.zip
             SHA256SUMS.txt

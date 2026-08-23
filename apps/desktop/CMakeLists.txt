@@ -8,6 +8,8 @@ qt_add_executable(ardirec WIN32 MACOSX_BUNDLE
     analysis_controller.hpp
     harmonic_snapshot_controller.cpp
     harmonic_snapshot_controller.hpp
+    table_snapshot_controller.cpp
+    table_snapshot_controller.hpp
     distance_zone_controller.cpp
     distance_zone_controller.hpp
     waveform_item.cpp
