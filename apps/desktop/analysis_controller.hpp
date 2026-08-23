@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #pragma once
 
+#include "ardirec/power/harmonics.hpp"
 #include "document_controller.hpp"
 
 #include <QObject>
@@ -25,6 +26,9 @@ public:
     Q_INVOKABLE double rmsValue(int channelIndex, double absoluteTimeSeconds) const;
     Q_INVOKABLE QString rmsValueText(int channelIndex, double absoluteTimeSeconds) const;
     Q_INVOKABLE QVariantMap phasorAt(int channelIndex, double absoluteTimeSeconds) const;
+    Q_INVOKABLE QVariantMap harmonicSpectrumAt(int channelIndex,
+                                               double absoluteTimeSeconds,
+                                               int maximumOrder = 15) const;
     Q_INVOKABLE QVariantList harmonicsAt(int channelIndex,
                                          double absoluteTimeSeconds,
                                          int maximumOrder = 15) const;
@@ -37,6 +41,9 @@ private:
     [[nodiscard]] std::complex<double> phasorComplex(int channelIndex,
                                                      double absoluteTimeSeconds,
                                                      int harmonicOrder = 1) const;
+    [[nodiscard]] ardirec::power::HarmonicSpectrum harmonicSpectrum(int channelIndex,
+                                                                    double absoluteTimeSeconds,
+                                                                    int maximumOrder) const;
     [[nodiscard]] double unitScaleToSi(int channelIndex) const;
     [[nodiscard]] QString formatEngineeringValue(double value, int channelIndex) const;
 
