@@ -12,12 +12,14 @@ Rectangle {
     property real visibleDuration: 1.0
     property real cursorATime: 0.0
     property real cursorBTime: 0.0
+    property string valueRepresentation: document ? document.valueRepresentation : "secondary"
 
     function requestRepaint() { locusCanvas.requestPaint() }
     onViewStartChanged: requestRepaint()
     onVisibleDurationChanged: requestRepaint()
     onCursorATimeChanged: requestRepaint()
     onCursorBTimeChanged: requestRepaint()
+    onValueRepresentationChanged: requestRepaint()
     Connections {
         target: root.document
         function onDocumentChanged() { root.requestRepaint() }
@@ -32,10 +34,10 @@ Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: 25
             Label { text: "IMPEDANCE LOCUS"; color: "#394149"; font.pixelSize: 9; font.weight: Font.DemiBold; font.letterSpacing: 0.6 }
-            Label { text: "R-X plane"; color: "#707980"; font.pixelSize: 8 }
+            Label { text: "R-X plane · " + (root.valueRepresentation === "primary" ? "primary" : "secondary"); color: "#707980"; font.pixelSize: 8 }
             Item { Layout.fillWidth: true }
             Label {
-                text: "Phase V/I reference trajectory · distance-loop compensation/RIO overlay follows in protection gate"
+                text: "Phase V/I reference trajectory · compensated loops/RIO follow in P2"
                 color: "#7b8389"
                 font.pixelSize: 8
             }
