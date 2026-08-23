@@ -5,27 +5,35 @@ import QtQuick.Controls
 Rectangle {
     id: root
     color: "#ffffff"
-    border.color: "#c8cdd1"
+    border.color: "#cbd0d4"
 
     property var document
     property var analysis
+    property var snapshot
     property int channelIndex: -1
-    property real cursorATime: 0.0
-    property real cursorBTime: 0.0
-    property int activeCursor: 1
+    property real cursorTime: 0.0
     property int maximumOrder: 15
     property string displayMode: "percent"
+    property string spectrumMode: "full"
     property string valueRepresentation: "secondary"
 
     readonly property color phaseColor: analysis && channelIndex >= 0 ? analysis.phaseColor(channelIndex) : "#6f7780"
-    readonly property var spectrumA: {
+    readonly property var spectrum: {
         const representationDependency = valueRepresentation
-        return analysis && channelIndex >= 0 ? analysis.harmonicSpectrumAt(channelIndex, cursorATime, maximumOrder) : ({valid:false, bins:[]})
+        return snapshot && channelIndex >= 0
+               ? snapshot.spectrumAt(channelIndex, cursorTime, maximumOrder)
+               : ({valid:false, bins:[]})
     }
-    readonly property var spectrumB: {
-        const representationDependency = valueRepresentation
-        return analysis && channelIndex >= 0 ? analysis.harmonicSpectrumAt(channelIndex, cursorBTime, maximumOrder) : ({valid:false, bins:[]})
+    readonly property var plotBins: {
+        if (!spectrum.valid) return []
+        if (spectrumMode === "distortion") {
+            let out = []
+            for (let bin of spectrum.bins) if (bin.order >= 2) out.push(bin)
+            return out
+        }
+        return spectrum.bins
     }
+    property var hoveredBin: null
 
     function valueFor(bin) {
         return displayMode === "rms" ? bin.magnitude : bin.percent
@@ -35,15 +43,12 @@ Rectangle {
         if (displayMode === "percent") return value.toFixed(value >= 10 ? 1 : 2) + "%"
         return document ? document.formatChannelValue(channelIndex, value) : value.toFixed(3)
     }
-    function h1Text(spectrum) {
-        return spectrum && spectrum.valid && document ? document.formatChannelValue(channelIndex, spectrum.fundamental) : "—"
+    function magnitudeText(bin) {
+        return document && bin ? document.formatChannelValue(channelIndex, bin.magnitude) : "—"
     }
-    function dominantText(spectrum) {
-        if (!spectrum || !spectrum.valid || spectrum.dominantOrder <= 0) return "—"
-        const detail = displayMode === "rms"
-                       ? (document ? document.formatChannelValue(channelIndex, spectrum.dominantMagnitude) : spectrum.dominantMagnitude.toFixed(3))
-                       : spectrum.dominantPercent.toFixed(2) + "%"
-        return "H" + spectrum.dominantOrder + " · " + detail
+    function dominantText() {
+        if (!spectrum.valid || spectrum.dominantOrder <= 0) return "—"
+        return "H" + spectrum.dominantOrder + " " + spectrum.dominantPercent.toFixed(1) + "%"
     }
 
     Rectangle {
@@ -51,7 +56,7 @@ Rectangle {
         anchors.left: parent.left
         anchors.top: parent.top
         anchors.bottom: parent.bottom
-        width: 235
+        width: 148
         color: "#f5f6f7"
         border.color: "#d0d4d7"
 
@@ -59,53 +64,46 @@ Rectangle {
 
         Label {
             anchors.left: parent.left
-            anchors.leftMargin: 10
+            anchors.leftMargin: 9
             anchors.top: parent.top
-            anchors.topMargin: 8
-            width: parent.width - 18
+            anchors.topMargin: 7
+            width: parent.width - 15
             text: root.document && root.channelIndex >= 0 ? root.document.channelName(root.channelIndex) : "—"
             color: root.phaseColor
-            font.pixelSize: 10
+            font.pixelSize: 9
             font.weight: Font.DemiBold
             elide: Text.ElideRight
         }
         Label {
             anchors.left: parent.left
-            anchors.leftMargin: 10
+            anchors.leftMargin: 9
             anchors.top: parent.top
-            anchors.topMargin: 25
+            anchors.topMargin: 23
             text: (root.analysis ? root.analysis.channelPhase(root.channelIndex) : "—")
                   + " · " + (root.valueRepresentation === "primary" ? "PRI" : "SEC")
-            color: "#687078"
-            font.pixelSize: 8
+            color: "#6b7379"
+            font.pixelSize: 7
         }
 
         Grid {
             anchors.left: parent.left
-            anchors.leftMargin: 10
+            anchors.leftMargin: 9
             anchors.right: parent.right
-            anchors.rightMargin: 7
+            anchors.rightMargin: 6
             anchors.top: parent.top
-            anchors.topMargin: 48
-            columns: 3
-            columnSpacing: 6
-            rowSpacing: 3
+            anchors.topMargin: 42
+            columns: 2
+            columnSpacing: 4
+            rowSpacing: 2
 
-            Label { width: 52; text: ""; font.pixelSize: 7 }
-            Label { width: 70; text: "C1"; color: root.activeCursor === 1 ? "#244f9e" : "#6b737a"; font.pixelSize: 7; font.weight: Font.DemiBold }
-            Label { width: 70; text: "C2"; color: root.activeCursor === 2 ? "#b77900" : "#6b737a"; font.pixelSize: 7; font.weight: Font.DemiBold }
-
-            Label { width: 52; text: "H1 RMS"; color: "#697178"; font.pixelSize: 7 }
-            Label { width: 70; text: root.h1Text(root.spectrumA); color: "#252b30"; font.pixelSize: 7; elide: Text.ElideRight }
-            Label { width: 70; text: root.h1Text(root.spectrumB); color: "#252b30"; font.pixelSize: 7; elide: Text.ElideRight }
-
-            Label { width: 52; text: "THD"; color: "#697178"; font.pixelSize: 7 }
-            Label { width: 70; text: root.spectrumA.valid ? root.spectrumA.thdPercent.toFixed(2) + "%" : "—"; color: "#252b30"; font.pixelSize: 7 }
-            Label { width: 70; text: root.spectrumB.valid ? root.spectrumB.thdPercent.toFixed(2) + "%" : "—"; color: "#252b30"; font.pixelSize: 7 }
-
-            Label { width: 52; text: "Dominant"; color: "#697178"; font.pixelSize: 7 }
-            Label { width: 70; text: root.dominantText(root.spectrumA); color: "#252b30"; font.pixelSize: 7; elide: Text.ElideRight }
-            Label { width: 70; text: root.dominantText(root.spectrumB); color: "#252b30"; font.pixelSize: 7; elide: Text.ElideRight }
+            Label { width: 45; text: "H0 / DC"; color: "#737b81"; font.pixelSize: 7 }
+            Label { width: 78; text: root.spectrum.valid && root.document ? root.document.formatChannelValue(root.channelIndex, Math.abs(root.spectrum.dc)) : "—"; color: "#2f363b"; font.pixelSize: 7; elide: Text.ElideRight }
+            Label { width: 45; text: "H1 RMS"; color: "#737b81"; font.pixelSize: 7 }
+            Label { width: 78; text: root.spectrum.valid && root.document ? root.document.formatChannelValue(root.channelIndex, root.spectrum.fundamental) : "—"; color: "#2f363b"; font.pixelSize: 7; elide: Text.ElideRight }
+            Label { width: 45; text: "THD"; color: "#737b81"; font.pixelSize: 7 }
+            Label { width: 78; text: root.spectrum.valid ? root.spectrum.thdPercent.toFixed(2) + "%" : "—"; color: "#2f363b"; font.pixelSize: 7 }
+            Label { width: 45; text: "Dominant"; color: "#737b81"; font.pixelSize: 7 }
+            Label { width: 78; text: root.dominantText(); color: "#2f363b"; font.pixelSize: 7; elide: Text.ElideRight }
         }
     }
 
@@ -115,97 +113,118 @@ Rectangle {
         anchors.right: parent.right
         anchors.top: parent.top
         anchors.bottom: parent.bottom
-        anchors.leftMargin: 10
-        anchors.rightMargin: 14
-        anchors.topMargin: 12
-        anchors.bottomMargin: 28
+        anchors.leftMargin: 7
+        anchors.rightMargin: 10
+        anchors.topMargin: 5
+        anchors.bottomMargin: 20
         antialiasing: true
+
+        property real currentMaximum: 1.0
 
         onPaint: {
             const ctx = getContext("2d")
             ctx.clearRect(0, 0, width, height)
-            const a = root.spectrumA
-            const b = root.spectrumB
-            if ((!a.valid && !b.valid) || width < 80 || height < 50) return
-            const binsA = a.valid ? a.bins : []
-            const binsB = b.valid ? b.bins : []
-            const count = Math.max(binsA.length, binsB.length)
-            if (count < 2) return
+            const bins = root.plotBins
+            if (!root.spectrum.valid || !bins || bins.length === 0 || width < 100 || height < 45) return
 
-            let maximum = root.displayMode === "percent" ? 5.0 : 0.0
-            for (let i = 1; i < count; ++i) {
-                if (i < binsA.length) maximum = Math.max(maximum, root.valueFor(binsA[i]))
-                if (i < binsB.length) maximum = Math.max(maximum, root.valueFor(binsB[i]))
-            }
+            const annotationTop = 22
+            const plotHeight = Math.max(20, height - annotationTop)
+            let maximum = root.displayMode === "percent" ? (root.spectrumMode === "full" ? 100.0 : 5.0) : 0.0
+            for (let bin of bins) maximum = Math.max(maximum, root.valueFor(bin))
             if (maximum <= 0) maximum = 1
-            maximum *= 1.12
+            maximum *= 1.08
+            currentMaximum = maximum
 
             ctx.strokeStyle = "#e1e5e8"
             ctx.lineWidth = 1
-            ctx.fillStyle = "#687078"
-            ctx.font = "8px sans-serif"
-            for (let g = 0; g <= 4; ++g) {
-                const y = height * g / 4
+            ctx.fillStyle = "#737b81"
+            ctx.font = "7px sans-serif"
+            for (let g = 0; g <= 3; ++g) {
+                const y = annotationTop + plotHeight * g / 3
                 ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke()
-                const v = maximum * (4 - g) / 4
-                ctx.fillText(root.displayMode === "percent" ? v.toFixed(1) + "%" : root.valueText(v), 3, Math.max(9, y - 3))
+                const v = maximum * (3 - g) / 3
+                const axisText = root.displayMode === "percent" ? v.toFixed(v >= 20 ? 0 : 1) + "%" : root.valueText(v)
+                ctx.fillText(axisText, 2, Math.max(8, y - 2))
             }
 
-            const distortionCount = count - 1
-            const slot = width / distortionCount
-            const pairWidth = Math.max(4, Math.min(18, slot * 0.72))
-            const half = pairWidth * 0.46
-            for (let i = 1; i < count; ++i) {
-                const xCenter = slot * (i - 1) + slot * 0.5
-                const binA = i < binsA.length ? binsA[i] : null
-                const binB = i < binsB.length ? binsB[i] : null
-                const valueA = binA ? root.valueFor(binA) : 0
-                const valueB = binB ? root.valueFor(binB) : 0
-                const hA = Math.max(0, Math.min(height, height * valueA / maximum))
-                const hB = Math.max(0, Math.min(height, height * valueB / maximum))
+            const slot = width / bins.length
+            const barWidth = Math.max(3, Math.min(28, slot * 0.58))
+            for (let i = 0; i < bins.length; ++i) {
+                const bin = bins[i]
+                const value = root.valueFor(bin)
+                const h = Math.max(0, Math.min(plotHeight, plotHeight * value / maximum))
+                const xCenter = slot * i + slot * 0.5
+                const x = xCenter - barWidth * 0.5
+                const y = annotationTop + plotHeight - h
 
-                if (binA) {
-                    ctx.fillStyle = root.phaseColor
-                    ctx.globalAlpha = root.activeCursor === 1 ? 0.88 : 0.22
-                    ctx.fillRect(xCenter - half - 1, height - hA, half, hA)
-                    ctx.globalAlpha = 1
-                    ctx.strokeStyle = root.phaseColor
-                    ctx.lineWidth = root.activeCursor === 1 ? 1.2 : 0.8
-                    ctx.strokeRect(xCenter - half - 1, height - hA, half, hA)
-                }
-                if (binB) {
-                    ctx.fillStyle = root.phaseColor
-                    ctx.globalAlpha = root.activeCursor === 2 ? 0.88 : 0.12
-                    ctx.fillRect(xCenter + 1, height - hB, half, hB)
-                    ctx.globalAlpha = 1
-                    ctx.strokeStyle = root.phaseColor
-                    ctx.lineWidth = root.activeCursor === 2 ? 1.2 : 0.8
-                    ctx.strokeRect(xCenter + 1, height - hB, half, hB)
+                ctx.fillStyle = root.phaseColor
+                ctx.globalAlpha = bin.order === 1 ? 0.92 : 0.80
+                ctx.fillRect(x, y, barWidth, h)
+                ctx.globalAlpha = 1.0
+                ctx.strokeStyle = "#5d6469"
+                ctx.lineWidth = 0.6
+                ctx.strokeRect(x, y, barWidth, h)
+
+                const annotateAll = slot >= 58 && bins.length <= 18
+                const important = bin.order === 0 || bin.order === 1
+                                  || bin.order === root.spectrum.dominantOrder
+                                  || bin.percent >= 10.0
+                if (annotateAll || important) {
+                    ctx.textAlign = "center"
+                    ctx.fillStyle = "#4f575d"
+                    ctx.font = "7px sans-serif"
+                    ctx.fillText(bin.percent.toFixed(bin.percent >= 10 ? 1 : 2) + "%", xCenter, Math.max(8, y - 10))
+                    ctx.fillText(root.magnitudeText(bin), xCenter, Math.max(16, y - 2))
+                    ctx.textAlign = "start"
                 }
 
-                const order = i + 1
-                ctx.fillStyle = "#596168"
-                ctx.font = "8px sans-serif"
-                if (distortionCount <= 16 || order % 2 === 1 || order === count)
-                    ctx.fillText(String(order), xCenter - 3, height + 15)
+                ctx.fillStyle = "#545c62"
+                ctx.font = "7px sans-serif"
+                ctx.textAlign = "center"
+                ctx.fillText(String(bin.order), xCenter, height + 14)
+                ctx.textAlign = "start"
+            }
+        }
+
+        MouseArea {
+            anchors.fill: parent
+            hoverEnabled: true
+            onPositionChanged: mouse => {
+                const bins = root.plotBins
+                if (!bins || bins.length === 0 || chart.width <= 0) { root.hoveredBin = null; return }
+                const slot = chart.width / bins.length
+                const index = Math.max(0, Math.min(bins.length - 1, Math.floor(mouse.x / slot)))
+                root.hoveredBin = bins[index]
+            }
+            onExited: root.hoveredBin = null
+            ToolTip.visible: root.hoveredBin !== null
+            ToolTip.text: {
+                const bin = root.hoveredBin
+                if (!bin || !root.document) return ""
+                const frequency = bin.order * root.document.nominalFrequency
+                return root.document.channelName(root.channelIndex)
+                       + " · H" + bin.order
+                       + " · " + frequency.toFixed(1) + " Hz\n"
+                       + root.magnitudeText(bin)
+                       + " · " + bin.percent.toFixed(2) + "% H1"
+                       + (bin.order > 0 ? " · ∠" + bin.angle.toFixed(1) + "°" : " · DC")
             }
         }
     }
 
     Label {
         anchors.right: parent.right
-        anchors.rightMargin: 12
+        anchors.rightMargin: 10
         anchors.bottom: parent.bottom
-        anchors.bottomMargin: 5
-        text: "H2 … H" + root.maximumOrder + "   ·   active cursor = solid"
-        color: "#7a8288"
-        font.pixelSize: 7
+        anchors.bottomMargin: 3
+        text: root.spectrumMode === "full" ? "H0 … H" + root.maximumOrder : "H2 … H" + root.maximumOrder
+        color: "#81888e"
+        font.pixelSize: 6
     }
 
-    onSpectrumAChanged: chart.requestPaint()
-    onSpectrumBChanged: chart.requestPaint()
+    onSpectrumChanged: chart.requestPaint()
     onDisplayModeChanged: chart.requestPaint()
-    onActiveCursorChanged: chart.requestPaint()
+    onSpectrumModeChanged: chart.requestPaint()
     onWidthChanged: chart.requestPaint()
     onHeightChanged: chart.requestPaint()
 }
