@@ -23,9 +23,24 @@ Rectangle {
     readonly property bool earthLoop: distanceMode && selectedLoop.indexOf("-E") >= 0
     readonly property real kLMagnitude: zoneController ? zoneController.groundingFactorMagnitude : 0.0
     readonly property real kLAngle: zoneController ? zoneController.groundingFactorAngle : 0.0
-    readonly property var cursorAValue: distanceMode && analysis ? analysis.distanceLoopAt(selectedLoop, cursorATime, kLMagnitude, kLAngle) : ({valid:false})
-    readonly property var cursorBValue: distanceMode && analysis ? analysis.distanceLoopAt(selectedLoop, cursorBTime, kLMagnitude, kLAngle) : ({valid:false})
-    readonly property var locusPoints: distanceMode && analysis ? analysis.distanceLocus(selectedLoop, viewStart, visibleDuration, 140, kLMagnitude, kLAngle) : []
+    readonly property var cursorAValue: {
+        const representationDependency = valueRepresentation
+        return distanceMode && analysis
+                ? analysis.distanceLoopAt(selectedLoop, cursorATime, kLMagnitude, kLAngle)
+                : ({valid:false})
+    }
+    readonly property var cursorBValue: {
+        const representationDependency = valueRepresentation
+        return distanceMode && analysis
+                ? analysis.distanceLoopAt(selectedLoop, cursorBTime, kLMagnitude, kLAngle)
+                : ({valid:false})
+    }
+    readonly property var locusPoints: {
+        const representationDependency = valueRepresentation
+        return distanceMode && analysis
+                ? analysis.distanceLocus(selectedLoop, viewStart, visibleDuration, 140, kLMagnitude, kLAngle)
+                : []
+    }
     readonly property var visibleZones: {
         if (!distanceMode || !zoneController) return []
         const reactiveCount = zoneController.zoneCount
@@ -33,6 +48,7 @@ Rectangle {
         return zoneController.zonesForLoop(selectedLoop, valueRepresentation)
     }
     readonly property var rawSeries: {
+        const representationDependency = valueRepresentation
         if (distanceMode || !analysis || visibleDuration <= 0) return []
         let result = []
         const phases = ["L1", "L2", "L3"]
@@ -78,19 +94,38 @@ Rectangle {
              + "   |Z| " + formatOhm(value.magnitude) + "   ∠ " + value.angle.toFixed(2) + "°"
     }
 
+    function ensureAvailableLoop() {
+        if (!analysis || !distanceMode) return
+        if (analysis.distanceLoopAvailable(selectedLoop)) return
+        const loops = ["L1-E", "L2-E", "L3-E", "L1-L2", "L2-L3", "L3-L1"]
+        for (let loop of loops) {
+            if (analysis.distanceLoopAvailable(loop)) {
+                selectedLoop = loop
+                return
+            }
+        }
+    }
+
     function requestRepaint() { locusCanvas.requestPaint() }
     onLocusPointsChanged: requestRepaint()
     onVisibleZonesChanged: requestRepaint()
     onRawSeriesChanged: requestRepaint()
     onCursorAValueChanged: requestRepaint()
     onCursorBValueChanged: requestRepaint()
-    onAnalysisModeChanged: requestRepaint()
+    onAnalysisModeChanged: {
+        ensureAvailableLoop()
+        requestRepaint()
+    }
     onWidthChanged: requestRepaint()
     onHeightChanged: requestRepaint()
+    Component.onCompleted: ensureAvailableLoop()
 
     Connections {
         target: root.document
-        function onDocumentChanged() { root.requestRepaint() }
+        function onDocumentChanged() {
+            root.ensureAvailableLoop()
+            root.requestRepaint()
+        }
     }
     Connections {
         target: root.zoneController
