@@ -5,7 +5,7 @@ import QtQuick.Layouts
 
 Rectangle {
     id: root
-    height: 38
+    height: currentView === "table" ? 34 : 38
     color: "#e9ecef"
     border.color: "#c4c9ce"
 
@@ -53,12 +53,12 @@ Rectangle {
                 checkable: true
                 checked: root.currentView === modelData
                 enabled: root.hasRecord
-                font.pixelSize: 9
+                font.pixelSize: root.currentView === "table" ? 8 : 9
                 onClicked: root.viewRequested(modelData)
             }
         }
 
-        Rectangle { width: 1; height: 22; color: "#c0c5c9"; Layout.leftMargin: 4; Layout.rightMargin: 4 }
+        Rectangle { width: 1; height: root.currentView === "table" ? 18 : 22; color: "#c0c5c9"; Layout.leftMargin: 4; Layout.rightMargin: 4 }
 
         RowLayout {
             visible: root.currentView === "time"
@@ -138,7 +138,7 @@ Rectangle {
             }
         }
 
-        Rectangle { width: 1; height: 22; color: "#c0c5c9"; Layout.leftMargin: 3; Layout.rightMargin: 3 }
+        Rectangle { width: 1; height: root.currentView === "table" ? 18 : 22; color: "#c0c5c9"; Layout.leftMargin: 3; Layout.rightMargin: 3 }
 
         Label {
             text: root.currentView === "time" ? (root.timeDisplayMode === "rms" ? "ONE-CYCLE RMS" : "RECORDED SAMPLES")
