@@ -17,7 +17,7 @@ int main(int argc, char* argv[]) {
     QGuiApplication app(argc, argv);
     QGuiApplication::setApplicationName(QStringLiteral("ardirec"));
     QGuiApplication::setOrganizationName(QStringLiteral("ardirec"));
-    QGuiApplication::setApplicationVersion(QStringLiteral("0.2.0-alpha.11"));
+    QGuiApplication::setApplicationVersion(QStringLiteral("0.2.0-alpha.12"));
 
     qmlRegisterType<WaveformItem>("Ardirec.Render", 1, 0, "WaveformItem");
     qmlRegisterType<RmsWaveformItem>("Ardirec.Render", 1, 0, "RmsWaveformItem");
