@@ -7,8 +7,10 @@
 
 #include <algorithm>
 #include <cmath>
+#include <iterator>
 #include <limits>
 #include <span>
+#include <vector>
 
 namespace {
 QString compact_name(QString value) {
@@ -187,7 +189,16 @@ QVariantList TableSnapshotController::sortedChannels(const QVariantList& channel
                        b.snapshot.value(QStringLiteral("name")).toString()) < 0;
         });
     } else if (mode == QStringLiteral("rms")) {
-        std::stable_sort(entries.begin(), entries.end(), [](const Entry& a, const Entry& b) {
+        const auto roleRank = [](const Entry& entry) {
+            const QString role = entry.snapshot.value(QStringLiteral("role")).toString();
+            if (role == QStringLiteral("Voltage")) return 0;
+            if (role == QStringLiteral("Current")) return 1;
+            return 2;
+        };
+        std::stable_sort(entries.begin(), entries.end(), [roleRank](const Entry& a, const Entry& b) {
+            const int rankA = roleRank(a);
+            const int rankB = roleRank(b);
+            if (rankA != rankB) return rankA < rankB;
             return a.snapshot.value(QStringLiteral("rms")).toDouble()
                    > b.snapshot.value(QStringLiteral("rms")).toDouble();
         });
@@ -207,9 +218,11 @@ QVariantList TableSnapshotController::sortedChannels(const QVariantList& channel
 QVariantMap TableSnapshotController::summaryAt(const QVariantList& channelIndexes,
                                                 double absoluteTimeSeconds) {
     int maxThdChannel = -1;
-    int maxRmsChannel = -1;
+    int maxVoltageRmsChannel = -1;
+    int maxCurrentRmsChannel = -1;
     double maxThd = -1.0;
-    double maxRms = -1.0;
+    double maxVoltageRms = -1.0;
+    double maxCurrentRms = -1.0;
     int validCount = 0;
 
     for (const QVariant& value : channelIndexes) {
@@ -219,13 +232,23 @@ QVariantMap TableSnapshotController::summaryAt(const QVariantList& channelIndexe
         ++validCount;
         const double thd = snapshot.value(QStringLiteral("thd")).toDouble();
         const double rms = snapshot.value(QStringLiteral("rms")).toDouble();
+        const QString role = snapshot.value(QStringLiteral("role")).toString();
         if (thd > maxThd) { maxThd = thd; maxThdChannel = channel; }
-        if (rms > maxRms) { maxRms = rms; maxRmsChannel = channel; }
+        if (role == QStringLiteral("Voltage") && rms > maxVoltageRms) {
+            maxVoltageRms = rms;
+            maxVoltageRmsChannel = channel;
+        }
+        if (role == QStringLiteral("Current") && rms > maxCurrentRms) {
+            maxCurrentRms = rms;
+            maxCurrentRmsChannel = channel;
+        }
     }
 
     return {{QStringLiteral("count"), validCount},
             {QStringLiteral("maxThdChannel"), maxThdChannel},
             {QStringLiteral("maxThd"), std::max(0.0, maxThd)},
-            {QStringLiteral("maxRmsChannel"), maxRmsChannel},
-            {QStringLiteral("maxRms"), std::max(0.0, maxRms)}};
+            {QStringLiteral("maxVoltageRmsChannel"), maxVoltageRmsChannel},
+            {QStringLiteral("maxVoltageRms"), std::max(0.0, maxVoltageRms)},
+            {QStringLiteral("maxCurrentRmsChannel"), maxCurrentRmsChannel},
+            {QStringLiteral("maxCurrentRms"), std::max(0.0, maxCurrentRms)}};
 }
