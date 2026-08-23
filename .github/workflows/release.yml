@@ -42,7 +42,7 @@ jobs:
       - name: Stage Qt application
         shell: pwsh
         run: |
-          $folder = 'ardirec-v0.2.0-alpha.5-windows-x64'
+          $folder = 'ardirec-v0.2.0-alpha.6-windows-x64'
           New-Item -ItemType Directory -Force -Path $folder | Out-Null
           Copy-Item build/apps/desktop/Release/ardirec.exe "$folder/ardirec.exe"
           windeployqt --release --compiler-runtime --no-translations --qmldir apps/desktop/qml "$folder/ardirec.exe"
@@ -51,8 +51,8 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $folder = 'ardirec-v0.2.0-alpha.5-windows-x64'
-          $zip = 'ardirec-v0.2.0-alpha.5-windows-x64-portable.zip'
+          $folder = 'ardirec-v0.2.0-alpha.6-windows-x64'
+          $zip = 'ardirec-v0.2.0-alpha.6-windows-x64-portable.zip'
           if (Test-Path $zip) { Remove-Item $zip -Force }
           Compress-Archive -Path $folder -DestinationPath $zip -CompressionLevel Optimal
           (Get-FileHash $zip -Algorithm SHA256).Hash + '  ' + $zip | Set-Content SHA256SUMS.txt
@@ -60,28 +60,28 @@ jobs:
       - name: Publish GitHub prerelease
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v0.2.0-alpha.5
-          name: ardirec v0.2.0-alpha.5 — Portable ZIP Development Build
+          tag_name: v0.2.0-alpha.6
+          name: ardirec v0.2.0-alpha.6 — Synchronized Analysis Views
           prerelease: true
           make_latest: false
           generate_release_notes: true
           body: |
-            Development distribution policy update for ardirec.
+            ardirec alpha.6 starts the transition from a waveform-only viewer into a synchronized disturbance-analysis workstation.
 
-            Windows alpha/beta builds now ship as a transparent portable ZIP folder instead of a self-extracting EXE. This keeps the development workflow fast, makes the Qt runtime layout explicit, and avoids confusing a self-extracting bundle with a true monolithic executable.
+            Highlights:
+            - Standard phase colors are now shared by voltage and current: L1 red, L2 yellow, L3 blue, E/N green.
+            - The COMTRADE trigger is a muted dashed fixed reference instead of looking like a draggable measurement cursor.
+            - Time Signals can toggle between recorded sinusoidal samples and one-cycle sliding RMS traces.
+            - New Phasor view shows synchronized voltage/current fundamental vectors using a full-cycle DFT.
+            - New Locus view plots phase V/I trajectories in the R-X plane with C1/C2 markers. This is intentionally labeled as raw phase impedance; protection-loop compensation and RIO/XRIO zones come in the protection-analysis gate.
+            - New Harmonics view shows full-cycle DFT harmonic RMS magnitudes as percent of the fundamental.
+            - New Value Table view shows cursor-synchronized instantaneous, RMS and phasor-angle values.
+            - A common cursor navigator stays available in every view. C1/C2 still snap to digital transitions, so moving a cursor immediately updates phasor, locus, harmonics and table results.
+            - Windows development distribution remains a portable ZIP folder.
 
-            Usage:
-            1. Download `ardirec-v0.2.0-alpha.5-windows-x64-portable.zip`.
-            2. Extract the folder anywhere.
-            3. Run `ardirec.exe` inside the extracted folder.
-
-            The application remains fully portable: no installer is required and no installation is written to Windows. A proper installer will be introduced closer to stable/final releases.
-
-            This build retains the alpha.4 cursor improvements, including horizontal-resize hover feedback and snapping Cursor 1 / Cursor 2 to rising and falling COMTRADE digital transitions.
-
-            Alpha limitation: loading is still capped at 500,000 sample frames while the memory-mapped SignalStore and persistent LOD cache are being completed. RMS/phasor/vector/R-X/harmonics remain later gates.
+            Alpha limitation: loading is still capped at 500,000 sample frames while memory-mapped SignalStore/LOD work continues. The current DFT/RMS implementation is the first deterministic analysis core and will be expanded with symmetrical components, power/frequency, RIO/XRIO and calculation-validation fixtures.
 
             The executable is unsigned, so Windows SmartScreen may show a warning.
           files: |
-            ardirec-v0.2.0-alpha.5-windows-x64-portable.zip
+            ardirec-v0.2.0-alpha.6-windows-x64-portable.zip
             SHA256SUMS.txt
