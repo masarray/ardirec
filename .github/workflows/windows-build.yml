@@ -42,7 +42,7 @@ jobs:
       - name: Stage Qt application
         shell: pwsh
         run: |
-          $folder = 'ardirec-v0.2.0-alpha.6-windows-x64'
+          $folder = 'ardirec-v0.2.0-alpha.7-windows-x64'
           New-Item -ItemType Directory -Force -Path $folder | Out-Null
           Copy-Item build/apps/desktop/Release/ardirec.exe "$folder/ardirec.exe"
           windeployqt --release --compiler-runtime --no-translations --qmldir apps/desktop/qml "$folder/ardirec.exe"
@@ -51,8 +51,8 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $folder = 'ardirec-v0.2.0-alpha.6-windows-x64'
-          $zip = 'ardirec-v0.2.0-alpha.6-windows-x64-portable.zip'
+          $folder = 'ardirec-v0.2.0-alpha.7-windows-x64'
+          $zip = 'ardirec-v0.2.0-alpha.7-windows-x64-portable.zip'
           if (Test-Path $zip) { Remove-Item $zip -Force }
           Compress-Archive -Path $folder -DestinationPath $zip -CompressionLevel Optimal
           Get-FileHash $zip -Algorithm SHA256 | Format-List
@@ -61,6 +61,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ardirec-windows-x64-portable-zip
-          path: ardirec-v0.2.0-alpha.6-windows-x64-portable.zip
+          path: ardirec-v0.2.0-alpha.7-windows-x64-portable.zip
           if-no-files-found: error
           retention-days: 14

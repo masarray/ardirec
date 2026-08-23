@@ -46,7 +46,7 @@ ApplicationWindow {
         if (viewMode === "locus") return "LOCUS / R-X"
         if (viewMode === "harmonics") return "HARMONICS"
         if (viewMode === "table") return "VALUE TABLE"
-        return timeDisplayMode === "rms" ? "TIME SIGNALS · RMS" : "TIME SIGNALS"
+        return timeDisplayMode === "rms" ? "TIME SIGNALS · RMS" : "TIME SIGNALS · INSTANT"
     }
 
     function defaultVisibleChannels() {
@@ -235,21 +235,27 @@ ApplicationWindow {
             Layout.fillWidth: true
             currentView: window.viewMode
             timeDisplayMode: window.timeDisplayMode
+            valueRepresentation: documentController.valueRepresentation
+            ratioSummary: documentController.transformerRatioSummary
+            transformerRatiosAvailable: documentController.transformerRatiosAvailable
             activeAnalysisCursor: window.activeAnalysisCursor
             hasRecord: window.hasRecord
             onViewRequested: viewName => window.viewMode = viewName
             onTimeDisplayModeRequested: mode => window.timeDisplayMode = mode
+            onValueRepresentationRequested: representation => documentController.setValueRepresentation(representation)
             onActiveAnalysisCursorRequested: cursorNumber => window.activeAnalysisCursor = cursorNumber
         }
 
         MeasurementPanel {
             Layout.fillWidth: true
-            Layout.preferredHeight: 120
+            Layout.preferredHeight: 128
             document: documentController
+            analysis: analysisController
             visibleChannels: window.visibleChannels
             measurementChannel: window.measurementChannel
             cursorATime: window.cursorATime
             cursorBTime: window.cursorBTime
+            valueRepresentation: documentController.valueRepresentation
             onMeasurementChannelRequested: channelIndex => window.measurementChannel = channelIndex
         }
 
@@ -297,6 +303,7 @@ ApplicationWindow {
                 displayedDigitalChannels: window.displayedDigitalChannels
                 digitalDisplayMode: window.digitalDisplayMode
                 displayMode: window.timeDisplayMode
+                valueRepresentation: documentController.valueRepresentation
                 zoomFactor: window.waveformZoom
                 panFraction: window.waveformPan
                 viewStart: window.viewStart
@@ -353,6 +360,7 @@ ApplicationWindow {
                 visibleChannels: window.visibleChannels
                 cursorATime: window.cursorATime
                 cursorBTime: window.cursorBTime
+                valueRepresentation: documentController.valueRepresentation
             }
         }
 
@@ -378,15 +386,25 @@ ApplicationWindow {
                     visible: window.hasRecord
                     text: "View " + ((window.viewStart - documentController.triggerOffsetSeconds) * 1000.0).toFixed(2)
                           + " … " + ((window.viewEnd - documentController.triggerOffsetSeconds) * 1000.0).toFixed(2)
-                          + " ms  ·  zoom " + window.waveformZoom.toFixed(2) + "×"
+                          + " ms · zoom " + window.waveformZoom.toFixed(2) + "×"
                     color: "#5c5c5c"
                     font.pixelSize: 8
+                }
+                Rectangle { visible: window.hasRecord; width: 1; height: 14; color: "#c0c0c0" }
+                Label {
+                    visible: window.hasRecord
+                    text: (documentController.valueRepresentation === "primary" ? "PRIMARY" : "SECONDARY")
+                          + " · " + documentController.transformerRatioSummary
+                    color: documentController.transformerRatiosAvailable ? "#4f585f" : "#8a6d3b"
+                    font.pixelSize: 8
+                    elide: Text.ElideRight
+                    Layout.maximumWidth: 330
                 }
                 Item { Layout.fillWidth: true }
                 Label {
                     text: window.viewMode === "time"
-                          ? "Wheel scrolls signals · Ctrl+wheel zooms time · cursor ↔ snaps to digital edges"
-                          : "Drag C1/C2 on the common time ruler · every analysis view follows the cursor context"
+                          ? "Wheel scroll · Ctrl+wheel zoom · C1/C2 snap to digital edges"
+                          : "C1/C2 use one shared investigation context across every view"
                     color: "#666666"
                     font.pixelSize: 8
                 }

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #pragma once
 
+#include "ardirec/comtrade/record.hpp"
+
 #include <QObject>
 #include <QString>
 #include <QStringList>
@@ -34,6 +36,9 @@ class DocumentController final : public QObject {
     Q_PROPERTY(QString startTimeText READ startTimeText NOTIFY documentChanged)
     Q_PROPERTY(QString triggerTimeText READ triggerTimeText NOTIFY documentChanged)
     Q_PROPERTY(QString recordHealth READ recordHealth NOTIFY documentChanged)
+    Q_PROPERTY(QString valueRepresentation READ valueRepresentation NOTIFY representationChanged)
+    Q_PROPERTY(bool transformerRatiosAvailable READ transformerRatiosAvailable NOTIFY documentChanged)
+    Q_PROPERTY(QString transformerRatioSummary READ transformerRatioSummary NOTIFY documentChanged)
 public:
     explicit DocumentController(QObject* parent = nullptr) : QObject(parent) {}
 
@@ -58,6 +63,9 @@ public:
     QString startTimeText() const { return m_startTimeText; }
     QString triggerTimeText() const { return m_triggerTimeText; }
     QString recordHealth() const { return m_recordHealth; }
+    QString valueRepresentation() const { return m_valueRepresentation; }
+    bool transformerRatiosAvailable() const { return m_transformerRatiosAvailable; }
+    QString transformerRatioSummary() const { return m_transformerRatioSummary; }
 
     [[nodiscard]] const std::vector<double>& selectedSamples() const { return m_selectedSamples; }
     [[nodiscard]] const std::vector<double>& timeSeconds() const { return m_timeSeconds; }
@@ -68,14 +76,18 @@ public:
 
     Q_INVOKABLE void openCfg(const QUrl& url);
     Q_INVOKABLE void selectChannel(int index);
+    Q_INVOKABLE void setValueRepresentation(const QString& representation);
     Q_INVOKABLE QString channelName(int index) const;
     Q_INVOKABLE QString channelUnit(int index) const;
     Q_INVOKABLE QString analogRole(int index) const;
     Q_INVOKABLE double channelPeak(int index) const;
+    Q_INVOKABLE double channelDisplayScale(int index) const;
+    Q_INVOKABLE QString channelRatioText(int index) const;
     Q_INVOKABLE double sampleValue(int channelIndex,
                                    double absoluteTimeSeconds) const;
     Q_INVOKABLE QString sampleValueText(int channelIndex,
                                         double absoluteTimeSeconds) const;
+    Q_INVOKABLE QString formatChannelValue(int channelIndex, double value) const;
     Q_INVOKABLE QString digitalName(int index) const;
     Q_INVOKABLE bool digitalIsActive(int index) const;
     Q_INVOKABLE bool digitalStateAt(int index, double absoluteTimeSeconds) const;
@@ -86,10 +98,12 @@ public:
 signals:
     void documentChanged();
     void waveformChanged();
+    void representationChanged();
     void errorChanged();
 
 private:
     void rebuildSelectedSamples();
+    void rebuildTransformerSummary();
     [[nodiscard]] std::size_t nearestSampleIndex(double absoluteTimeSeconds) const;
     void rebuildDigitalEdges();
 
@@ -107,12 +121,16 @@ private:
     QString m_startTimeText{QStringLiteral("—")};
     QString m_triggerTimeText{QStringLiteral("—")};
     QString m_recordHealth{QStringLiteral("No record")};
+    QString m_valueRepresentation{QStringLiteral("secondary")};
+    QString m_transformerRatioSummary{QStringLiteral("No CT/PT ratio metadata")};
     int m_selectedAnalogIndex{-1};
     int m_analogCount{0};
     int m_digitalCount{0};
     int m_activeDigitalCount{0};
     double m_nominalFrequency{0.0};
     double m_triggerOffsetSeconds{0.0};
+    bool m_transformerRatiosAvailable{false};
+    std::vector<ardirec::comtrade::AnalogChannel> m_channelConfigs;
     std::vector<std::vector<double>> m_analogSamples;
     std::vector<std::vector<std::uint8_t>> m_statusSamples;
     std::vector<bool> m_statusActive;

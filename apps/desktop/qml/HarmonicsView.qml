@@ -13,12 +13,14 @@ Rectangle {
     property real cursorBTime: 0.0
     property int activeCursor: 1
     property int maximumOrder: 15
+    property string valueRepresentation: document ? document.valueRepresentation : "secondary"
     readonly property real cursorTime: activeCursor === 2 ? cursorBTime : cursorATime
 
     function requestRepaint() { harmonicCanvas.requestPaint() }
     onCursorTimeChanged: requestRepaint()
     onChannelIndexChanged: requestRepaint()
     onMaximumOrderChanged: requestRepaint()
+    onValueRepresentationChanged: requestRepaint()
     Connections {
         target: root.document
         function onDocumentChanged() { root.requestRepaint() }
@@ -45,7 +47,11 @@ Rectangle {
                 font.pixelSize: 8
             }
             Item { Layout.fillWidth: true }
-            Label { text: "Full-cycle DFT · RMS magnitude · % fundamental"; color: "#747c83"; font.pixelSize: 8 }
+            Label {
+                text: "Full-cycle DFT · " + (root.valueRepresentation === "primary" ? "primary" : "secondary") + " RMS · % H1"
+                color: "#747c83"
+                font.pixelSize: 8
+            }
         }
 
         Rectangle {

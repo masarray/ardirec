@@ -44,6 +44,7 @@ protected:
 private:
     void reloadSamples();
     void rebuildRms();
+    void refreshRepresentation();
 
     QPointer<DocumentController> m_document;
     int m_channelIndex{0};
@@ -51,6 +52,7 @@ private:
     std::vector<double> m_samples;
     std::vector<double> m_times;
     std::vector<double> m_rmsSamples;
+    double m_displayScale{1.0};
     double m_zoomFactor{1.0};
     double m_panFraction{0.0};
 };

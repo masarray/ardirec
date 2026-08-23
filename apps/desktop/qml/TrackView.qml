@@ -18,16 +18,21 @@ Rectangle {
     property real cursorATime: 0.0
     property real cursorBTime: 0.0
     property string displayMode: "instantaneous"
+    property string valueRepresentation: "secondary"
     property color traceColor: "#315f8d"
     property real axisWidth: 92
     property color cursorAColor: "#244f9e"
     property color cursorBColor: "#b77900"
 
-    readonly property real rawPeak: document && channelIndex >= 0 ? document.channelPeak(channelIndex) : 1.0
+    readonly property real rawPeak: {
+        const representationDependency = root.valueRepresentation
+        return document && channelIndex >= 0 ? document.channelPeak(channelIndex) : 1.0
+    }
     readonly property real displayPeak: displayMode === "rms" ? rawPeak / Math.sqrt(2.0) : rawPeak
 
     function formatAxis(value) {
         const magnitude = Math.abs(value)
+        if (magnitude >= 100000) return value.toFixed(0)
         if (magnitude >= 10000) return value.toFixed(0)
         if (magnitude >= 1000) return value.toFixed(0)
         if (magnitude >= 100) return value.toFixed(1)
@@ -64,10 +69,14 @@ Rectangle {
             anchors.leftMargin: 5
             anchors.topMargin: 19
             text: (root.document ? root.document.channelUnit(root.channelIndex) : "")
-                  + (root.displayMode === "rms" ? "  RMS" : "")
+                  + (root.displayMode === "rms" ? " · RMS" : "")
+                  + " · " + (root.valueRepresentation === "primary" ? "PRI" : "SEC")
             color: "#707070"
-            font.pixelSize: 8
+            font.pixelSize: 7
+            ToolTip.visible: ratioHover.containsMouse
+            ToolTip.text: root.document && root.channelIndex >= 0 ? root.document.channelRatioText(root.channelIndex) : ""
         }
+        MouseArea { id: ratioHover; anchors.left: parent.left; anchors.top: parent.top; width: parent.width; height: 34; hoverEnabled: true; acceptedButtons: Qt.NoButton }
 
         Label {
             anchors.right: parent.right

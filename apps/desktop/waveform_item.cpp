@@ -20,6 +20,7 @@ void WaveformItem::setDocument(QObject* document) {
     m_document = controller;
     if (m_document) {
         connect(m_document, &DocumentController::documentChanged, this, &WaveformItem::reloadSamples);
+        connect(m_document, &DocumentController::representationChanged, this, &WaveformItem::refreshRepresentation);
     }
     reloadSamples();
     emit documentChanged();
@@ -60,12 +61,19 @@ void WaveformItem::reloadSamples() {
     if (!m_document) {
         m_samples.clear();
         m_times.clear();
+        m_displayScale = 1.0;
     } else {
         m_samples = m_document->analogSamples(m_channelIndex);
         m_times = m_document->timeSeconds();
         if (m_times.size() > m_samples.size()) m_times.resize(m_samples.size());
         if (m_samples.size() > m_times.size()) m_samples.resize(m_times.size());
+        m_displayScale = m_document->channelDisplayScale(m_channelIndex);
     }
+    update();
+}
+
+void WaveformItem::refreshRepresentation() {
+    m_displayScale = m_document ? m_document->channelDisplayScale(m_channelIndex) : 1.0;
     update();
 }
 
@@ -100,7 +108,7 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*) {
 
     double peak = 0.0;
     for (std::size_t i = start; i < end; ++i) {
-        const double value = m_samples[i];
+        const double value = m_samples[i] * m_displayScale;
         if (std::isfinite(value)) peak = std::max(peak, std::abs(value));
     }
     if (!std::isfinite(peak) || peak < 1.0e-12) peak = 1.0;
@@ -154,19 +162,19 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*) {
     if (!envelopeMode) {
         std::size_t out = 0;
         for (std::size_t i = start; i < end && out < pointCount; i += stride) {
-            const double value = m_samples[i];
+            const double value = m_samples[i] * m_displayScale;
             vertices[out++].set(xForTime(m_times[i]), std::isfinite(value) ? yFor(value) : h * 0.5F);
         }
         while (out < pointCount) {
             const std::size_t i = end - 1;
-            const double value = m_samples[i];
+            const double value = m_samples[i] * m_displayScale;
             vertices[out++].set(xForTime(m_times[i]), std::isfinite(value) ? yFor(value) : h * 0.5F);
         }
     } else {
         std::vector<double> lows(pixelWidth, std::numeric_limits<double>::infinity());
         std::vector<double> highs(pixelWidth, -std::numeric_limits<double>::infinity());
         for (std::size_t i = start; i < end; ++i) {
-            const double value = m_samples[i];
+            const double value = m_samples[i] * m_displayScale;
             if (!std::isfinite(value)) continue;
             const double fraction = std::clamp((m_times[i] - startTime) / visibleDuration, 0.0, 1.0);
             const std::size_t bucket = std::min(pixelWidth - 1,
