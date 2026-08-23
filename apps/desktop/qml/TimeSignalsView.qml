@@ -14,6 +14,7 @@ Rectangle {
     property var displayedDigitalChannels: []
     property string digitalDisplayMode: "active"
     property string displayMode: "instantaneous"
+    property string valueRepresentation: "secondary"
     property real zoomFactor: 1.0
     property real panFraction: 0.0
     property real viewStart: 0.0
@@ -78,7 +79,8 @@ Rectangle {
                 visible: root.voltageChannels.length > 0
                 title: "VOLTAGE"
                 count: root.voltageChannels.length
-                detail: root.displayMode === "rms" ? "one-cycle RMS" : "instantaneous"
+                detail: (root.displayMode === "rms" ? "one-cycle RMS" : "instantaneous")
+                        + " · " + (root.valueRepresentation === "primary" ? "primary" : "secondary")
                 accent: "#d32f2f"
             }
             Repeater {
@@ -98,6 +100,7 @@ Rectangle {
                     cursorBTime: root.cursorBTime
                     axisWidth: root.axisWidth
                     displayMode: root.displayMode
+                    valueRepresentation: root.valueRepresentation
                     traceColor: root.analysis ? root.analysis.phaseColor(modelData) : "#6f7780"
                 }
             }
@@ -108,7 +111,8 @@ Rectangle {
                 visible: root.currentChannels.length > 0
                 title: "CURRENT"
                 count: root.currentChannels.length
-                detail: root.displayMode === "rms" ? "one-cycle RMS" : "instantaneous"
+                detail: (root.displayMode === "rms" ? "one-cycle RMS" : "instantaneous")
+                        + " · " + (root.valueRepresentation === "primary" ? "primary" : "secondary")
                 accent: "#1976d2"
             }
             Repeater {
@@ -128,6 +132,7 @@ Rectangle {
                     cursorBTime: root.cursorBTime
                     axisWidth: root.axisWidth
                     displayMode: root.displayMode
+                    valueRepresentation: root.valueRepresentation
                     traceColor: root.analysis ? root.analysis.phaseColor(modelData) : "#6f7780"
                 }
             }
@@ -138,7 +143,8 @@ Rectangle {
                 visible: root.otherChannels.length > 0
                 title: "OTHER ANALOG"
                 count: root.otherChannels.length
-                detail: root.displayMode === "rms" ? "one-cycle RMS" : "recorded channels"
+                detail: (root.displayMode === "rms" ? "one-cycle RMS" : "recorded channels")
+                        + " · " + (root.valueRepresentation === "primary" ? "primary" : "secondary")
                 accent: "#6f7780"
             }
             Repeater {
@@ -158,6 +164,7 @@ Rectangle {
                     cursorBTime: root.cursorBTime
                     axisWidth: root.axisWidth
                     displayMode: root.displayMode
+                    valueRepresentation: root.valueRepresentation
                     traceColor: root.analysis ? root.analysis.phaseColor(modelData) : "#6f7780"
                 }
             }
