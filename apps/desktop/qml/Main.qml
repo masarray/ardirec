@@ -171,6 +171,7 @@ ApplicationWindow {
     }
 
     onDigitalDisplayModeChanged: rebuildDigitalGroup()
+    onViewModeChanged: if (viewMode === "harmonics") activeAnalysisCursor = 1
 
     FileDialog {
         id: openDialog
@@ -248,7 +249,8 @@ ApplicationWindow {
 
         MeasurementPanel {
             Layout.fillWidth: true
-            Layout.preferredHeight: 128
+            visible: window.viewMode !== "harmonics"
+            Layout.preferredHeight: visible ? 128 : 0
             document: documentController
             analysis: analysisController
             visibleChannels: window.visibleChannels
@@ -261,8 +263,8 @@ ApplicationWindow {
 
         CursorNavigator {
             Layout.fillWidth: true
-            Layout.preferredHeight: 32
-            visible: window.hasRecord
+            Layout.preferredHeight: visible ? 32 : 0
+            visible: window.hasRecord && window.viewMode !== "harmonics"
             document: documentController
             viewStart: window.viewStart
             visibleDuration: window.visibleDuration
@@ -271,6 +273,18 @@ ApplicationWindow {
             axisWidth: window.axisWidth
             onCursorARequested: timeSeconds => window.cursorATime = timeSeconds
             onCursorBRequested: timeSeconds => window.cursorBTime = timeSeconds
+        }
+
+        HarmonicCursorNavigator {
+            Layout.fillWidth: true
+            Layout.preferredHeight: visible ? 32 : 0
+            visible: window.hasRecord && window.viewMode === "harmonics"
+            document: documentController
+            viewStart: window.viewStart
+            visibleDuration: window.visibleDuration
+            cursorTime: window.cursorATime
+            axisWidth: window.axisWidth
+            onCursorRequested: timeSeconds => window.cursorATime = timeSeconds
         }
 
         Rectangle {
@@ -346,10 +360,9 @@ ApplicationWindow {
                 visible: window.hasRecord && window.viewMode === "harmonics"
                 document: documentController
                 analysis: analysisController
-                channelIndex: window.measurementChannel
-                cursorATime: window.cursorATime
-                cursorBTime: window.cursorBTime
-                activeCursor: window.activeAnalysisCursor
+                snapshot: harmonicSnapshotController
+                visibleChannels: window.visibleChannels
+                cursorTime: window.cursorATime
             }
 
             ValueTableView {
@@ -404,7 +417,9 @@ ApplicationWindow {
                 Label {
                     text: window.viewMode === "time"
                           ? "Wheel scroll · Ctrl+wheel zoom · C1/C2 snap to digital edges"
-                          : "C1/C2 use one shared investigation context across every view"
+                          : window.viewMode === "harmonics"
+                            ? "Single Harmonic Cursor · snap to digital edges · full H0/H1/Hn spectra"
+                            : "C1/C2 use one shared investigation context across every view"
                     color: "#666666"
                     font.pixelSize: 8
                 }

@@ -42,7 +42,7 @@ jobs:
       - name: Stage Qt application
         shell: pwsh
         run: |
-          $folder = 'ardirec-v0.2.0-alpha.9-windows-x64'
+          $folder = 'ardirec-v0.2.0-alpha.10-windows-x64'
           New-Item -ItemType Directory -Force -Path $folder | Out-Null
           Copy-Item build/apps/desktop/Release/ardirec.exe "$folder/ardirec.exe"
           windeployqt --release --compiler-runtime --no-translations --qmldir apps/desktop/qml "$folder/ardirec.exe"
@@ -51,8 +51,8 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $folder = 'ardirec-v0.2.0-alpha.9-windows-x64'
-          $zip = 'ardirec-v0.2.0-alpha.9-windows-x64-portable.zip'
+          $folder = 'ardirec-v0.2.0-alpha.10-windows-x64'
+          $zip = 'ardirec-v0.2.0-alpha.10-windows-x64-portable.zip'
           if (Test-Path $zip) { Remove-Item $zip -Force }
           Compress-Archive -Path $folder -DestinationPath $zip -CompressionLevel Optimal
           (Get-FileHash $zip -Algorithm SHA256).Hash + '  ' + $zip | Set-Content SHA256SUMS.txt
@@ -60,28 +60,29 @@ jobs:
       - name: Publish GitHub prerelease
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v0.2.0-alpha.9
-          name: ardirec v0.2.0-alpha.9 — Protection Distance Locus
+          tag_name: v0.2.0-alpha.10
+          name: ardirec v0.2.0-alpha.10 — Harmonics Workstation
           prerelease: true
           make_latest: false
           generate_release_notes: true
           body: |
-            ardirec alpha.9 delivers the P2 manual distance-protection analysis foundation.
+            ardirec alpha.10 upgrades Harmonics from a role-switched proof view into a dense full-record investigation workspace.
 
             Highlights:
-            - Locus now uses explicit protection measuring loops: L1-E, L2-E, L3-E, L1-L2, L2-L3 and L3-L1.
-            - Phase-phase loops use differential voltage/current; phase-earth loops support complex residual-current grounding compensation kL.
-            - kL can be entered manually or imported from RIO/XRIO KL, Z0/Z1, or RE/RL-XE/XL settings where available.
-            - C1 and C2 remain synchronized with the shared investigation context and are displayed as filled/outlined impedance markers.
-            - The selected Time-view window drives the R-X trajectory, keeping fault timing and impedance behavior aligned.
-            - Classic RIO distance zones are imported with fault-loop filtering, trip metadata and supported generic polygon/mho geometry.
-            - Standardized XRIO RIO Distance sections are adapted without evaluating vendor-specific Custom formulas/scripts; unsupported content is reported explicitly.
-            - Imported zone impedance bases follow the global Primary/Secondary representation when CT/VT metadata permits verified conversion.
-            - Pure C++ distance and RIO seams have deterministic regression tests for LL/LN loop equations, complex kL conversion, RIO geometry/filtering and XRIO adaptation.
-
-            P2 is manual analysis infrastructure, not automatic fault classification or distance-to-fault estimation. Unsupported proprietary XRIO converter logic is never guessed.
+            - Harmonics now defaults to all recognized Voltage + Current analog signals in one vertically scrollable workspace; no measuring-signal switch is required to reveal Current after Voltage.
+            - Harmonics uses one dedicated analysis cursor only. Time/Phasor/Locus/Table retain dual C1/C2 workflows.
+            - The single Harmonic Cursor keeps the same shared timebase and digital-edge snapping behavior.
+            - Full spectrum mode now shows H0/DC, H1 fundamental and H2..Hn. Distortion-only H2..Hn remains available as an optional view.
+            - H0/DC is calculated as the arithmetic mean of the same one-cycle trailing window and is never multiplied by sqrt(2).
+            - Compact 128 px virtualized rows expose substantially more signals per screen and keep large analog records responsive while scrolling.
+            - Direct bar annotations show %H1 and engineering magnitude when spacing permits; hover reveals order, frequency, magnitude, %H1 and phase.
+            - Scope controls provide Electrical, Voltage, Current, Visible and All Analog views.
+            - H10/H15/H25/H50 and %H1/RMS controls remain available without changing the cursor or scroll context.
+            - Cached harmonic snapshots avoid recomputing spectra merely because a row scrolls out and back into view.
+            - Primary/Secondary continues to scale absolute magnitudes while %H1 and THD remain invariant.
+            - Core regression tests now validate a known DC + H1 + H2 waveform and confirm DC is excluded from THD.
 
             Windows development distribution remains a portable ZIP folder. The executable is unsigned, so Windows SmartScreen may show a warning.
           files: |
-            ardirec-v0.2.0-alpha.9-windows-x64-portable.zip
+            ardirec-v0.2.0-alpha.10-windows-x64-portable.zip
             SHA256SUMS.txt

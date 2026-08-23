@@ -14,6 +14,7 @@ struct HarmonicBin {
 
 struct HarmonicSpectrum {
     bool valid{};
+    double dc_component{};
     double fundamental_rms{};
     double thd_percent{};
     int dominant_order{};

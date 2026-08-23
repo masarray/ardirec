@@ -6,6 +6,8 @@ qt_add_executable(ardirec WIN32 MACOSX_BUNDLE
     document_controller.hpp
     analysis_controller.cpp
     analysis_controller.hpp
+    harmonic_snapshot_controller.cpp
+    harmonic_snapshot_controller.hpp
     distance_zone_controller.cpp
     distance_zone_controller.hpp
     waveform_item.cpp
@@ -26,6 +28,7 @@ qt_add_qml_module(ardirec
         qml/ViewModeBar.qml
         qml/MeasurementPanel.qml
         qml/CursorNavigator.qml
+        qml/HarmonicCursorNavigator.qml
         qml/TimeRuler.qml
         qml/TimeSignalsView.qml
         qml/TrackView.qml
