@@ -17,7 +17,7 @@ Rectangle {
     property string sortMode: "record"
     property string columnMode: "analysis"
     property bool abnormalOnly: false
-    property int selectedChannel: -1
+    property int selectedChannel: document ? document.selectedAnalogIndex : -1
 
     signal signalActivated(int channelIndex)
 
@@ -363,7 +363,10 @@ Rectangle {
                             anchors.fill: parent
                             hoverEnabled: true
                             acceptedButtons: Qt.LeftButton
-                            onClicked: root.signalActivated(modelData)
+                            onClicked: {
+                                if (root.document) root.document.selectChannel(modelData)
+                                root.signalActivated(modelData)
+                            }
                         }
                     }
                 }
