@@ -18,11 +18,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: github/codeql-action/init@v3
+      - uses: github/codeql-action/init@v4
         with:
           languages: c-cpp
       - name: Configure
         run: cmake -S . -B build -DARDIREC_BUILD_DESKTOP=OFF -DARDIREC_BUILD_TESTS=ON
       - name: Build
         run: cmake --build build
-      - uses: github/codeql-action/analyze@v3
+      - uses: github/codeql-action/analyze@v4
