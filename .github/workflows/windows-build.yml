@@ -58,7 +58,7 @@ jobs:
           Get-FileHash $zip -Algorithm SHA256 | Format-List
 
       - name: Upload portable ZIP
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ardirec-windows-x64-portable-zip
           path: ardirec-v0.2.0-alpha.14-windows-x64-portable.zip
