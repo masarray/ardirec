@@ -328,6 +328,21 @@ bool AnalysisController::distanceLoopAvailable(const QString& loopId) const {
     return false;
 }
 
+double AnalysisController::distanceCurrentFloor() const {
+    if (!m_document) return 1.0e-6;
+
+    double currentPeak = 0.0;
+    for (int phase = 1; phase <= 3; ++phase) {
+        const int channel = phaseChannel(QStringLiteral("Current"), QStringLiteral("L%1").arg(phase));
+        if (channel < 0) continue;
+        const double peak = std::abs(m_document->channelPeak(channel) * unitScaleToSi(channel));
+        if (std::isfinite(peak)) currentPeak = std::max(currentPeak, peak);
+    }
+
+    if (!std::isfinite(currentPeak) || currentPeak <= 0.0) return 1.0e-6;
+    return std::max(1.0e-6, currentPeak * 1.0e-3);
+}
+
 bool AnalysisController::distancePhasors(ardirec::distance::FaultLoop loop,
                                          double absoluteTimeSeconds,
                                          ardirec::distance::ThreePhasePhasors& phasors) const {
@@ -365,8 +380,14 @@ QVariantMap AnalysisController::distanceLoopAt(const QString& loopId,
 
     const double angleRadians = groundingFactorAngleDegrees * kPi / 180.0;
     const std::complex<double> groundingFactor = std::polar(std::max(0.0, groundingFactorMagnitude), angleRadians);
-    const auto result = ardirec::distance::distance_impedance(loop, phasors, groundingFactor);
-    if (!result.valid) return invalid_distance();
+    const double minimumCurrent = distanceCurrentFloor();
+    const auto result = ardirec::distance::distance_impedance(loop, phasors, groundingFactor, minimumCurrent);
+    if (!result.valid) {
+        QVariantMap invalid = invalid_distance();
+        invalid.insert(QStringLiteral("minimumCurrent"), minimumCurrent);
+        invalid.insert(QStringLiteral("loop"), loopId);
+        return invalid;
+    }
 
     const auto impedance = result.impedance;
     return {{QStringLiteral("valid"), true},
@@ -375,13 +396,14 @@ QVariantMap AnalysisController::distanceLoopAt(const QString& loopId,
             {QStringLiteral("magnitude"), std::abs(impedance)},
             {QStringLiteral("angle"), std::atan2(impedance.imag(), impedance.real()) * 180.0 / kPi},
             {QStringLiteral("measuringCurrent"), std::abs(result.measuring_current)},
+            {QStringLiteral("minimumCurrent"), minimumCurrent},
             {QStringLiteral("loop"), loopId}};
 }
 
 QVariantList AnalysisController::distanceLocus(const QString& loopId,
                                                double viewStartSeconds,
                                                double visibleDurationSeconds,
-                                               int steps,
+                                               int maximumPoints,
                                                double groundingFactorMagnitude,
                                                double groundingFactorAngleDegrees) const {
     QVariantList points;
@@ -389,19 +411,46 @@ QVariantList AnalysisController::distanceLocus(const QString& loopId,
         || !std::isfinite(visibleDurationSeconds)) {
         return points;
     }
-    steps = std::clamp(steps, 16, 240);
-    points.reserve(steps);
-    for (int index = 0; index < steps; ++index) {
-        const double fraction = static_cast<double>(index) / static_cast<double>(std::max(1, steps - 1));
-        const double time = viewStartSeconds + visibleDurationSeconds * fraction;
-        const QVariantMap value = distanceLoopAt(loopId,
-                                                 time,
-                                                 groundingFactorMagnitude,
-                                                 groundingFactorAngleDegrees);
-        if (!value.value(QStringLiteral("valid")).toBool()) continue;
-        QVariantMap point = value;
+
+    const auto& times = m_document->timeSeconds();
+    if (times.empty()) return points;
+
+    const double requestedEnd = viewStartSeconds + visibleDurationSeconds;
+    const double startTime = std::max(viewStartSeconds, m_document->dataStartSeconds());
+    const double endTime = std::min(requestedEnd, m_document->dataEndSeconds());
+    if (endTime < startTime) return points;
+
+    const auto firstIt = std::lower_bound(times.begin(), times.end(), startTime);
+    const auto endIt = std::upper_bound(times.begin(), times.end(), endTime);
+    const std::size_t first = static_cast<std::size_t>(std::distance(times.begin(), firstIt));
+    const std::size_t end = static_cast<std::size_t>(std::distance(times.begin(), endIt));
+    if (first >= end || first >= times.size()) return points;
+
+    maximumPoints = std::clamp(maximumPoints, 16, 4000);
+    const std::size_t sampleCount = end - first;
+    const std::size_t maxCount = static_cast<std::size_t>(maximumPoints);
+    const std::size_t stride = sampleCount <= maxCount
+                                   ? 1u
+                                   : static_cast<std::size_t>(std::ceil(static_cast<double>(sampleCount - 1)
+                                                                        / static_cast<double>(maxCount - 1)));
+    points.reserve(static_cast<qsizetype>(std::min(sampleCount, maxCount) + 1));
+
+    auto appendSample = [&](std::size_t index) {
+        const double time = times[index];
+        QVariantMap point = distanceLoopAt(loopId,
+                                           time,
+                                           groundingFactorMagnitude,
+                                           groundingFactorAngleDegrees);
         point.insert(QStringLiteral("time"), time);
         points.push_back(point);
+    };
+
+    std::size_t lastAppended = first;
+    for (std::size_t index = first; index < end; index += stride) {
+        appendSample(index);
+        lastAppended = index;
     }
+    const std::size_t finalIndex = end - 1;
+    if (lastAppended != finalIndex) appendSample(finalIndex);
     return points;
 }
