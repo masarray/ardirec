@@ -48,7 +48,7 @@ std::optional<double> parse_comtrade_timestamp(const std::string& raw) {
     if (year < 100) year += year >= 70 ? 1900 : 2000;
     const int wholeSecond = std::clamp(static_cast<int>(std::floor(seconds)), 0, 59);
     const double fraction = std::max(0.0, seconds - static_cast<double>(wholeSecond));
-    const QDate qDate(year, month, year > 0 ? day : day);
+    const QDate qDate(year, month, day);
     const QTime qTime(hour, minute, wholeSecond);
     if (!qDate.isValid() || !qTime.isValid()) return std::nullopt;
 
@@ -84,6 +84,14 @@ QString filesystem_path_to_qstring(const std::filesystem::path& path) {
     return QString::fromStdWString(path.wstring());
 #else
     return QString::fromStdString(path.string());
+#endif
+}
+
+std::filesystem::path qstring_to_filesystem_path(const QString& value) {
+#ifdef _WIN32
+    return std::filesystem::path(value.toStdWString());
+#else
+    return std::filesystem::path(value.toStdString());
 #endif
 }
 
@@ -149,16 +157,19 @@ std::pair<std::size_t, std::size_t> DocumentController::visibleSampleRange(doubl
 }
 
 void DocumentController::openCfg(const QUrl& url) {
-    m_distanceZonePath.clear();
-    m_headerSourceName.clear();
-    m_headerText.clear();
-
     try {
-        const auto path = std::filesystem::path(url.toLocalFile().toStdString());
+        const auto path = qstring_to_filesystem_path(url.toLocalFile());
         const auto bundle = ardirec::comtrade::locate_bundle(path);
         if (bundle.cfg.empty()) throw std::runtime_error("Cannot locate CFG file");
         if (bundle.dat.empty()) throw std::runtime_error("Matching DAT file was not found next to CFG");
 
+        const auto cfg = ardirec::comtrade::ConfigParser{}.parse_file(bundle.cfg);
+        const auto frames = ardirec::comtrade::DatReader{}.read(cfg, bundle.dat, kViewerAlphaFrameLimit);
+        if (frames.empty()) throw std::runtime_error("DAT contains no readable sample frames");
+
+        m_distanceZonePath.clear();
+        m_headerSourceName.clear();
+        m_headerText.clear();
         const auto distanceSidecar = !bundle.rio.empty() ? bundle.rio : bundle.xrio;
         if (!distanceSidecar.empty()) {
             m_distanceZonePath = QFileInfo(filesystem_path_to_qstring(distanceSidecar)).absoluteFilePath();
@@ -167,10 +178,6 @@ void DocumentController::openCfg(const QUrl& url) {
             m_headerSourceName = QFileInfo(filesystem_path_to_qstring(bundle.hdr)).fileName();
             m_headerText = read_text_sidecar(bundle.hdr);
         }
-
-        const auto cfg = ardirec::comtrade::ConfigParser{}.parse_file(bundle.cfg);
-        const auto frames = ardirec::comtrade::DatReader{}.read(cfg, bundle.dat, kViewerAlphaFrameLimit);
-        if (frames.empty()) throw std::runtime_error("DAT contains no readable sample frames");
 
         m_title = QString::fromStdString(cfg.station_name.empty() ? bundle.cfg.stem().string() : cfg.station_name);
         m_recorderId = cfg.recorder_id.empty() ? QStringLiteral("—") : QString::fromStdString(cfg.recorder_id);
