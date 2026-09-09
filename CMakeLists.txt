@@ -8,6 +8,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 option(ARDIREC_BUILD_DESKTOP "Build the Qt Quick desktop application" ON)
+option(ARDIREC_BUILD_BRIDGE "Build the native C ABI bridge" ON)
 option(ARDIREC_BUILD_TESTS "Build unit tests" ON)
 option(ARDIREC_ENABLE_SANITIZERS "Enable ASan/UBSan on supported compilers" OFF)
 
@@ -17,6 +18,10 @@ include(Sanitizers)
 
 add_subdirectory(core)
 add_subdirectory(cli)
+
+if(ARDIREC_BUILD_BRIDGE)
+    add_subdirectory(bridge)
+endif()
 
 if(ARDIREC_BUILD_DESKTOP)
     find_package(Qt6 6.8 QUIET COMPONENTS Quick Qml QuickControls2)
