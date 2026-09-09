@@ -13,8 +13,8 @@
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QString>
+#include <QStringList>
 #include <QUrl>
-#include <QVariant>
 #include <qqml.h>
 
 namespace {
@@ -23,15 +23,15 @@ struct StartupRequest {
     bool hostedByArsas{false};
 };
 
-StartupRequest startup_request(int argc, char* argv[]) {
-    if (argc == 2) {
-        const QString candidate = QString::fromLocal8Bit(argv[1]).trimmed();
+StartupRequest startup_request(const QStringList& arguments) {
+    if (arguments.size() == 2) {
+        const QString candidate = arguments.at(1).trimmed();
         if (!candidate.startsWith('-')) return {candidate, false};
     }
 
-    if (argc >= 3) {
-        const QString mode = QString::fromLatin1(argv[1]);
-        const QString candidate = QString::fromLocal8Bit(argv[2]).trimmed();
+    if (arguments.size() >= 3) {
+        const QString mode = arguments.at(1);
+        const QString candidate = arguments.at(2).trimmed();
         if (mode == QStringLiteral("--open")) return {candidate, false};
         if (mode == QStringLiteral("--arsas-open")) return {candidate, true};
     }
@@ -42,7 +42,7 @@ StartupRequest startup_request(int argc, char* argv[]) {
 
 int main(int argc, char* argv[]) {
     QGuiApplication app(argc, argv);
-    const StartupRequest startup = startup_request(argc, argv);
+    const StartupRequest startup = startup_request(QCoreApplication::arguments());
 
     QGuiApplication::setApplicationName(startup.hostedByArsas
                                             ? QStringLiteral("ARSAS COMTRADE Viewer")
