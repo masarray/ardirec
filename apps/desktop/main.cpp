@@ -10,6 +10,7 @@
 
 #include <QFileInfo>
 #include <QGuiApplication>
+#include <QObject>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QString>
@@ -59,6 +60,16 @@ int main(int argc, char* argv[]) {
     HarmonicSnapshotController harmonicSnapshots(&document);
     TableSnapshotController tableSnapshots(&document);
     DistanceZoneController distanceZones;
+
+    QObject::connect(&document, &DocumentController::documentChanged, &distanceZones, [&document, &distanceZones]() {
+        const QString sidecar = document.distanceZonePath();
+        if (sidecar.isEmpty()) {
+            distanceZones.clearZones();
+            return;
+        }
+        distanceZones.openFile(QUrl::fromLocalFile(sidecar));
+    });
+
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty(QStringLiteral("documentController"), &document);
     engine.rootContext()->setContextProperty(QStringLiteral("analysisController"), &analysis);
