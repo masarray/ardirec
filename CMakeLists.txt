@@ -16,6 +16,10 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 include(ProjectWarnings)
 include(Sanitizers)
 
+if(ARDIREC_BUILD_TESTS)
+    enable_testing()
+endif()
+
 add_subdirectory(core)
 add_subdirectory(cli)
 
@@ -33,6 +37,5 @@ if(ARDIREC_BUILD_DESKTOP)
 endif()
 
 if(ARDIREC_BUILD_TESTS)
-    enable_testing()
     add_subdirectory(tests)
 endif()
