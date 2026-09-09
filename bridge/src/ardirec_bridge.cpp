@@ -4,13 +4,17 @@
 #include "ardirec/comtrade/bundle.hpp"
 #include "ardirec/comtrade/dat_reader.hpp"
 #include "ardirec/comtrade/parser.hpp"
+#include "ardirec/power/harmonics.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <filesystem>
 #include <memory>
+#include <span>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -23,6 +27,8 @@ struct NativeRecord {
 constexpr int32_t kInvalidArgument = -1;
 constexpr int32_t kOutOfRange = -2;
 constexpr int32_t kOpenFailed = -3;
+constexpr int32_t kInsufficientBuffer = -4;
+constexpr double kPi = 3.141592653589793238462643383279502884;
 
 void copy_text(char* destination, std::size_t capacity, const std::string& value) {
     if (destination == nullptr || capacity == 0) return;
@@ -49,6 +55,80 @@ NativeRecord* as_record(ardirec_record_handle handle) {
 bool valid_range(const NativeRecord& record, std::uint64_t start, std::uint64_t count) {
     const auto size = static_cast<std::uint64_t>(record.frames.size());
     return start <= size && count <= (size - start);
+}
+
+double frame_time_seconds(const NativeRecord& record, std::size_t frame_index) {
+    const double time_scale = record.config.time_multiplier * 1.0e-6;
+    return static_cast<double>(record.frames[frame_index].raw_timestamp) * time_scale;
+}
+
+double wrap_degrees(double angle) {
+    while (angle <= -180.0) angle += 360.0;
+    while (angle > 180.0) angle -= 360.0;
+    return angle;
+}
+
+std::pair<std::size_t, std::size_t> one_cycle_window(const NativeRecord& record,
+                                                      std::uint64_t reference_frame) {
+    if (record.frames.empty() || reference_frame >= record.frames.size()) return {0, 0};
+
+    const double frequency = record.config.nominal_frequency > 1.0
+                                 ? record.config.nominal_frequency
+                                 : 50.0;
+    const double period = 1.0 / frequency;
+    const std::size_t reference = static_cast<std::size_t>(reference_frame);
+    const double data_start = frame_time_seconds(record, 0);
+    const double end_time = frame_time_seconds(record, reference);
+    const double start_time = std::max(data_start, end_time - period);
+    const double time_scale = record.config.time_multiplier * 1.0e-6;
+
+    const auto search_end = record.frames.begin() + static_cast<std::ptrdiff_t>(reference + 1);
+    const auto first_it = std::lower_bound(
+        record.frames.begin(), search_end, start_time,
+        [time_scale](const ardirec::comtrade::SampleFrame& frame, double target) {
+            return static_cast<double>(frame.raw_timestamp) * time_scale < target;
+        });
+
+    std::size_t first = static_cast<std::size_t>(std::distance(record.frames.begin(), first_it));
+    const std::size_t end = reference + 1;
+    if (end > first + 2
+        && frame_time_seconds(record, end - 1) - frame_time_seconds(record, first)
+               >= period * (1.0 - 1.0e-8)) {
+        ++first;
+    }
+    if (end <= first) return {0, 0};
+    return {first, end};
+}
+
+ardirec::power::HarmonicSpectrum analyze_spectrum(const NativeRecord& record,
+                                                   std::uint32_t channel_index,
+                                                   std::uint64_t reference_frame,
+                                                   int maximum_order,
+                                                   std::size_t* out_first,
+                                                   std::size_t* out_end) {
+    const auto [first, end] = one_cycle_window(record, reference_frame);
+    if (out_first != nullptr) *out_first = first;
+    if (out_end != nullptr) *out_end = end;
+    if (first >= end || end - first < 4) return {};
+
+    std::vector<double> samples;
+    std::vector<double> times;
+    samples.reserve(end - first);
+    times.reserve(end - first);
+    for (std::size_t i = first; i < end; ++i) {
+        samples.push_back(record.frames[i].analog[channel_index]);
+        times.push_back(frame_time_seconds(record, i));
+    }
+
+    const double frequency = record.config.nominal_frequency > 1.0
+                                 ? record.config.nominal_frequency
+                                 : 50.0;
+    return ardirec::power::harmonic_spectrum(
+        std::span<const double>(samples.data(), samples.size()),
+        std::span<const double>(times.data(), times.size()),
+        frequency,
+        maximum_order,
+        frame_time_seconds(record, 0));
 }
 
 } // namespace
@@ -217,6 +297,88 @@ int32_t ardirec_record_copy_raw_timestamps(
 
     for (uint64_t i = 0; i < frame_count; ++i) {
         destination[i] = record->frames[static_cast<size_t>(start_frame + i)].raw_timestamp;
+    }
+    return 0;
+}
+
+int32_t ardirec_record_get_phasor(
+    ardirec_record_handle handle,
+    uint32_t channel_index,
+    uint64_t reference_frame,
+    ardirec_phasor_info* out_info) {
+    const auto* record = as_record(handle);
+    if (record == nullptr || out_info == nullptr) return kInvalidArgument;
+    if (channel_index >= record->config.analog_channels.size()
+        || reference_frame >= record->frames.size()) {
+        return kOutOfRange;
+    }
+
+    std::memset(out_info, 0, sizeof(*out_info));
+    std::size_t first = 0;
+    std::size_t end = 0;
+    const auto spectrum = analyze_spectrum(*record, channel_index, reference_frame, 1, &first, &end);
+    out_info->window_start_frame = static_cast<uint64_t>(first);
+    out_info->window_end_exclusive = static_cast<uint64_t>(end);
+    if (!spectrum.valid || spectrum.bins.empty()) return 0;
+
+    const auto& fundamental = spectrum.bins.front();
+    const double angle = wrap_degrees(fundamental.angle_degrees - 90.0);
+    const double radians = angle * kPi / 180.0;
+    out_info->valid = 1;
+    out_info->magnitude_rms = fundamental.magnitude_rms;
+    out_info->angle_degrees = angle;
+    out_info->real = fundamental.magnitude_rms * std::cos(radians);
+    out_info->imag = fundamental.magnitude_rms * std::sin(radians);
+    return 0;
+}
+
+int32_t ardirec_record_get_harmonic_spectrum(
+    ardirec_record_handle handle,
+    uint32_t channel_index,
+    uint64_t reference_frame,
+    int32_t maximum_order,
+    ardirec_harmonic_spectrum_info* out_info,
+    ardirec_harmonic_bin* bins,
+    uint32_t bin_capacity) {
+    const auto* record = as_record(handle);
+    if (record == nullptr || out_info == nullptr || maximum_order < 1) return kInvalidArgument;
+    if (channel_index >= record->config.analog_channels.size()
+        || reference_frame >= record->frames.size()) {
+        return kOutOfRange;
+    }
+
+    std::memset(out_info, 0, sizeof(*out_info));
+    std::size_t first = 0;
+    std::size_t end = 0;
+    const auto spectrum = analyze_spectrum(
+        *record, channel_index, reference_frame, maximum_order, &first, &end);
+    out_info->window_start_frame = static_cast<uint64_t>(first);
+    out_info->window_end_exclusive = static_cast<uint64_t>(end);
+    if (!spectrum.valid) return 0;
+
+    out_info->valid = 1;
+    out_info->dc_component = spectrum.dc_component;
+    out_info->fundamental_rms = spectrum.fundamental_rms;
+    out_info->thd_percent = spectrum.thd_percent;
+    out_info->dominant_order = spectrum.dominant_order;
+    out_info->dominant_rms = spectrum.dominant_rms;
+    out_info->dominant_percent = spectrum.dominant_percent;
+    out_info->estimated_sample_rate_hz = spectrum.estimated_sample_rate_hz;
+    out_info->maximum_resolvable_order = spectrum.maximum_resolvable_order;
+    out_info->bin_count = static_cast<uint32_t>(spectrum.bins.size());
+
+    if (bins == nullptr || bin_capacity == 0) return 0;
+    if (bin_capacity < out_info->bin_count) return kInsufficientBuffer;
+
+    const double fundamental = spectrum.fundamental_rms;
+    for (std::size_t i = 0; i < spectrum.bins.size(); ++i) {
+        const auto& source = spectrum.bins[i];
+        bins[i].order = source.order;
+        bins[i].magnitude_rms = source.magnitude_rms;
+        bins[i].percent_of_fundamental = fundamental > 1.0e-12
+                                            ? source.magnitude_rms / fundamental * 100.0
+                                            : 0.0;
+        bins[i].angle_degrees = source.angle_degrees;
     }
     return 0;
 }
