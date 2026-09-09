@@ -6,7 +6,7 @@ import QtQuick.Layouts
 
 Rectangle {
     id: root
-    color: "#f3f4f5"
+    color: "#f2f3f4"
 
     property var document
     property var analysis
@@ -28,14 +28,14 @@ Rectangle {
     readonly property var cursorAValue: {
         const representationDependency = valueRepresentation
         return distanceMode && analysis
-                ? analysis.distanceLoopAt(selectedLoop, cursorATime, kLMagnitude, kLAngle)
-                : ({valid:false})
+            ? analysis.distanceLoopAt(selectedLoop, cursorATime, kLMagnitude, kLAngle)
+            : ({valid:false})
     }
     readonly property var cursorBValue: {
         const representationDependency = valueRepresentation
         return distanceMode && analysis
-                ? analysis.distanceLoopAt(selectedLoop, cursorBTime, kLMagnitude, kLAngle)
-                : ({valid:false})
+            ? analysis.distanceLoopAt(selectedLoop, cursorBTime, kLMagnitude, kLAngle)
+            : ({valid:false})
     }
     readonly property var earthSeries: {
         const representationDependency = valueRepresentation
@@ -47,68 +47,74 @@ Rectangle {
     }
     readonly property var earthZones: {
         const representationDependency = valueRepresentation
-        const reactiveCount = zoneController ? zoneController.zoneCount : 0
-        const reactiveSource = zoneController ? zoneController.sourceName : ""
         return distanceMode ? zonesForFamily(earthLoops) : []
     }
     readonly property var phaseZones: {
         const representationDependency = valueRepresentation
-        const reactiveCount = zoneController ? zoneController.zoneCount : 0
-        const reactiveSource = zoneController ? zoneController.sourceName : ""
         return distanceMode ? zonesForFamily(phaseLoops) : []
     }
     readonly property var rawSeries: {
         const representationDependency = valueRepresentation
-        if (distanceMode || !analysis || visibleDuration <= 0) return []
-        let result = []
-        const phases = ["L1", "L2", "L3"]
-        const steps = 180
-        for (let phase of phases) {
-            const voltage = analysis.phaseChannel("Voltage", phase)
-            const current = analysis.phaseChannel("Current", phase)
-            if (voltage < 0 || current < 0) continue
-            let points = []
-            for (let n = 0; n < steps; ++n) {
-                const time = viewStart + visibleDuration * n / Math.max(1, steps - 1)
-                const z = analysis.impedanceAt(voltage, current, time)
-                if (z.valid && Number.isFinite(z.r) && Number.isFinite(z.x)) points.push({valid:true, r:z.r, x:z.x})
-            }
-            result.push({
-                phase: phase,
-                color: analysis.phaseColorForName(phase),
-                points: points,
-                cursorA: analysis.impedanceAt(voltage, current, cursorATime),
-                cursorB: analysis.impedanceAt(voltage, current, cursorBTime)
-            })
-        }
-        return result
+        return distanceMode ? [] : buildRawSeries()
     }
     readonly property color selectedLoopColor: loopColor(selectedLoop)
 
     function loopColor(loop) {
-        if (loop === "L1-E") return "#178a3a"
-        if (loop === "L2-E") return "#d000c8"
+        if (loop === "L1-E") return "#00923f"
+        if (loop === "L2-E") return "#e000d0"
         if (loop === "L3-E") return "#1769d2"
-        if (loop === "L1-L2") return "#d000c8"
-        if (loop === "L2-L3") return "#1769d2"
-        if (loop === "L3-L1") return "#07977e"
+        if (loop === "L1-L2") return "#6789ee"
+        if (loop === "L2-L3") return "#00a184"
+        if (loop === "L3-L1") return "#b568c4"
         return "#6f7780"
     }
 
+    function signalLegendName(loop) {
+        if (loop === "L1-E") return "Z L1E*"
+        if (loop === "L2-E") return "Z L2E*"
+        if (loop === "L3-E") return "Z L3E*"
+        if (loop === "L1-L2") return "Z L12*"
+        if (loop === "L2-L3") return "Z L23*"
+        if (loop === "L3-L1") return "Z L31*"
+        return loop
+    }
+
+    function fullRecordStart() {
+        return document ? document.dataStartSeconds : viewStart
+    }
+
+    function fullRecordDuration() {
+        if (!document) return visibleDuration
+        return Math.max(0.0, document.dataEndSeconds - document.dataStartSeconds)
+    }
+
     function buildDistanceSeries(loops) {
-        if (!analysis || visibleDuration <= 0) return []
+        if (!analysis) return []
+        const start = fullRecordStart()
+        const duration = fullRecordDuration()
+        if (duration <= 0) return []
         let result = []
         for (let loop of loops) {
             if (!analysis.distanceLoopAvailable(loop)) continue
             result.push({
                 loop: loop,
                 color: loopColor(loop),
-                points: analysis.distanceLocus(loop, viewStart, visibleDuration, 1600, kLMagnitude, kLAngle),
+                points: analysis.distanceLocus(loop, start, duration, 4000, kLMagnitude, kLAngle),
                 cursorA: analysis.distanceLoopAt(loop, cursorATime, kLMagnitude, kLAngle),
                 cursorB: analysis.distanceLoopAt(loop, cursorBTime, kLMagnitude, kLAngle)
             })
         }
         return result
+    }
+
+    function isOverreachZone(zone) {
+        return zone && String(zone.type).toUpperCase().indexOf("OVERREACH") >= 0
+    }
+
+    function legacyZoneNumber(zone) {
+        if (!zone) return NaN
+        const match = String(zone.label).toUpperCase().match(/Z\s*(\d+)/)
+        return match && match.length > 1 ? Number(match[1]) : NaN
     }
 
     function zonesForFamily(loops) {
@@ -124,29 +130,61 @@ Rectangle {
                 result.push(zone)
             }
         }
+
+        if (result.some(function(zone) { return root.isOverreachZone(zone) })) {
+            result.sort(function(a, b) {
+                const an = root.legacyZoneNumber(a)
+                const bn = root.legacyZoneNumber(b)
+                if (Number.isFinite(an) && Number.isFinite(bn) && an !== bn) return an - bn
+                if (Number.isFinite(an) && Number.isFinite(bn) && an === bn) {
+                    const ao = root.isOverreachZone(a) ? 1 : 0
+                    const bo = root.isOverreachZone(b) ? 1 : 0
+                    if (ao !== bo) return ao - bo
+                }
+                const ai = Number(a.index)
+                const bi = Number(b.index)
+                if (Number.isFinite(ai) && Number.isFinite(bi)) return ai - bi
+                return 0
+            })
+        }
+        return result
+    }
+
+    function buildRawSeries() {
+        if (!analysis || !document) return []
+        let result = []
+        const phases = ["L1", "L2", "L3"]
+        const start = fullRecordStart()
+        const duration = fullRecordDuration()
+        const steps = 240
+        for (let phase of phases) {
+            const voltage = analysis.phaseChannel("Voltage", phase)
+            const current = analysis.phaseChannel("Current", phase)
+            if (voltage < 0 || current < 0) continue
+            let points = []
+            for (let n = 0; n < steps; ++n) {
+                const time = start + duration * n / Math.max(1, steps - 1)
+                const z = analysis.impedanceAt(voltage, current, time)
+                points.push(z.valid && Number.isFinite(z.r) && Number.isFinite(z.x)
+                            ? {valid:true, r:z.r, x:z.x}
+                            : {valid:false})
+            }
+            result.push({phase:phase, color:analysis.phaseColorForName(phase), points:points})
+        }
         return result
     }
 
     function formatOhm(value) {
         if (!Number.isFinite(value)) return "—"
-        const absolute = Math.abs(value)
-        if (absolute >= 1000) return value.toFixed(1) + " Ω"
-        if (absolute >= 100) return value.toFixed(2) + " Ω"
-        if (absolute >= 10) return value.toFixed(3) + " Ω"
+        const a = Math.abs(value)
+        if (a >= 100) return value.toFixed(2) + " Ω"
+        if (a >= 10) return value.toFixed(3) + " Ω"
         return value.toFixed(4) + " Ω"
     }
 
-    function formatAmp(value) {
-        if (!Number.isFinite(value)) return "—"
-        if (Math.abs(value) >= 1000) return (value / 1000).toFixed(3) + " kA"
-        if (Math.abs(value) >= 1) return value.toFixed(3) + " A"
-        return (value * 1000).toFixed(2) + " mA"
-    }
-
-    function cursorSummary(value) {
+    function compactImpedance(value) {
         if (!value || !value.valid) return "—"
-        return "R " + formatOhm(value.r) + "   X " + formatOhm(value.x)
-             + "   |Z| " + formatOhm(value.magnitude) + "   ∠ " + value.angle.toFixed(2) + "°"
+        return "R " + formatOhm(value.r) + "  X " + formatOhm(value.x)
     }
 
     function ensureAvailableLoop() {
@@ -170,20 +208,14 @@ Rectangle {
     onCursorAValueChanged: requestRepaint()
     onCursorBValueChanged: requestRepaint()
     onSelectedLoopChanged: requestRepaint()
-    onAnalysisModeChanged: {
-        ensureAvailableLoop()
-        requestRepaint()
-    }
+    onAnalysisModeChanged: { ensureAvailableLoop(); requestRepaint() }
     onWidthChanged: requestRepaint()
     onHeightChanged: requestRepaint()
     Component.onCompleted: ensureAvailableLoop()
 
     Connections {
         target: root.document
-        function onDocumentChanged() {
-            root.ensureAvailableLoop()
-            root.requestRepaint()
-        }
+        function onDocumentChanged() { root.ensureAvailableLoop(); root.requestRepaint() }
         function onRepresentationChanged() { root.requestRepaint() }
     }
     Connections {
@@ -205,44 +237,26 @@ Rectangle {
 
         Rectangle {
             Layout.fillWidth: true
-            Layout.preferredHeight: 40
-            color: "#e8ebed"
-            border.color: "#c4c9cd"
-
+            Layout.preferredHeight: 34
+            color: "#eceeef"
+            border.color: "#c8cdd1"
             RowLayout {
                 anchors.fill: parent
                 anchors.leftMargin: 8
                 anchors.rightMargin: 8
-                spacing: 5
-
+                spacing: 4
                 Label {
                     text: "DISTANCE / R-X"
-                    color: "#343c43"
+                    color: "#31383e"
                     font.pixelSize: 9
                     font.weight: Font.DemiBold
-                    font.letterSpacing: 0.7
+                    font.letterSpacing: 0.5
                 }
-
-                Rectangle { width: 1; height: 22; color: "#c1c6ca"; Layout.leftMargin: 4; Layout.rightMargin: 3 }
-                ToolButton {
-                    text: "Protection"
-                    checkable: true
-                    checked: root.distanceMode
-                    font.pixelSize: 8
-                    onClicked: root.analysisMode = "distance"
-                }
-                ToolButton {
-                    text: "Raw V/I"
-                    checkable: true
-                    checked: !root.distanceMode
-                    font.pixelSize: 8
-                    onClicked: root.analysisMode = "raw"
-                    ToolTip.visible: hovered
-                    ToolTip.text: "Diagnostic phase V/I only — not a compensated distance measuring loop"
-                }
-
-                Rectangle { visible: root.distanceMode; width: 1; height: 22; color: "#c1c6ca"; Layout.leftMargin: 4; Layout.rightMargin: 3 }
-                Label { visible: root.distanceMode; text: "INSPECT"; color: "#687078"; font.pixelSize: 7; font.weight: Font.DemiBold }
+                Rectangle { width: 1; height: 18; color: "#c4c9cd"; Layout.leftMargin: 4; Layout.rightMargin: 3 }
+                ToolButton { text: "Protection"; checkable: true; checked: root.distanceMode; font.pixelSize: 8; onClicked: root.analysisMode = "distance" }
+                ToolButton { text: "Raw V/I"; checkable: true; checked: !root.distanceMode; font.pixelSize: 8; onClicked: root.analysisMode = "raw" }
+                Rectangle { visible: root.distanceMode; width: 1; height: 18; color: "#c4c9cd"; Layout.leftMargin: 3; Layout.rightMargin: 3 }
+                Label { visible: root.distanceMode; text: "INSPECT"; color: "#6a7278"; font.pixelSize: 7; font.weight: Font.DemiBold }
                 Repeater {
                     model: root.earthLoops.concat(root.phaseLoops)
                     ToolButton {
@@ -254,12 +268,9 @@ Rectangle {
                         enabled: root.analysis ? root.analysis.distanceLoopAvailable(modelData) : false
                         font.pixelSize: 8
                         onClicked: root.selectedLoop = modelData
-                        ToolTip.visible: hovered && !enabled
-                        ToolTip.text: "Required voltage/current channels are not mapped in this record"
                     }
                 }
-
-                Rectangle { visible: root.distanceMode; width: 1; height: 22; color: "#c1c6ca"; Layout.leftMargin: 3; Layout.rightMargin: 3 }
+                Rectangle { visible: root.distanceMode; width: 1; height: 18; color: "#c4c9cd"; Layout.leftMargin: 3; Layout.rightMargin: 3 }
                 ToolButton {
                     visible: root.distanceMode
                     text: root.zoneController && root.zoneController.hasZones ? "Zones ✓" : "Load RIO/XRIO"
@@ -272,11 +283,10 @@ Rectangle {
                     font.pixelSize: 8
                     onClicked: root.zoneController.clearZones()
                 }
-
                 Item { Layout.fillWidth: true }
                 Label {
-                    text: (root.valueRepresentation === "primary" ? "PRIMARY" : "SECONDARY") + " impedance"
-                    color: "#626b72"
+                    text: (root.valueRepresentation === "primary" ? "PRIMARY" : "SECONDARY") + " Ω"
+                    color: "#616970"
                     font.pixelSize: 8
                     font.weight: Font.DemiBold
                 }
@@ -285,171 +295,98 @@ Rectangle {
 
         Rectangle {
             Layout.fillWidth: true
-            Layout.preferredHeight: 34
-            color: root.distanceMode ? "#f5f6f7" : "#fff8e8"
-            border.color: root.distanceMode ? "#d3d7da" : "#e1c98d"
-
+            Layout.preferredHeight: root.distanceMode ? 27 : 24
+            color: root.distanceMode ? "#f8f9f9" : "#fff8e8"
+            border.color: root.distanceMode ? "#d7dbde" : "#e1c98d"
             RowLayout {
                 anchors.fill: parent
                 anchors.leftMargin: 8
                 anchors.rightMargin: 8
-                spacing: 7
-
-                Label {
-                    visible: !root.distanceMode
-                    text: "RAW DIAGNOSTIC · Va/Ia, Vb/Ib, Vc/Ic · relay zones hidden"
-                    color: "#785b1a"
-                    font.pixelSize: 8
-                    font.weight: Font.DemiBold
-                }
-
-                Label {
-                    text: "EARTH kL"
-                    visible: root.distanceMode
-                    color: "#697178"
-                    font.pixelSize: 8
-                    font.weight: Font.DemiBold
-                }
+                spacing: 6
+                Label { visible: root.distanceMode; text: "Earth kL"; color: "#646d73"; font.pixelSize: 8; font.weight: Font.DemiBold }
                 TextField {
                     visible: root.distanceMode
-                    Layout.preferredWidth: 58
-                    Layout.preferredHeight: 24
+                    Layout.preferredWidth: 52
+                    Layout.preferredHeight: 21
                     text: root.kLMagnitude.toFixed(4)
                     horizontalAlignment: TextInput.AlignRight
                     font.pixelSize: 8
-                    selectByMouse: true
                     validator: DoubleValidator { bottom: 0.0; notation: DoubleValidator.StandardNotation }
                     onEditingFinished: if (root.zoneController) root.zoneController.groundingFactorMagnitude = Number(text)
                 }
-                Label { visible: root.distanceMode; text: "∠"; color: "#697178"; font.pixelSize: 8 }
+                Label { visible: root.distanceMode; text: "∠"; color: "#646d73"; font.pixelSize: 8 }
                 TextField {
                     visible: root.distanceMode
-                    Layout.preferredWidth: 58
-                    Layout.preferredHeight: 24
+                    Layout.preferredWidth: 48
+                    Layout.preferredHeight: 21
                     text: root.kLAngle.toFixed(2)
                     horizontalAlignment: TextInput.AlignRight
                     font.pixelSize: 8
-                    selectByMouse: true
                     validator: DoubleValidator { bottom: -360; top: 360; notation: DoubleValidator.StandardNotation }
                     onEditingFinished: if (root.zoneController) root.zoneController.groundingFactorAngle = Number(text)
                 }
                 Label {
                     visible: root.distanceMode
-                    text: "° · " + (root.zoneController ? root.zoneController.groundingFactorSource : "manual")
-                    color: root.zoneController && root.zoneController.groundingFactorValid ? "#626b72" : "#9a6b1f"
-                    font.pixelSize: 8
+                    text: "°  " + (root.zoneController ? root.zoneController.groundingFactorSource : "manual")
+                    color: "#697178"
+                    font.pixelSize: 7
                 }
                 Label {
-                    visible: root.distanceMode && (!root.zoneController || !root.zoneController.groundingFactorValid || root.kLMagnitude === 0)
+                    visible: root.distanceMode && (!root.zoneController || !root.zoneController.groundingFactorValid || Math.abs(root.kLMagnitude) < 1.0e-12)
                     text: "UNCOMPENSATED EARTH LOOPS"
                     color: "#9a5c00"
                     font.pixelSize: 7
                     font.weight: Font.DemiBold
                 }
-
-                Rectangle { visible: root.distanceMode; width: 1; height: 18; color: "#ccd0d3"; Layout.leftMargin: 4; Layout.rightMargin: 3 }
-                Label {
-                    visible: root.distanceMode
-                    text: "I floor " + (root.analysis ? root.formatAmp(root.analysis.distanceCurrentFloor()) : "—")
-                    color: "#687078"
-                    font.pixelSize: 7
-                    ToolTip.visible: hovered
-                    ToolTip.text: "Locus points below 0.1% of the record current peak are rejected to suppress open-breaker V/I artifacts"
-                }
-                Rectangle { visible: root.distanceMode; width: 1; height: 18; color: "#ccd0d3" }
+                Rectangle { visible: root.distanceMode; width: 1; height: 15; color: "#d2d6d9"; Layout.leftMargin: 3; Layout.rightMargin: 3 }
                 Label {
                     visible: root.distanceMode
                     text: root.zoneController ? root.zoneController.status : "No zone model"
-                    color: "#687078"
+                    color: "#667078"
                     font.pixelSize: 7
                     elide: Text.ElideRight
-                    Layout.maximumWidth: 370
+                    Layout.maximumWidth: 430
                 }
                 Item { Layout.fillWidth: true }
-                Label {
-                    visible: root.distanceMode && root.zoneController && root.zoneController.hasZones
-                    text: root.zoneController.zoneBaseConversionAvailable
-                          ? "zone base conversion verified"
-                          : "zone base conversion 1:1 · verify CT/VT metadata"
-                    color: root.zoneController && root.zoneController.zoneBaseConversionAvailable ? "#60726a" : "#9a6b1f"
-                    font.pixelSize: 7
-                }
+                Label { visible: root.distanceMode; text: "CONFORMAL AUTO · full record"; color: "#52636b"; font.pixelSize: 7; font.weight: Font.DemiBold }
+                Label { visible: !root.distanceMode; text: "RAW PHASE V/I · diagnostic only"; color: "#785b1a"; font.pixelSize: 8; font.weight: Font.DemiBold }
             }
         }
 
         Rectangle {
             Layout.fillWidth: true
-            Layout.preferredHeight: 46
+            Layout.preferredHeight: root.distanceMode ? 25 : 0
+            visible: root.distanceMode
             color: "#ffffff"
-            border.color: "#c9ced2"
-
-            GridLayout {
-                visible: root.distanceMode
-                anchors.fill: parent
-                anchors.leftMargin: 9
-                anchors.rightMargin: 9
-                columns: 6
-                rowSpacing: 1
-                columnSpacing: 12
-
-                Label { text: "CURSOR"; color: "#737b81"; font.pixelSize: 7; font.weight: Font.DemiBold }
-                Label { text: "LOOP"; color: "#737b81"; font.pixelSize: 7; font.weight: Font.DemiBold }
-                Label { text: "TIME"; color: "#737b81"; font.pixelSize: 7; font.weight: Font.DemiBold }
-                Label { text: "LOOP IMPEDANCE"; color: "#737b81"; font.pixelSize: 7; font.weight: Font.DemiBold; Layout.fillWidth: true }
-                Label { text: "I MEAS"; color: "#737b81"; font.pixelSize: 7; font.weight: Font.DemiBold }
-                Label { text: "" }
-
-                Label { text: "C1"; color: "#245ba7"; font.pixelSize: 8; font.weight: Font.DemiBold }
-                Label { text: root.selectedLoop; color: root.selectedLoopColor; font.pixelSize: 8; font.weight: Font.DemiBold }
-                Label { text: root.document ? ((root.cursorATime - root.document.triggerOffsetSeconds) * 1000).toFixed(3) + " ms" : "—"; color: "#333b41"; font.pixelSize: 8 }
-                Label { text: root.cursorSummary(root.cursorAValue); color: "#252b30"; font.pixelSize: 8; Layout.fillWidth: true }
-                Label { text: root.cursorAValue.valid ? root.formatAmp(root.cursorAValue.measuringCurrent) : "—"; color: "#505960"; font.pixelSize: 8 }
-                Rectangle { width: 9; height: 9; radius: 5; color: root.selectedLoopColor }
-
-                Label { text: "C2"; color: "#b77900"; font.pixelSize: 8; font.weight: Font.DemiBold }
-                Label { text: root.selectedLoop; color: root.selectedLoopColor; font.pixelSize: 8; font.weight: Font.DemiBold }
-                Label { text: root.document ? ((root.cursorBTime - root.document.triggerOffsetSeconds) * 1000).toFixed(3) + " ms" : "—"; color: "#333b41"; font.pixelSize: 8 }
-                Label { text: root.cursorSummary(root.cursorBValue); color: "#252b30"; font.pixelSize: 8; Layout.fillWidth: true }
-                Label { text: root.cursorBValue.valid ? root.formatAmp(root.cursorBValue.measuringCurrent) : "—"; color: "#505960"; font.pixelSize: 8 }
-                Rectangle { width: 10; height: 10; radius: 6; color: "transparent"; border.width: 2; border.color: root.selectedLoopColor }
-            }
-
+            border.color: "#d4d8db"
             RowLayout {
-                visible: !root.distanceMode
                 anchors.fill: parent
-                anchors.leftMargin: 10
-                anchors.rightMargin: 10
-                spacing: 18
+                anchors.leftMargin: 8
+                anchors.rightMargin: 8
+                spacing: 8
+                Label { text: root.selectedLoop; color: root.selectedLoopColor; font.pixelSize: 8; font.weight: Font.DemiBold }
+                Label { text: "C1"; color: "#c58a00"; font.pixelSize: 8; font.weight: Font.DemiBold }
                 Label {
-                    text: "C1 " + (root.document ? ((root.cursorATime - root.document.triggerOffsetSeconds) * 1000).toFixed(3) + " ms" : "—")
-                    color: "#245ba7"
-                    font.pixelSize: 8
-                    font.weight: Font.DemiBold
+                    text: (root.document ? ((root.cursorATime - root.document.triggerOffsetSeconds) * 1000).toFixed(3) + " ms  " : "") + root.compactImpedance(root.cursorAValue)
+                    color: "#41494f"; font.pixelSize: 8
                 }
+                Rectangle { width: 1; height: 13; color: "#d5d9dc" }
+                Label { text: "C2"; color: "#0097bd"; font.pixelSize: 8; font.weight: Font.DemiBold }
                 Label {
-                    text: "C2 " + (root.document ? ((root.cursorBTime - root.document.triggerOffsetSeconds) * 1000).toFixed(3) + " ms" : "—")
-                    color: "#b77900"
-                    font.pixelSize: 8
-                    font.weight: Font.DemiBold
-                }
-                Rectangle { width: 1; height: 18; color: "#d0d4d7" }
-                Repeater {
-                    model: root.rawSeries
-                    Row {
-                        required property var modelData
-                        spacing: 5
-                        Rectangle { width: 14; height: 2; anchors.verticalCenter: parent.verticalCenter; color: modelData.color }
-                        Label { text: modelData.phase + " V/I"; color: "#4f585f"; font.pixelSize: 8 }
-                    }
+                    text: (root.document ? ((root.cursorBTime - root.document.triggerOffsetSeconds) * 1000).toFixed(3) + " ms  " : "") + root.compactImpedance(root.cursorBValue)
+                    color: "#41494f"; font.pixelSize: 8
                 }
                 Item { Layout.fillWidth: true }
-                Label { text: "● C1   ○ C2"; color: "#6d757c"; font.pixelSize: 8 }
+                Label {
+                    text: root.analysis ? "I floor " + (root.analysis.distanceCurrentFloor() * 1000).toFixed(2) + " mA" : ""
+                    color: "#7a8186"; font.pixelSize: 7
+                }
             }
         }
 
         Rectangle {
             Layout.fillWidth: true
-            Layout.preferredHeight: root.distanceMode && root.zoneController && root.zoneController.compatibilityWarning.length ? 23 : 0
+            Layout.preferredHeight: root.distanceMode && root.zoneController && root.zoneController.compatibilityWarning.length ? 20 : 0
             visible: height > 0
             color: "#fff8e8"
             border.color: "#e1c98d"
@@ -468,268 +405,380 @@ Rectangle {
         Rectangle {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            color: "#ffffff"
-            border.color: "#c5cbd0"
+            color: "#f2f3f4"
             clip: true
 
             Canvas {
                 id: locusCanvas
                 anchors.fill: parent
-                anchors.margins: 6
+                anchors.margins: 5
                 antialiasing: true
 
                 onPaint: {
                     const ctx = getContext("2d")
                     ctx.clearRect(0, 0, width, height)
-                    if (!root.analysis || width < 180 || height < 150) return
+                    if (!root.analysis || width < 220 || height < 160) return
 
-                    function finitePoint(point) {
-                        return point && point.valid !== false && Number.isFinite(point.r) && Number.isFinite(point.x)
+                    function finitePoint(p) {
+                        return p && p.valid !== false && Number.isFinite(p.r) && Number.isFinite(p.x)
                     }
 
-                    function niceExtent(value) {
+                    function percentile(values, q) {
+                        if (!values || values.length === 0) return 0.0
+                        values.sort(function(a, b) { return a - b })
+                        if (values.length === 1) return values[0]
+                        const pos = (values.length - 1) * q
+                        const lo = Math.floor(pos)
+                        const hi = Math.ceil(pos)
+                        if (lo === hi) return values[lo]
+                        const f = pos - lo
+                        return values[lo] * (1.0 - f) + values[hi] * f
+                    }
+
+                    function niceCeil(value) {
                         if (!Number.isFinite(value) || value <= 0) return 1.0
                         const exponent = Math.floor(Math.log(value) / Math.LN10)
                         const base = Math.pow(10, exponent)
                         const normalized = value / base
-                        let step = 10
-                        if (normalized <= 1) step = 1
-                        else if (normalized <= 2) step = 2
-                        else if (normalized <= 5) step = 5
-                        return step * base
+                        const choices = [1, 1.5, 2, 2.5, 3, 4, 5, 7.5, 10]
+                        for (let c of choices) if (normalized <= c + 1e-12) return c * base
+                        return 10 * base
                     }
 
-                    function panelExtents(series, zones) {
-                        let rExtent = 1.0
-                        let xExtent = 1.0
-                        for (let item of series) {
-                            for (let p of item.points) {
-                                if (!finitePoint(p)) continue
-                                rExtent = Math.max(rExtent, Math.abs(p.r))
-                                xExtent = Math.max(xExtent, Math.abs(p.x))
-                            }
-                            if (finitePoint(item.cursorA)) {
-                                rExtent = Math.max(rExtent, Math.abs(item.cursorA.r))
-                                xExtent = Math.max(xExtent, Math.abs(item.cursorA.x))
-                            }
-                            if (finitePoint(item.cursorB)) {
-                                rExtent = Math.max(rExtent, Math.abs(item.cursorB.r))
-                                xExtent = Math.max(xExtent, Math.abs(item.cursorB.x))
-                            }
-                        }
+                    function niceStep(value) {
+                        if (!Number.isFinite(value) || value <= 0) return 1.0
+                        const exponent = Math.floor(Math.log(value) / Math.LN10)
+                        const base = Math.pow(10, exponent)
+                        const normalized = value / base
+                        if (normalized <= 1) return 1 * base
+                        if (normalized <= 2) return 2 * base
+                        if (normalized <= 2.5) return 2.5 * base
+                        if (normalized <= 5) return 5 * base
+                        return 10 * base
+                    }
+
+                    function zoneMagnitude(zones) {
+                        let r = 0.0
+                        let x = 0.0
                         for (let zone of zones) {
                             if (zone.kind === "circle") {
-                                rExtent = Math.max(rExtent, Math.abs(zone.centerR) + Math.abs(zone.radius))
-                                xExtent = Math.max(xExtent, Math.abs(zone.centerX) + Math.abs(zone.radius))
+                                r = Math.max(r, Math.abs(zone.centerR) + Math.abs(zone.radius))
+                                x = Math.max(x, Math.abs(zone.centerX) + Math.abs(zone.radius))
                             } else if (zone.kind === "polygon") {
                                 for (let p of zone.points) {
                                     if (!Number.isFinite(p.r) || !Number.isFinite(p.x)) continue
-                                    rExtent = Math.max(rExtent, Math.abs(p.r))
-                                    xExtent = Math.max(xExtent, Math.abs(p.x))
+                                    r = Math.max(r, Math.abs(p.r))
+                                    x = Math.max(x, Math.abs(p.x))
                                 }
                             }
                         }
-                        return {r:niceExtent(rExtent * 1.08), x:niceExtent(xExtent * 1.08)}
+                        return {r:r, x:x}
                     }
 
-                    function zoneColor(index) {
-                        const colors = ["#138a38", "#1263b4", "#b88900", "#bf2c8a", "#008b91", "#79589b"]
-                        return colors[index % colors.length]
-                    }
-
-                    function drawZone(ctx, zone, mapX, mapY, index) {
-                        const color = zoneColor(index)
-                        ctx.strokeStyle = color
-                        ctx.fillStyle = "rgba(90,110,120,0.025)"
-                        ctx.lineWidth = 1.05
-                        if (zone.kind === "circle" && Number.isFinite(zone.radius) && zone.radius > 0) {
-                            ctx.beginPath()
-                            const segments = 72
-                            for (let n = 0; n <= segments; ++n) {
-                                const angle = Math.PI * 2 * n / segments
-                                const r = zone.centerR + zone.radius * Math.cos(angle)
-                                const x = zone.centerX + zone.radius * Math.sin(angle)
-                                if (n === 0) ctx.moveTo(mapX(r), mapY(x))
-                                else ctx.lineTo(mapX(r), mapY(x))
+                    function coreTarget(series, zones) {
+                        let rs = []
+                        let xs = []
+                        for (let item of series) {
+                            for (let p of item.points) {
+                                if (!finitePoint(p)) continue
+                                rs.push(Math.abs(p.r))
+                                xs.push(Math.abs(p.x))
                             }
-                            ctx.closePath(); ctx.fill(); ctx.stroke()
+                        }
+                        const zone = zoneMagnitude(zones)
+                        const robustR = percentile(rs, 0.80)
+                        const robustX = percentile(xs, 0.80)
+                        return {
+                            r: niceCeil(Math.max(3.0, zone.r, robustR) * 1.10),
+                            x: niceCeil(Math.max(3.0, zone.x, robustX) * 1.10)
+                        }
+                    }
+
+                    function earthZoneColor(index) { return index % 2 === 0 ? "#008a2f" : "#075ec7" }
+                    function phaseZoneColor(index) { return index % 2 === 0 ? "#c7a000" : "#e300cb" }
+
+                    function zoneLegendLabel(zone, earthFamily, ordinal, zones) {
+                        const legacyOrdered = zones && zones.some(function(z) { return root.isOverreachZone(z) })
+                        let index = legacyOrdered ? ordinal + 1 : Number(zone.index)
+                        if (!Number.isFinite(index) || index <= 0) index = ordinal + 1
+                        return "Zone_" + index + (earthFamily ? "E" : "")
+                    }
+
+                    function insidePlot(px, py, left, top, right, bottom) {
+                        return px >= left && px <= right && py >= top && py <= bottom
+                    }
+
+                    function drawZone(zone, mapX, mapY, color) {
+                        ctx.save()
+                        ctx.strokeStyle = color
+                        ctx.lineWidth = 0.9
+                        ctx.setLineDash([3, 2])
+                        if (zone.kind === "circle" && Number.isFinite(zone.radius) && zone.radius > 0) {
+                            const segments = 72
+                            ctx.beginPath()
+                            for (let n = 0; n <= segments; ++n) {
+                                const a = Math.PI * 2 * n / segments
+                                const px = mapX(zone.centerR + zone.radius * Math.cos(a))
+                                const py = mapY(zone.centerX + zone.radius * Math.sin(a))
+                                if (n === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py)
+                            }
+                            ctx.stroke()
                         } else if (zone.kind === "polygon" && zone.points.length >= 3) {
                             ctx.beginPath()
                             ctx.moveTo(mapX(zone.points[0].r), mapY(zone.points[0].x))
                             for (let n = 1; n < zone.points.length; ++n) ctx.lineTo(mapX(zone.points[n].r), mapY(zone.points[n].x))
-                            ctx.closePath(); ctx.fill(); ctx.stroke()
+                            ctx.closePath()
+                            ctx.stroke()
                         }
+                        ctx.restore()
                     }
 
-                    function drawSeries(ctx, item, mapX, mapY) {
+                    function drawCross(point, mapX, mapY, color, size) {
+                        if (!finitePoint(point)) return
+                        const px = mapX(point.r)
+                        const py = mapY(point.x)
+                        ctx.save()
+                        ctx.setLineDash([])
+                        ctx.strokeStyle = color
+                        ctx.lineWidth = 1.15
+                        ctx.beginPath(); ctx.moveTo(px - size, py); ctx.lineTo(px + size, py); ctx.stroke()
+                        ctx.beginPath(); ctx.moveTo(px, py - size); ctx.lineTo(px, py + size); ctx.stroke()
+                        ctx.restore()
+                    }
+
+                    function drawSampleSquare(px, py, color) {
+                        ctx.save()
+                        ctx.setLineDash([])
+                        ctx.fillStyle = "#ffffff"
+                        ctx.fillRect(px - 1.65, py - 1.65, 3.3, 3.3)
+                        ctx.strokeStyle = color
+                        ctx.lineWidth = 0.75
+                        ctx.strokeRect(px - 1.65, py - 1.65, 3.3, 3.3)
+                        ctx.restore()
+                    }
+
+                    function drawSeries(item, mapX, mapY, left, top, right, bottom) {
                         const selected = root.selectedLoop === item.loop
+                        ctx.save()
+                        ctx.setLineDash([])
                         ctx.strokeStyle = item.color
-                        ctx.lineWidth = selected ? 2.0 : 1.35
+                        ctx.lineWidth = selected ? 1.05 : 0.85
                         ctx.beginPath()
                         let active = false
                         for (let p of item.points) {
-                            if (!finitePoint(p)) {
-                                active = false
-                                continue
-                            }
-                            if (!active) {
-                                ctx.moveTo(mapX(p.r), mapY(p.x))
-                                active = true
-                            } else {
-                                ctx.lineTo(mapX(p.r), mapY(p.x))
-                            }
+                            if (!finitePoint(p)) { active = false; continue }
+                            const px = mapX(p.r)
+                            const py = mapY(p.x)
+                            if (!active) { ctx.moveTo(px, py); active = true }
+                            else ctx.lineTo(px, py)
                         }
                         ctx.stroke()
+                        ctx.restore()
 
-                        if (selected && finitePoint(item.cursorA)) {
-                            ctx.fillStyle = item.color
-                            ctx.beginPath(); ctx.arc(mapX(item.cursorA.r), mapY(item.cursorA.x), 4.2, 0, Math.PI * 2); ctx.fill()
+                        // SIGRA-like markers are placed by travelled screen distance, not by
+                        // sample count. Density therefore stays readable across zoom/record size.
+                        const markerGapPx = 10.0
+                        let lastMarkerX = NaN
+                        let lastMarkerY = NaN
+                        let segmentStarted = false
+                        for (let p of item.points) {
+                            if (!finitePoint(p)) {
+                                segmentStarted = false
+                                lastMarkerX = NaN
+                                lastMarkerY = NaN
+                                continue
+                            }
+                            const px = mapX(p.r)
+                            const py = mapY(p.x)
+                            if (!insidePlot(px, py, left, top, right, bottom)) continue
+                            if (!segmentStarted || !Number.isFinite(lastMarkerX)
+                                    || Math.hypot(px - lastMarkerX, py - lastMarkerY) >= markerGapPx) {
+                                drawSampleSquare(px, py, item.color)
+                                lastMarkerX = px
+                                lastMarkerY = py
+                                segmentStarted = true
+                            }
                         }
-                        if (selected && finitePoint(item.cursorB)) {
-                            ctx.strokeStyle = item.color
-                            ctx.lineWidth = 2
-                            ctx.beginPath(); ctx.arc(mapX(item.cursorB.r), mapY(item.cursorB.x), 6.0, 0, Math.PI * 2); ctx.stroke()
+
+                        if (selected) {
+                            drawCross(item.cursorA, mapX, mapY, "#d89a00", 3.5)
+                            drawCross(item.cursorB, mapX, mapY, "#009fc8", 3.5)
                         }
                     }
 
-                    function drawDistancePanel(ctx, px, py, pw, ph, title, subtitle, series, zones) {
-                        ctx.fillStyle = "#fbfcfc"
+                    function drawLegend(px, py, pw, earthFamily, series, zones) {
+                        let x = px + 8
+                        const y = py + 13
+                        ctx.font = "7px sans-serif"
+                        ctx.textAlign = "left"
+                        ctx.textBaseline = "middle"
+                        for (let z = 0; z < zones.length; ++z) {
+                            const color = earthFamily ? earthZoneColor(z) : phaseZoneColor(z)
+                            ctx.save()
+                            ctx.strokeStyle = color
+                            ctx.lineWidth = 0.9
+                            ctx.setLineDash([3, 2])
+                            ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + 10, y); ctx.stroke()
+                            ctx.restore()
+                            ctx.fillStyle = "#333a40"
+                            const label = zoneLegendLabel(zones[z], earthFamily, z, zones)
+                            ctx.fillText(label, x + 13, y)
+                            x += 58
+                        }
+                        for (let item of series) {
+                            ctx.save()
+                            ctx.setLineDash([])
+                            ctx.strokeStyle = item.color
+                            ctx.lineWidth = root.selectedLoop === item.loop ? 1.05 : 0.85
+                            ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + 13, y); ctx.stroke()
+                            ctx.restore()
+                            drawSampleSquare(x + 6, y, item.color)
+                            ctx.fillStyle = "#333a40"
+                            ctx.fillText(root.signalLegendName(item.loop), x + 17, y)
+                            x += 58
+                            if (x > px + pw - 70) break
+                        }
+                        ctx.textBaseline = "alphabetic"
+                    }
+
+                    function drawDistancePanel(px, py, pw, ph, earthFamily, series, zones) {
+                        ctx.fillStyle = "#ffffff"
                         ctx.fillRect(px, py, pw, ph)
-                        ctx.strokeStyle = "#bfc6cb"
-                        ctx.lineWidth = 1
+                        ctx.strokeStyle = "#c5c9cc"
+                        ctx.lineWidth = 0.8
                         ctx.strokeRect(px + 0.5, py + 0.5, pw - 1, ph - 1)
 
-                        const headerH = 30
-                        ctx.fillStyle = "#f0f3f4"
-                        ctx.fillRect(px + 1, py + 1, pw - 2, headerH - 1)
-                        ctx.strokeStyle = "#d3d8dc"
-                        ctx.beginPath(); ctx.moveTo(px, py + headerH); ctx.lineTo(px + pw, py + headerH); ctx.stroke()
-
-                        ctx.fillStyle = "#2f373d"
-                        ctx.font = "600 9px sans-serif"
-                        ctx.fillText(title, px + 10, py + 12)
-                        ctx.fillStyle = "#6a737a"
-                        ctx.font = "7px sans-serif"
-                        ctx.fillText(subtitle, px + 10, py + 24)
-
-                        let legendX = px + Math.min(245, pw * 0.33)
-                        ctx.font = "7px sans-serif"
-                        for (let item of series) {
-                            ctx.strokeStyle = item.color
-                            ctx.lineWidth = root.selectedLoop === item.loop ? 2.1 : 1.4
-                            ctx.beginPath(); ctx.moveTo(legendX, py + 15); ctx.lineTo(legendX + 16, py + 15); ctx.stroke()
-                            ctx.fillStyle = "#4e575e"
-                            ctx.fillText(item.loop, legendX + 20, py + 18)
-                            legendX += 61
-                        }
+                        const legendH = 24
+                        drawLegend(px, py, pw, earthFamily, series, zones)
+                        ctx.strokeStyle = "#eceeef"
+                        ctx.lineWidth = 0.7
+                        ctx.beginPath(); ctx.moveTo(px, py + legendH); ctx.lineTo(px + pw, py + legendH); ctx.stroke()
 
                         const left = px + 58
-                        const right = px + pw - 18
-                        const top = py + headerH + 8
-                        const bottom = py + ph - 27
+                        const right = px + pw - 14
+                        const top = py + legendH + 7
+                        const bottom = py + ph - 28
                         const plotW = Math.max(20, right - left)
                         const plotH = Math.max(20, bottom - top)
-                        const ext = panelExtents(series, zones)
-                        const mapX = r => left + ((r + ext.r) / (2 * ext.r)) * plotW
-                        const mapY = x => bottom - ((x + ext.x) / (2 * ext.x)) * plotH
-                        const zeroX = mapX(0)
-                        const zeroY = mapY(0)
+                        const target = coreTarget(series, zones)
+
+                        // Conformal R-X mapping: one ohm is the same number of pixels on R and X.
+                        const scale = Math.max(1e-9, Math.min(plotW / (2 * target.r), plotH / (2 * target.x)))
+                        const rHalf = plotW / (2 * scale)
+                        const xHalf = plotH / (2 * scale)
+                        const cx = left + plotW * 0.5
+                        const cy = top + plotH * 0.5
+                        const mapX = function(r) { return cx + r * scale }
+                        const mapY = function(x) { return cy - x * scale }
 
                         ctx.fillStyle = "#ffffff"
                         ctx.fillRect(left, top, plotW, plotH)
-                        ctx.strokeStyle = "#e0e5e8"
-                        ctx.lineWidth = 1
-                        for (let g = -4; g <= 4; ++g) {
-                            const rv = ext.r * g / 4
-                            const xv = ext.x * g / 4
+
+                        const rStep = niceStep(rHalf / 4.0)
+                        const xStep = niceStep(xHalf / 3.5)
+                        // P1: keep grid deliberately subordinate to relay characteristics.
+                        ctx.strokeStyle = "#f2f3f4"
+                        ctx.lineWidth = 0.55
+                        ctx.setLineDash([])
+                        for (let rv = Math.ceil(-rHalf / rStep) * rStep; rv <= rHalf + 1e-9; rv += rStep) {
+                            if (Math.abs(rv) < rStep * 0.1) continue
                             const gx = mapX(rv)
-                            const gy = mapY(xv)
                             ctx.beginPath(); ctx.moveTo(gx, top); ctx.lineTo(gx, bottom); ctx.stroke()
+                        }
+                        for (let xv = Math.ceil(-xHalf / xStep) * xStep; xv <= xHalf + 1e-9; xv += xStep) {
+                            if (Math.abs(xv) < xStep * 0.1) continue
+                            const gy = mapY(xv)
                             ctx.beginPath(); ctx.moveTo(left, gy); ctx.lineTo(right, gy); ctx.stroke()
                         }
 
-                        ctx.strokeStyle = "#5f6870"
-                        ctx.lineWidth = 1.1
-                        ctx.beginPath(); ctx.moveTo(left, zeroY); ctx.lineTo(right, zeroY); ctx.stroke()
-                        ctx.beginPath(); ctx.moveTo(zeroX, top); ctx.lineTo(zeroX, bottom); ctx.stroke()
+                        ctx.strokeStyle = "#20252a"
+                        ctx.lineWidth = 0.9
+                        ctx.beginPath(); ctx.moveTo(left, cy); ctx.lineTo(right, cy); ctx.stroke()
+                        ctx.beginPath(); ctx.moveTo(cx, top); ctx.lineTo(cx, bottom); ctx.stroke()
 
-                        ctx.fillStyle = "#5d676e"
+                        ctx.fillStyle = "#535b61"
                         ctx.font = "7px sans-serif"
-                        for (let g = -4; g <= 4; g += 2) {
-                            if (g === 0) continue
-                            const rv = ext.r * g / 4
-                            const xv = ext.x * g / 4
-                            ctx.fillText(rv.toFixed(Math.abs(rv) < 10 ? 2 : 1), mapX(rv) - 11, zeroY + 12)
-                            ctx.fillText(xv.toFixed(Math.abs(xv) < 10 ? 2 : 1), zeroX + 5, mapY(xv) + 3)
+                        ctx.textBaseline = "top"
+                        ctx.textAlign = "center"
+                        for (let rv = Math.ceil(-rHalf / rStep) * rStep; rv <= rHalf + 1e-9; rv += rStep) {
+                            if (Math.abs(rv) < rStep * 0.1) continue
+                            const tx = mapX(rv)
+                            ctx.fillText(rv.toFixed(Math.abs(rv) < 10 ? 1 : 0), tx, bottom + 4)
+                            ctx.strokeStyle = "#5e666c"
+                            ctx.lineWidth = 0.7
+                            ctx.beginPath(); ctx.moveTo(tx, cy - 2); ctx.lineTo(tx, cy + 2); ctx.stroke()
                         }
-                        ctx.fillText("R / Ω", right - 26, zeroY - 5)
-                        ctx.fillText("X / Ω", zeroX + 5, top + 9)
+                        ctx.textAlign = "right"
+                        ctx.textBaseline = "middle"
+                        for (let xv = Math.ceil(-xHalf / xStep) * xStep; xv <= xHalf + 1e-9; xv += xStep) {
+                            if (Math.abs(xv) < xStep * 0.1) continue
+                            const ty = mapY(xv)
+                            ctx.fillText(xv.toFixed(Math.abs(xv) < 10 ? 1 : 0), left - 5, ty)
+                            ctx.strokeStyle = "#5e666c"
+                            ctx.lineWidth = 0.7
+                            ctx.beginPath(); ctx.moveTo(cx - 2, ty); ctx.lineTo(cx + 2, ty); ctx.stroke()
+                        }
+                        ctx.textAlign = "center"
+                        ctx.textBaseline = "alphabetic"
+                        ctx.fillText("R/Ohm(" + (root.valueRepresentation === "primary" ? "primary" : "secondary") + ")", cx, py + ph - 7)
 
-                        for (let z = 0; z < zones.length; ++z) drawZone(ctx, zones[z], mapX, mapY, z)
-                        for (let item of series) drawSeries(ctx, item, mapX, mapY)
+                        ctx.save()
+                        ctx.beginPath(); ctx.rect(left, top, plotW, plotH); ctx.clip()
+                        for (let z = 0; z < zones.length; ++z)
+                            drawZone(zones[z], mapX, mapY, earthFamily ? earthZoneColor(z) : phaseZoneColor(z))
+                        for (let item of series) drawSeries(item, mapX, mapY, left, top, right, bottom)
+                        ctx.restore()
 
-                        ctx.fillStyle = "#6a737a"
+                        ctx.save()
+                        ctx.translate(px + 12, cy)
+                        ctx.rotate(-Math.PI / 2)
+                        ctx.fillStyle = "#40484e"
                         ctx.font = "7px sans-serif"
-                        ctx.fillText("R ±" + ext.r.toFixed(ext.r < 10 ? 2 : 1) + " Ω   X ±" + ext.x.toFixed(ext.x < 10 ? 2 : 1) + " Ω · independent axes", left, py + ph - 9)
-                        ctx.fillText(root.valueRepresentation === "primary" ? "PRIMARY" : "SECONDARY", right - 48, py + ph - 9)
+                        ctx.textAlign = "center"
+                        ctx.fillText("X/Ohm(" + (root.valueRepresentation === "primary" ? "primary" : "secondary") + ")", 0, 0)
+                        ctx.restore()
                     }
 
-                    function drawRawPanel(ctx, series) {
-                        let rExtent = 1.0
-                        let xExtent = 1.0
+                    function drawRawPanel(series) {
+                        ctx.fillStyle = "#ffffff"
+                        ctx.fillRect(0, 0, width, height)
+                        let rs = []
+                        let xs = []
+                        for (let item of series) for (let p of item.points) if (finitePoint(p)) { rs.push(Math.abs(p.r)); xs.push(Math.abs(p.x)) }
+                        const rTarget = niceCeil(Math.max(1, percentile(rs, 0.90)) * 1.1)
+                        const xTarget = niceCeil(Math.max(1, percentile(xs, 0.90)) * 1.1)
+                        const left = 58, right = width - 14, top = 18, bottom = height - 28
+                        const plotW = right - left, plotH = bottom - top
+                        const scale = Math.max(1e-9, Math.min(plotW / (2 * rTarget), plotH / (2 * xTarget)))
+                        const cx = left + plotW * 0.5, cy = top + plotH * 0.5
+                        const mapX = function(r) { return cx + r * scale }
+                        const mapY = function(x) { return cy - x * scale }
+                        ctx.strokeStyle = "#20252a"; ctx.lineWidth = 0.9
+                        ctx.beginPath(); ctx.moveTo(left, cy); ctx.lineTo(right, cy); ctx.stroke()
+                        ctx.beginPath(); ctx.moveTo(cx, top); ctx.lineTo(cx, bottom); ctx.stroke()
+                        ctx.save(); ctx.beginPath(); ctx.rect(left, top, plotW, plotH); ctx.clip()
                         for (let item of series) {
+                            ctx.strokeStyle = item.color; ctx.lineWidth = 0.9; ctx.beginPath()
+                            let active = false
                             for (let p of item.points) {
-                                if (!finitePoint(p)) continue
-                                rExtent = Math.max(rExtent, Math.abs(p.r))
-                                xExtent = Math.max(xExtent, Math.abs(p.x))
+                                if (!finitePoint(p)) { active = false; continue }
+                                if (!active) { ctx.moveTo(mapX(p.r), mapY(p.x)); active = true }
+                                else ctx.lineTo(mapX(p.r), mapY(p.x))
                             }
+                            ctx.stroke()
                         }
-                        rExtent = niceExtent(rExtent * 1.08)
-                        xExtent = niceExtent(xExtent * 1.08)
-                        const left = 60
-                        const right = width - 20
-                        const top = 20
-                        const bottom = height - 36
-                        const plotW = Math.max(20, right - left)
-                        const plotH = Math.max(20, bottom - top)
-                        const mapX = r => left + ((r + rExtent) / (2 * rExtent)) * plotW
-                        const mapY = x => bottom - ((x + xExtent) / (2 * xExtent)) * plotH
-                        ctx.fillStyle = "#ffffff"; ctx.fillRect(left, top, plotW, plotH)
-                        ctx.strokeStyle = "#dfe4e7"; ctx.lineWidth = 1
-                        for (let g = -4; g <= 4; ++g) {
-                            const gx = mapX(rExtent * g / 4)
-                            const gy = mapY(xExtent * g / 4)
-                            ctx.beginPath(); ctx.moveTo(gx, top); ctx.lineTo(gx, bottom); ctx.stroke()
-                            ctx.beginPath(); ctx.moveTo(left, gy); ctx.lineTo(right, gy); ctx.stroke()
-                        }
-                        ctx.strokeStyle = "#667078"
-                        ctx.beginPath(); ctx.moveTo(left, mapY(0)); ctx.lineTo(right, mapY(0)); ctx.stroke()
-                        ctx.beginPath(); ctx.moveTo(mapX(0), top); ctx.lineTo(mapX(0), bottom); ctx.stroke()
-                        for (let item of series) {
-                            ctx.strokeStyle = item.color; ctx.lineWidth = 1.7; ctx.beginPath()
-                            if (item.points.length) {
-                                ctx.moveTo(mapX(item.points[0].r), mapY(item.points[0].x))
-                                for (let n = 1; n < item.points.length; ++n) ctx.lineTo(mapX(item.points[n].r), mapY(item.points[n].x))
-                                ctx.stroke()
-                            }
-                        }
+                        ctx.restore()
                         ctx.fillStyle = "#687078"; ctx.font = "8px sans-serif"
-                        ctx.fillText("RAW PHASE V/I · diagnostic only · independent R/X scale", left, bottom + 22)
+                        ctx.fillText("RAW PHASE V/I · diagnostic only", left, bottom + 18)
                     }
 
                     if (root.distanceMode) {
-                        const gap = 7
+                        const gap = 6
                         const panelH = (height - gap) * 0.5
-                        drawDistancePanel(ctx, 0, 0, width, panelH,
-                                          "EARTH LOOPS",
-                                          "L1-E · L2-E · L3-E · residual-current compensated",
-                                          root.earthSeries || [], root.earthZones || [])
-                        drawDistancePanel(ctx, 0, panelH + gap, width, panelH,
-                                          "PHASE-PHASE LOOPS",
-                                          "L1-L2 · L2-L3 · L3-L1",
-                                          root.phaseSeries || [], root.phaseZones || [])
+                        drawDistancePanel(0, 0, width, panelH, true, root.earthSeries || [], root.earthZones || [])
+                        drawDistancePanel(0, panelH + gap, width, panelH, false, root.phaseSeries || [], root.phaseZones || [])
                     } else {
-                        drawRawPanel(ctx, root.rawSeries || [])
+                        drawRawPanel(root.rawSeries || [])
                     }
                 }
             }

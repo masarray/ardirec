@@ -17,7 +17,7 @@ A point is invalid when the required channels are unavailable, the calculation w
 
 ### Locus sampling and open-breaker guard
 
-The protection locus is evaluated on the actual COMTRADE sample timestamps inside the visible time range. If the visible range contains more points than the drawing budget, ardirec decimates the timestamp sequence while preserving the first and last visible samples. It does not invent an evenly spaced analysis time grid.
+The protection locus is evaluated on the actual COMTRADE sample timestamps across the full loaded record. The circle diagram therefore represents the complete impedance trajectory independently of the current time-waveform zoom window. If the record contains more points than the drawing budget, ardirec decimates the timestamp sequence while preserving the first and last samples. It does not invent an evenly spaced analysis time grid.
 
 For protection loops, the minimum measuring-current magnitude is set to 0.1% of the largest displayed phase-current peak in the loaded record, with a 1 µA absolute lower bound. This floor scales naturally with the global Primary/Secondary representation and rejects the very large `V/I` artifacts that otherwise appear after a breaker has opened and current has collapsed. Rejected samples remain in the locus sequence as invalid timestamped gaps, so the renderer breaks the trajectory instead of drawing a line across the invalid interval.
 
@@ -108,7 +108,11 @@ Protection mode renders two R-X diagrams simultaneously:
 
 All available loops are visible at the same time. The loop selector is retained as an **inspection selector** for C1/C2 values and marker emphasis; it no longer hides the other protection trajectories.
 
-Each panel computes its own symmetric R and X ranges. R and X are scaled independently, matching the wide R / compact X presentation commonly used by SIGRA instead of forcing a square one-ohm-per-pixel plot. Zone geometry and trajectory coordinates remain in engineering ohms; only their display transform differs between axes.
+The R-X transform is **conformal**: one ohm uses the same number of screen pixels on the R and X axes. A wide diagram therefore naturally shows a much larger numerical R span than X span. This preserves relay characteristic geometry and matches the circle-diagram contract used by SIGRA.
+
+Impedance does not have a useful finite maximum for display fitting. The automatic viewport therefore uses an **ideal-display** strategy instead of literal min/max: it fits imported zone geometry together with the robust core of the full-record trajectory (80th percentile of absolute R/X values), adds engineering margin, and clips rare extreme excursions at the viewport boundary. The underlying locus samples are not deleted or modified; only the spatial display window is robust to low-current/post-trip impedance excursions.
+
+The visual treatment intentionally favors disturbance-analysis readability over decorative UI: white plotting field, restrained grid, thin zone outlines, thin trajectories, sparse square sample markers, synchronized cursor crosses, and compact SIGRA-like zone/loop legends.
 
 ## XRIO boundary
 
