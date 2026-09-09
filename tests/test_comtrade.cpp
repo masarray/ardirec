@@ -79,7 +79,11 @@ int main() {
                 "missing ratio safely falls back to one-to-one");
 
         const auto bundle = ardirec::comtrade::locate_bundle(dir / "minimal_1999.cfg");
-        require(!bundle.dat.empty(), "bundle auto-location");
+        require(!bundle.dat.empty(), "bundle DAT auto-location");
+        require(!bundle.hdr.empty(), "bundle HDR auto-location");
+        require(!bundle.rio.empty(), "bundle RIO auto-location");
+        require(bundle.xrio.empty(), "bundle does not invent XRIO sidecar");
+
         std::cout << "ardirec core tests: PASS\n";
         return 0;
     } catch (const std::exception& ex) {
