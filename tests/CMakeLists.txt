@@ -30,4 +30,19 @@ if(TARGET Qt6::Core)
     ardirec_set_warnings(ardirec_xrio_tests)
     ardirec_enable_sanitizers(ardirec_xrio_tests)
     add_test(NAME ardirec_xrio_tests COMMAND ardirec_xrio_tests)
+
+    qt_add_executable(ardirec_analysis_tests
+        test_analysis.cpp
+        ../apps/desktop/analysis_controller.cpp
+        ../apps/desktop/analysis_controller.hpp
+        ../apps/desktop/document_controller.cpp
+        ../apps/desktop/document_controller.hpp
+    )
+    set_target_properties(ardirec_analysis_tests PROPERTIES AUTOMOC ON)
+    target_include_directories(ardirec_analysis_tests PRIVATE ../apps/desktop)
+    target_link_libraries(ardirec_analysis_tests PRIVATE ardirec::core Qt6::Core)
+    target_compile_definitions(ardirec_analysis_tests PRIVATE ARDIREC_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
+    ardirec_set_warnings(ardirec_analysis_tests)
+    ardirec_enable_sanitizers(ardirec_analysis_tests)
+    add_test(NAME ardirec_analysis_tests COMMAND ardirec_analysis_tests)
 endif()
