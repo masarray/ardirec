@@ -1,0 +1,2 @@
+ARDIREC sidecar regression fixture.
+This header verifies automatic HDR discovery/loading next to the CFG/DAT pair.
