@@ -74,6 +74,8 @@ struct FileBundle {
     std::filesystem::path hdr;
     std::filesystem::path inf;
     std::filesystem::path dmf;
+    std::filesystem::path rio;
+    std::filesystem::path xrio;
 };
 
 } // namespace ardirec::comtrade
