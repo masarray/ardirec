@@ -14,17 +14,26 @@
 #include <QQmlContext>
 #include <QString>
 #include <QUrl>
+#include <QVariant>
 #include <qqml.h>
 
 namespace {
-QString startup_cfg_path(int argc, char* argv[]) {
+struct StartupRequest {
+    QString cfgPath;
+    bool hostedByArsas{false};
+};
+
+StartupRequest startup_request(int argc, char* argv[]) {
     if (argc == 2) {
         const QString candidate = QString::fromLocal8Bit(argv[1]).trimmed();
-        if (!candidate.startsWith('-')) return candidate;
+        if (!candidate.startsWith('-')) return {candidate, false};
     }
 
-    if (argc >= 3 && QString::fromLatin1(argv[1]) == QStringLiteral("--open")) {
-        return QString::fromLocal8Bit(argv[2]).trimmed();
+    if (argc >= 3) {
+        const QString mode = QString::fromLatin1(argv[1]);
+        const QString candidate = QString::fromLocal8Bit(argv[2]).trimmed();
+        if (mode == QStringLiteral("--open")) return {candidate, false};
+        if (mode == QStringLiteral("--arsas-open")) return {candidate, true};
     }
 
     return {};
@@ -33,7 +42,11 @@ QString startup_cfg_path(int argc, char* argv[]) {
 
 int main(int argc, char* argv[]) {
     QGuiApplication app(argc, argv);
-    QGuiApplication::setApplicationName(QStringLiteral("ardirec"));
+    const StartupRequest startup = startup_request(argc, argv);
+
+    QGuiApplication::setApplicationName(startup.hostedByArsas
+                                            ? QStringLiteral("ARSAS COMTRADE Viewer")
+                                            : QStringLiteral("ardirec"));
     QGuiApplication::setOrganizationName(QStringLiteral("ardirec"));
     QGuiApplication::setApplicationVersion(QStringLiteral("0.2.0-alpha.14"));
 
@@ -55,9 +68,12 @@ int main(int argc, char* argv[]) {
     engine.loadFromModule("Ardirec", "Main");
     if (engine.rootObjects().isEmpty()) return -1;
 
-    const QString startupCfg = startup_cfg_path(argc, argv);
-    if (!startupCfg.isEmpty()) {
-        const QFileInfo cfgInfo(startupCfg);
+    if (startup.hostedByArsas) {
+        engine.rootObjects().first()->setProperty("title", QStringLiteral("ARSAS — COMTRADE Viewer"));
+    }
+
+    if (!startup.cfgPath.isEmpty()) {
+        const QFileInfo cfgInfo(startup.cfgPath);
         document.openCfg(QUrl::fromLocalFile(cfgInfo.absoluteFilePath()));
     }
 
