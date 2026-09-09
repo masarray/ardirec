@@ -8,14 +8,45 @@
 #include "table_snapshot_controller.hpp"
 #include "waveform_item.hpp"
 
+#include <QFileInfo>
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
+#include <QString>
+#include <QStringList>
+#include <QUrl>
 #include <qqml.h>
+
+namespace {
+struct StartupRequest {
+    QString cfgPath;
+    bool hostedByArsas{false};
+};
+
+StartupRequest startup_request(const QStringList& arguments) {
+    if (arguments.size() == 2) {
+        const QString candidate = arguments.at(1).trimmed();
+        if (!candidate.startsWith('-')) return {candidate, false};
+    }
+
+    if (arguments.size() >= 3) {
+        const QString mode = arguments.at(1);
+        const QString candidate = arguments.at(2).trimmed();
+        if (mode == QStringLiteral("--open")) return {candidate, false};
+        if (mode == QStringLiteral("--arsas-open")) return {candidate, true};
+    }
+
+    return {};
+}
+} // namespace
 
 int main(int argc, char* argv[]) {
     QGuiApplication app(argc, argv);
-    QGuiApplication::setApplicationName(QStringLiteral("ardirec"));
+    const StartupRequest startup = startup_request(QCoreApplication::arguments());
+
+    QGuiApplication::setApplicationName(startup.hostedByArsas
+                                            ? QStringLiteral("ARSAS COMTRADE Viewer")
+                                            : QStringLiteral("ardirec"));
     QGuiApplication::setOrganizationName(QStringLiteral("ardirec"));
     QGuiApplication::setApplicationVersion(QStringLiteral("0.2.0-alpha.14"));
 
@@ -36,5 +67,15 @@ int main(int argc, char* argv[]) {
     engine.rootContext()->setContextProperty(QStringLiteral("distanceZoneController"), &distanceZones);
     engine.loadFromModule("Ardirec", "Main");
     if (engine.rootObjects().isEmpty()) return -1;
+
+    if (startup.hostedByArsas) {
+        engine.rootObjects().first()->setProperty("title", QStringLiteral("ARSAS — COMTRADE Viewer"));
+    }
+
+    if (!startup.cfgPath.isEmpty()) {
+        const QFileInfo cfgInfo(startup.cfgPath);
+        document.openCfg(QUrl::fromLocalFile(cfgInfo.absoluteFilePath()));
+    }
+
     return app.exec();
 }
