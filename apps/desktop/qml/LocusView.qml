@@ -25,27 +25,48 @@ Rectangle {
     readonly property var earthLoops: ["L1-E", "L2-E", "L3-E"]
     readonly property var phaseLoops: ["L1-L2", "L2-L3", "L3-L1"]
 
-    readonly property var cursorAValue: distanceMode && analysis
-        ? analysis.distanceLoopAt(selectedLoop, cursorATime, kLMagnitude, kLAngle)
-        : ({valid:false})
-    readonly property var cursorBValue: distanceMode && analysis
-        ? analysis.distanceLoopAt(selectedLoop, cursorBTime, kLMagnitude, kLAngle)
-        : ({valid:false})
+    readonly property var cursorAValue: {
+        const representationDependency = valueRepresentation
+        return distanceMode && analysis
+            ? analysis.distanceLoopAt(selectedLoop, cursorATime, kLMagnitude, kLAngle)
+            : ({valid:false})
+    }
+    readonly property var cursorBValue: {
+        const representationDependency = valueRepresentation
+        return distanceMode && analysis
+            ? analysis.distanceLoopAt(selectedLoop, cursorBTime, kLMagnitude, kLAngle)
+            : ({valid:false})
+    }
 
-    readonly property var earthSeries: distanceMode ? buildDistanceSeries(earthLoops) : []
-    readonly property var phaseSeries: distanceMode ? buildDistanceSeries(phaseLoops) : []
-    readonly property var earthZones: distanceMode ? zonesForFamily(earthLoops) : []
-    readonly property var phaseZones: distanceMode ? zonesForFamily(phaseLoops) : []
-    readonly property var rawSeries: distanceMode ? [] : buildRawSeries()
+    readonly property var earthSeries: {
+        const representationDependency = valueRepresentation
+        return distanceMode ? buildDistanceSeries(earthLoops) : []
+    }
+    readonly property var phaseSeries: {
+        const representationDependency = valueRepresentation
+        return distanceMode ? buildDistanceSeries(phaseLoops) : []
+    }
+    readonly property var earthZones: {
+        const representationDependency = valueRepresentation
+        return distanceMode ? zonesForFamily(earthLoops) : []
+    }
+    readonly property var phaseZones: {
+        const representationDependency = valueRepresentation
+        return distanceMode ? zonesForFamily(phaseLoops) : []
+    }
+    readonly property var rawSeries: {
+        const representationDependency = valueRepresentation
+        return distanceMode ? [] : buildRawSeries()
+    }
     readonly property color selectedLoopColor: loopColor(selectedLoop)
 
     function loopColor(loop) {
         if (loop === "L1-E") return "#00923f"
         if (loop === "L2-E") return "#e000d0"
         if (loop === "L3-E") return "#1769d2"
-        if (loop === "L1-L2") return "#b568c4"
-        if (loop === "L2-L3") return "#6789ee"
-        if (loop === "L3-L1") return "#00a184"
+        if (loop === "L1-L2") return "#6789ee"
+        if (loop === "L2-L3") return "#00a184"
+        if (loop === "L3-L1") return "#b568c4"
         return "#6f7780"
     }
 
@@ -87,6 +108,16 @@ Rectangle {
         return result
     }
 
+    function isOverreachZone(zone) {
+        return zone && String(zone.type).toUpperCase().indexOf("OVERREACH") >= 0
+    }
+
+    function legacyZoneNumber(zone) {
+        if (!zone) return NaN
+        const match = String(zone.label).toUpperCase().match(/Z\s*(\d+)/)
+        return match && match.length > 1 ? Number(match[1]) : NaN
+    }
+
     function zonesForFamily(loops) {
         if (!zoneController || !zoneController.hasZones) return []
         let result = []
@@ -99,6 +130,26 @@ Rectangle {
                 seen[key] = true
                 result.push(zone)
             }
+        }
+
+        // Legacy SIGRA stores ZONE-OVERREACH after the normal zones in the file,
+        // while Circle Diagrams present it immediately after its parent zone.
+        // Reorder only families that actually contain an OVERREACH characteristic.
+        if (result.some(function(zone) { return root.isOverreachZone(zone) })) {
+            result.sort(function(a, b) {
+                const an = root.legacyZoneNumber(a)
+                const bn = root.legacyZoneNumber(b)
+                if (Number.isFinite(an) && Number.isFinite(bn) && an !== bn) return an - bn
+                if (Number.isFinite(an) && Number.isFinite(bn) && an === bn) {
+                    const ao = root.isOverreachZone(a) ? 1 : 0
+                    const bo = root.isOverreachZone(b) ? 1 : 0
+                    if (ao !== bo) return ao - bo
+                }
+                const ai = Number(a.index)
+                const bi = Number(b.index)
+                if (Number.isFinite(ai) && Number.isFinite(bi)) return ai - bi
+                return 0
+            })
         }
         return result
     }
@@ -302,6 +353,16 @@ Rectangle {
                     color: "#697178"
                     font.pixelSize: 7
                 }
+                Label {
+                    visible: root.distanceMode
+                             && (!root.zoneController
+                                 || !root.zoneController.groundingFactorValid
+                                 || Math.abs(root.kLMagnitude) < 1.0e-12)
+                    text: "UNCOMPENSATED EARTH LOOPS"
+                    color: "#9a5c00"
+                    font.pixelSize: 7
+                    font.weight: Font.DemiBold
+                }
                 Rectangle { visible: root.distanceMode; width: 1; height: 15; color: "#d2d6d9"; Layout.leftMargin: 3; Layout.rightMargin: 3 }
                 Label {
                     visible: root.distanceMode
@@ -481,8 +542,8 @@ Rectangle {
                         return index % 2 === 0 ? "#c7a000" : "#e300cb"
                     }
 
-                    function zoneLegendLabel(zone, earthFamily, ordinal) {
-                        let index = Number(zone.index)
+                    function zoneLegendLabel(zone, earthFamily, ordinal, semanticOrdinal) {
+                        let index = semanticOrdinal ? ordinal + 1 : Number(zone.index)
                         if (!Number.isFinite(index) || index <= 0) index = ordinal + 1
                         return "Zone_" + index + (earthFamily ? "E" : "")
                     }
@@ -492,8 +553,10 @@ Rectangle {
                     }
 
                     function drawZone(zone, mapX, mapY, color) {
+                        ctx.save()
                         ctx.strokeStyle = color
-                        ctx.lineWidth = 1.0
+                        ctx.lineWidth = 0.9
+                        ctx.setLineDash([3, 2])
                         if (zone.kind === "circle" && Number.isFinite(zone.radius) && zone.radius > 0) {
                             const segments = 72
                             ctx.beginPath()
@@ -511,6 +574,7 @@ Rectangle {
                             ctx.closePath()
                             ctx.stroke()
                         }
+                        ctx.restore()
                     }
 
                     function drawCross(point, mapX, mapY, color, size) {
@@ -560,6 +624,7 @@ Rectangle {
                     function drawLegend(px, py, pw, earthFamily, series, zones) {
                         let x = px + 8
                         const y = py + 13
+                        const semanticOrdinal = zones.some(function(zone) { return root.isOverreachZone(zone) })
                         ctx.font = "7px sans-serif"
                         ctx.textAlign = "left"
                         ctx.textBaseline = "middle"
@@ -568,7 +633,7 @@ Rectangle {
                             ctx.fillStyle = color
                             ctx.fillRect(x, y - 3, 6, 6)
                             ctx.fillStyle = "#333a40"
-                            const label = zoneLegendLabel(zones[z], earthFamily, z)
+                            const label = zoneLegendLabel(zones[z], earthFamily, z, semanticOrdinal)
                             ctx.fillText(label, x + 9, y)
                             x += 58
                         }
