@@ -43,6 +43,8 @@ FileBundle locate_bundle(const std::filesystem::path& selected_file) {
     b.hdr = sibling(base, ".hdr");
     b.inf = sibling(base, ".inf");
     b.dmf = sibling(base, ".dmf");
+    b.rio = sibling(base, ".rio");
+    b.xrio = sibling(base, ".xrio");
     return b;
 }
 
