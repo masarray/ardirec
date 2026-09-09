@@ -66,6 +66,41 @@ typedef struct ardirec_status_channel_info {
     char circuit[ARDIREC_BRIDGE_TEXT_MEDIUM];
 } ardirec_status_channel_info;
 
+// Fundamental RMS phasor at a reference frame. The analysis window is the
+// nominal-frequency cycle ending at reference_frame and uses the same
+// cosine-referenced phase convention as ArdIrec's Phasor view.
+typedef struct ardirec_phasor_info {
+    int32_t valid;
+    double magnitude_rms;
+    double angle_degrees;
+    double real;
+    double imag;
+    uint64_t window_start_frame;
+    uint64_t window_end_exclusive;
+} ardirec_phasor_info;
+
+typedef struct ardirec_harmonic_bin {
+    int32_t order;
+    double magnitude_rms;
+    double percent_of_fundamental;
+    double angle_degrees;
+} ardirec_harmonic_bin;
+
+typedef struct ardirec_harmonic_spectrum_info {
+    int32_t valid;
+    double dc_component;
+    double fundamental_rms;
+    double thd_percent;
+    int32_t dominant_order;
+    double dominant_rms;
+    double dominant_percent;
+    double estimated_sample_rate_hz;
+    int32_t maximum_resolvable_order;
+    uint32_t bin_count;
+    uint64_t window_start_frame;
+    uint64_t window_end_exclusive;
+} ardirec_harmonic_spectrum_info;
+
 // Return codes: 0 success, negative values are bridge errors.
 ARDIREC_BRIDGE_API uint32_t ardirec_bridge_abi_version(void);
 ARDIREC_BRIDGE_API int32_t ardirec_record_open_utf8(
@@ -102,6 +137,21 @@ ARDIREC_BRIDGE_API int32_t ardirec_record_copy_raw_timestamps(
     uint64_t start_frame,
     uint64_t frame_count,
     uint32_t* destination);
+ARDIREC_BRIDGE_API int32_t ardirec_record_get_phasor(
+    ardirec_record_handle handle,
+    uint32_t channel_index,
+    uint64_t reference_frame,
+    ardirec_phasor_info* out_info);
+// Call once with bins=NULL/bin_capacity=0 to query bin_count, then again with
+// a buffer of at least bin_count entries to copy the complete spectrum.
+ARDIREC_BRIDGE_API int32_t ardirec_record_get_harmonic_spectrum(
+    ardirec_record_handle handle,
+    uint32_t channel_index,
+    uint64_t reference_frame,
+    int32_t maximum_order,
+    ardirec_harmonic_spectrum_info* out_info,
+    ardirec_harmonic_bin* bins,
+    uint32_t bin_capacity);
 
 #ifdef __cplusplus
 }
