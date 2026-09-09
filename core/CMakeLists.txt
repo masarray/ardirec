@@ -11,6 +11,8 @@ add_library(ardirec_core STATIC
 
 add_library(ardirec::core ALIAS ardirec_core)
 
+set_target_properties(ardirec_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
 target_include_directories(ardirec_core PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
