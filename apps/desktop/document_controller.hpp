@@ -39,6 +39,9 @@ class DocumentController final : public QObject {
     Q_PROPERTY(QString valueRepresentation READ valueRepresentation NOTIFY representationChanged)
     Q_PROPERTY(bool transformerRatiosAvailable READ transformerRatiosAvailable NOTIFY documentChanged)
     Q_PROPERTY(QString transformerRatioSummary READ transformerRatioSummary NOTIFY documentChanged)
+    Q_PROPERTY(QString distanceZonePath READ distanceZonePath NOTIFY documentChanged)
+    Q_PROPERTY(QString headerSourceName READ headerSourceName NOTIFY documentChanged)
+    Q_PROPERTY(QString headerText READ headerText NOTIFY documentChanged)
 public:
     explicit DocumentController(QObject* parent = nullptr) : QObject(parent) {}
 
@@ -66,6 +69,9 @@ public:
     QString valueRepresentation() const { return m_valueRepresentation; }
     bool transformerRatiosAvailable() const { return m_transformerRatiosAvailable; }
     QString transformerRatioSummary() const { return m_transformerRatioSummary; }
+    QString distanceZonePath() const { return m_distanceZonePath; }
+    QString headerSourceName() const { return m_headerSourceName; }
+    QString headerText() const { return m_headerText; }
 
     [[nodiscard]] const std::vector<double>& selectedSamples() const { return m_selectedSamples; }
     [[nodiscard]] const std::vector<double>& timeSeconds() const { return m_timeSeconds; }
@@ -123,6 +129,9 @@ private:
     QString m_recordHealth{QStringLiteral("No record")};
     QString m_valueRepresentation{QStringLiteral("secondary")};
     QString m_transformerRatioSummary{QStringLiteral("No CT/PT ratio metadata")};
+    QString m_distanceZonePath;
+    QString m_headerSourceName;
+    QString m_headerText;
     int m_selectedAnalogIndex{-1};
     int m_analogCount{0};
     int m_digitalCount{0};

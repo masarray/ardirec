@@ -40,6 +40,21 @@ struct PendingShape {
     double mho_offset{};
 };
 
+struct LegacyZoneBuilder {
+    int index{};
+    std::string label;
+    std::string type{"TRIPPING"};
+    double trip_time_seconds{};
+    std::vector<RxPoint> phase_phase;
+    std::vector<RxPoint> phase_earth;
+};
+
+enum class LegacyCharacteristic {
+    None,
+    PhasePhase,
+    PhaseEarth,
+};
+
 std::string trim(std::string value) {
     const auto first = std::find_if_not(value.begin(), value.end(), [](unsigned char ch) { return std::isspace(ch) != 0; });
     const auto last = std::find_if_not(value.rbegin(), value.rend(), [](unsigned char ch) { return std::isspace(ch) != 0; }).base();
@@ -306,6 +321,176 @@ bool parse_arc_element(const std::string& keyword, const std::string& raw, ArcEl
     return true;
 }
 
+bool parse_rx_point(std::string_view raw, RxPoint& point) {
+    const auto values = csv_values(raw);
+    if (values.size() < 2) return false;
+    const auto r = parse_double(values[0]);
+    const auto x = parse_double(values[1]);
+    if (!r || !x) return false;
+    point = {*r, *x};
+    return true;
+}
+
+ZoneShape legacy_polygon(std::vector<RxPoint> points,
+                         std::vector<std::string>& diagnostics,
+                         const std::string& label,
+                         const std::string& loop) {
+    ZoneShape shape;
+    deduplicate_polygon(points);
+    if (points.size() < 3) {
+        diagnostics.push_back("Legacy SIGRA zone '" + label + "' " + loop
+                              + " characteristic has fewer than three vertices.");
+        return shape;
+    }
+    shape.kind = ZoneShapeKind::Polygon;
+    shape.points = std::move(points);
+    return shape;
+}
+
+void append_legacy_characteristic(RioDistanceModel& model,
+                                  const LegacyZoneBuilder& builder,
+                                  const std::string& loop,
+                                  const std::vector<RxPoint>& points) {
+    if (points.empty()) return;
+    DistanceZone zone;
+    zone.index = builder.index;
+    zone.label = builder.label.empty() ? "Zone " + std::to_string(builder.index) : builder.label;
+    zone.type = builder.type;
+    zone.fault_loop = loop;
+    zone.trip_time_seconds = builder.trip_time_seconds;
+    zone.active = true;
+    zone.shape = legacy_polygon(points, model.diagnostics, zone.label, loop);
+    model.zones.push_back(std::move(zone));
+}
+
+void append_legacy_zone(RioDistanceModel& model, const LegacyZoneBuilder& builder) {
+    append_legacy_characteristic(model, builder, "LL", builder.phase_phase);
+    append_legacy_characteristic(model, builder, "LN", builder.phase_earth);
+}
+
+bool looks_like_legacy_sigra_rio(std::string_view text) {
+    std::istringstream stream{std::string(text)};
+    std::string raw_line;
+    while (std::getline(stream, raw_line)) {
+        const auto [keyword, value] = keyword_value(trim(raw_line));
+        if (keyword == "BEGIN" && uppercase(strip_quotes(value)) == "PROTECTIONDEVICE") return true;
+    }
+    return false;
+}
+
+RioDistanceModel parse_legacy_sigra_rio(std::string_view text) {
+    RioDistanceModel model;
+    model.impedances_primary = false;
+
+    bool in_protection_device = false;
+    bool in_zone = false;
+    bool saw_protection_device = false;
+    bool saw_mutual_coupling = false;
+    int next_zone_index = 1;
+    LegacyCharacteristic characteristic = LegacyCharacteristic::None;
+    LegacyZoneBuilder zone;
+    std::optional<double> re_over_rl;
+    std::optional<double> xe_over_xl;
+
+    std::istringstream stream{std::string(text)};
+    std::string raw_line;
+    while (std::getline(stream, raw_line)) {
+        const std::string line = trim(raw_line);
+        if (line.empty()) continue;
+        const auto [keyword, value] = keyword_value(line);
+        if (keyword == "REM" || keyword == "#" || keyword == "//") continue;
+
+        if (keyword == "BEGIN") {
+            const std::string block = uppercase(strip_quotes(value));
+            if (block == "PROTECTIONDEVICE") {
+                in_protection_device = true;
+                saw_protection_device = true;
+            } else if ((block == "ZONE" || block == "ZONE-OVERREACH") && in_protection_device) {
+                in_zone = true;
+                characteristic = LegacyCharacteristic::None;
+                zone = LegacyZoneBuilder{};
+                zone.index = next_zone_index++;
+                zone.type = block == "ZONE-OVERREACH" ? "OVERREACH" : "TRIPPING";
+            } else if (block == "TRIPCHAR" && in_zone) {
+                characteristic = LegacyCharacteristic::PhasePhase;
+            } else if (block == "TRIPCHAR-EARTH" && in_zone) {
+                characteristic = LegacyCharacteristic::PhaseEarth;
+            }
+            continue;
+        }
+
+        if (keyword == "END") {
+            const std::string block = uppercase(strip_quotes(value));
+            if (block == "TRIPCHAR" || block == "TRIPCHAR-EARTH") {
+                characteristic = LegacyCharacteristic::None;
+            } else if ((block == "ZONE" || block == "ZONE-OVERREACH") && in_zone) {
+                append_legacy_zone(model, zone);
+                in_zone = false;
+                characteristic = LegacyCharacteristic::None;
+            } else if (block == "PROTECTIONDEVICE") {
+                in_protection_device = false;
+            }
+            continue;
+        }
+
+        if (!in_protection_device) continue;
+
+        if (in_zone) {
+            if (keyword == "NAME") {
+                zone.label = strip_quotes(value);
+            } else if (keyword == "TIME1") {
+                if (const auto parsed = parse_double(value)) zone.trip_time_seconds = *parsed;
+            } else if ((keyword == "START" || keyword == "LINE") && characteristic != LegacyCharacteristic::None) {
+                RxPoint point;
+                if (!parse_rx_point(value, point)) {
+                    model.diagnostics.push_back("Legacy SIGRA zone '" + zone.label + "': malformed " + keyword + " vertex.");
+                } else if (characteristic == LegacyCharacteristic::PhasePhase) {
+                    zone.phase_phase.push_back(point);
+                } else {
+                    zone.phase_earth.push_back(point);
+                }
+            }
+            continue;
+        }
+
+        if (keyword == "DEVICE") {
+            model.device_name = strip_quotes(value);
+        } else if (keyword == "LINEANGLE") {
+            if (const auto parsed = parse_double(value)) model.line_angle_degrees = *parsed;
+        } else if (keyword == "RE/RL") {
+            re_over_rl = parse_double(value);
+        } else if (keyword == "XE/XL") {
+            xe_over_xl = parse_double(value);
+        } else if (keyword == "RM/RL" || keyword == "XM/XL") {
+            if (const auto parsed = parse_double(value); parsed && std::abs(*parsed) > 1.0e-12) {
+                saw_mutual_coupling = true;
+            }
+        }
+    }
+
+    if (re_over_rl && xe_over_xl) {
+        model.grounding_factor = grounding_factor_from_rerl_xexl(*re_over_rl,
+                                                                  *xe_over_xl,
+                                                                  model.line_angle_degrees);
+        model.grounding_factor_valid = true;
+        model.grounding_factor_source = "RE/RL XE/XL (SIGRA legacy)";
+    }
+
+    model.diagnostics.push_back("Legacy SIGRA PROTECTIONDEVICE RIO imported; TRIPCHAR and TRIPCHAR-EARTH vertices mapped to LL/LN polygons.");
+    if (saw_mutual_coupling) {
+        model.diagnostics.push_back("Legacy SIGRA mutual-coupling parameters are present; parallel-line compensation is not applied in P0.");
+    }
+    if (!model.impedance_base_conversion_valid()) {
+        model.diagnostics.push_back("RIO device CT/VT metadata is incomplete; zone PRI/SEC conversion will remain 1:1.");
+    }
+    if (!model.grounding_factor_valid) {
+        model.diagnostics.push_back("RIO grounding factor is absent; earth-loop kL must be entered manually.");
+    }
+    if (!saw_protection_device) model.diagnostics.push_back("No PROTECTIONDEVICE block found in legacy SIGRA RIO data.");
+    model.valid = saw_protection_device && !model.zones.empty();
+    return model;
+}
+
 std::string normalized_zone_loop(std::string_view value) {
     std::string normalized = compact(value);
     if (normalized == "L1E") normalized = "L1N";
@@ -336,6 +521,8 @@ double RioDistanceModel::zone_scale(bool target_primary) const {
 }
 
 RioDistanceModel parse_rio(std::string_view text) {
+    if (looks_like_legacy_sigra_rio(text)) return parse_legacy_sigra_rio(text);
+
     RioDistanceModel model;
     bool in_device = false;
     bool in_distance = false;
