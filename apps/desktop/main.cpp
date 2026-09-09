@@ -8,10 +8,28 @@
 #include "table_snapshot_controller.hpp"
 #include "waveform_item.hpp"
 
+#include <QFileInfo>
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
+#include <QString>
+#include <QUrl>
 #include <qqml.h>
+
+namespace {
+QString startup_cfg_path(int argc, char* argv[]) {
+    if (argc == 2) {
+        const QString candidate = QString::fromLocal8Bit(argv[1]).trimmed();
+        if (!candidate.startsWith('-')) return candidate;
+    }
+
+    if (argc >= 3 && QString::fromLatin1(argv[1]) == QStringLiteral("--open")) {
+        return QString::fromLocal8Bit(argv[2]).trimmed();
+    }
+
+    return {};
+}
+} // namespace
 
 int main(int argc, char* argv[]) {
     QGuiApplication app(argc, argv);
@@ -36,5 +54,12 @@ int main(int argc, char* argv[]) {
     engine.rootContext()->setContextProperty(QStringLiteral("distanceZoneController"), &distanceZones);
     engine.loadFromModule("Ardirec", "Main");
     if (engine.rootObjects().isEmpty()) return -1;
+
+    const QString startupCfg = startup_cfg_path(argc, argv);
+    if (!startupCfg.isEmpty()) {
+        const QFileInfo cfgInfo(startupCfg);
+        document.openCfg(QUrl::fromLocalFile(cfgInfo.absoluteFilePath()));
+    }
+
     return app.exec();
 }
