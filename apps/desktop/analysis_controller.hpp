@@ -37,6 +37,7 @@ public:
                                         int currentChannelIndex,
                                         double absoluteTimeSeconds) const;
     Q_INVOKABLE bool distanceLoopAvailable(const QString& loopId) const;
+    Q_INVOKABLE double distanceCurrentFloor() const;
     Q_INVOKABLE QVariantMap distanceLoopAt(const QString& loopId,
                                            double absoluteTimeSeconds,
                                            double groundingFactorMagnitude,
@@ -44,7 +45,7 @@ public:
     Q_INVOKABLE QVariantList distanceLocus(const QString& loopId,
                                            double viewStartSeconds,
                                            double visibleDurationSeconds,
-                                           int steps,
+                                           int maximumPoints,
                                            double groundingFactorMagnitude,
                                            double groundingFactorAngleDegrees) const;
 

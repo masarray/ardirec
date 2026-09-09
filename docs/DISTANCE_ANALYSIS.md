@@ -13,7 +13,13 @@ Distance quantities use the same fundamental phasor convention as the rest of th
 - Primary/Secondary representation is applied at the channel phasor boundary before the protection-loop equation;
 - voltage/current unit prefixes are converted to SI before division, so the R-X result is in ohms.
 
-A point is invalid when the required channels are unavailable, the calculation window cannot produce a valid phasor, or the measuring-current magnitude is effectively zero. ardirec does not replace an invalid point with an arbitrary large impedance.
+A point is invalid when the required channels are unavailable, the calculation window cannot produce a valid phasor, or the measuring-current magnitude is too small for a meaningful impedance. ardirec does not replace an invalid point with an arbitrary large impedance.
+
+### Locus sampling and open-breaker guard
+
+The protection locus is evaluated on the actual COMTRADE sample timestamps inside the visible time range. If the visible range contains more points than the drawing budget, ardirec decimates the timestamp sequence while preserving the first and last visible samples. It does not invent an evenly spaced analysis time grid.
+
+For protection loops, the minimum measuring-current magnitude is set to 0.1% of the largest displayed phase-current peak in the loaded record, with a 1 µA absolute lower bound. This floor scales naturally with the global Primary/Secondary representation and rejects the very large `V/I` artifacts that otherwise appear after a breaker has opened and current has collapsed. Rejected samples remain in the locus sequence as invalid timestamped gaps, so the renderer breaks the trajectory instead of drawing a line across the invalid interval.
 
 ## Phase-phase loops
 
@@ -77,6 +83,10 @@ Generic LINE borders are interpreted as half-planes using the RIO LEFT/RIGHT ins
 
 Zone filtering follows the active measuring loop: `LN` applies to earth loops, `LL` to phase-phase loops, specific loop identifiers apply only to the matching loop, and `ALL` applies everywhere.
 
+### Legacy SIGRA RIO
+
+The SIGRA compatibility path also recognizes legacy `BEGIN PROTECTIONDEVICE` RIO files. `TRIPCHAR` polygons become internal `LL` characteristics and `TRIPCHAR-EARTH` polygons become `LN` characteristics. `LINEANGLE`, `RE/RL` and `XE/XL` are imported for earth-loop compensation. Mutual/parallel-circuit parameters can be detected and reported, but the parallel-line compensation algorithm remains outside the current parity scope.
+
 ## Primary / Secondary zone base
 
 A measured loop impedance and a relay characteristic are comparable only on the same impedance base.
@@ -88,6 +98,17 @@ Zsecondary / Zprimary = (Vsecondary / Vprimary) * (Iprimary / Isecondary)
 ```
 
 and converts imported zone geometry to the global ardirec Primary/Secondary representation. If ratio metadata is incomplete, file-native zone values are retained at 1:1 and the UI raises a warning; the application must not claim that conversion was verified.
+
+## SIGRA-style dual locus view
+
+Protection mode renders two R-X diagrams simultaneously:
+
+- **Earth loops**: L1-E, L2-E and L3-E with the earth-zone family;
+- **Phase-phase loops**: L1-L2, L2-L3 and L3-L1 with the phase-zone family.
+
+All available loops are visible at the same time. The loop selector is retained as an **inspection selector** for C1/C2 values and marker emphasis; it no longer hides the other protection trajectories.
+
+Each panel computes its own symmetric R and X ranges. R and X are scaled independently, matching the wide R / compact X presentation commonly used by SIGRA instead of forcing a square one-ohm-per-pixel plot. Zone geometry and trajectory coordinates remain in engineering ohms; only their display transform differs between axes.
 
 ## XRIO boundary
 
@@ -111,7 +132,7 @@ The old per-phase `Va/Ia`, `Vb/Ib`, `Vc/Ic` locus remains available only under *
 
 ## Validation contract
 
-P2 regression tests include:
+Regression tests include:
 
 1. a synthetic phase-phase case constructed from a known target complex impedance;
 2. a synthetic phase-earth case constructed from a known target complex impedance, residual current and non-zero complex `kL`;
@@ -119,6 +140,8 @@ P2 regression tests include:
 4. independently worked `Z0/Z1 -> kL` and `RE/RL-XE/XL -> kL` values;
 5. synthetic classic RIO with LL circle and LN quadrilateral geometry;
 6. fault-loop filtering and Primary/Secondary zone scaling;
-7. synthetic standardized XRIO adaptation through the desktop import boundary.
+7. synthetic standardized XRIO adaptation through the desktop import boundary;
+8. legacy SIGRA RIO conversion into LL/LN characteristics;
+9. sample-aligned six-loop availability, timestamp preservation, decimation and post-open current-floor rejection through the desktop analysis boundary.
 
 Cross-tool comparison with legally obtained records and relay settings remains required before claiming protection-algorithm parity with a commercial analysis package.
