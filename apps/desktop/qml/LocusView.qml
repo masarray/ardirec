@@ -37,7 +37,6 @@ Rectangle {
             ? analysis.distanceLoopAt(selectedLoop, cursorBTime, kLMagnitude, kLAngle)
             : ({valid:false})
     }
-
     readonly property var earthSeries: {
         const representationDependency = valueRepresentation
         return distanceMode ? buildDistanceSeries(earthLoops) : []
@@ -132,9 +131,6 @@ Rectangle {
             }
         }
 
-        // Legacy SIGRA stores ZONE-OVERREACH after the normal zones in the file,
-        // while Circle Diagrams present it immediately after its parent zone.
-        // Reorder only families that actually contain an OVERREACH characteristic.
         if (result.some(function(zone) { return root.isOverreachZone(zone) })) {
             result.sort(function(a, b) {
                 const an = root.legacyZoneNumber(a)
@@ -244,13 +240,11 @@ Rectangle {
             Layout.preferredHeight: 34
             color: "#eceeef"
             border.color: "#c8cdd1"
-
             RowLayout {
                 anchors.fill: parent
                 anchors.leftMargin: 8
                 anchors.rightMargin: 8
                 spacing: 4
-
                 Label {
                     text: "DISTANCE / R-X"
                     color: "#31383e"
@@ -259,21 +253,8 @@ Rectangle {
                     font.letterSpacing: 0.5
                 }
                 Rectangle { width: 1; height: 18; color: "#c4c9cd"; Layout.leftMargin: 4; Layout.rightMargin: 3 }
-                ToolButton {
-                    text: "Protection"
-                    checkable: true
-                    checked: root.distanceMode
-                    font.pixelSize: 8
-                    onClicked: root.analysisMode = "distance"
-                }
-                ToolButton {
-                    text: "Raw V/I"
-                    checkable: true
-                    checked: !root.distanceMode
-                    font.pixelSize: 8
-                    onClicked: root.analysisMode = "raw"
-                }
-
+                ToolButton { text: "Protection"; checkable: true; checked: root.distanceMode; font.pixelSize: 8; onClicked: root.analysisMode = "distance" }
+                ToolButton { text: "Raw V/I"; checkable: true; checked: !root.distanceMode; font.pixelSize: 8; onClicked: root.analysisMode = "raw" }
                 Rectangle { visible: root.distanceMode; width: 1; height: 18; color: "#c4c9cd"; Layout.leftMargin: 3; Layout.rightMargin: 3 }
                 Label { visible: root.distanceMode; text: "INSPECT"; color: "#6a7278"; font.pixelSize: 7; font.weight: Font.DemiBold }
                 Repeater {
@@ -289,7 +270,6 @@ Rectangle {
                         onClicked: root.selectedLoop = modelData
                     }
                 }
-
                 Rectangle { visible: root.distanceMode; width: 1; height: 18; color: "#c4c9cd"; Layout.leftMargin: 3; Layout.rightMargin: 3 }
                 ToolButton {
                     visible: root.distanceMode
@@ -318,13 +298,11 @@ Rectangle {
             Layout.preferredHeight: root.distanceMode ? 27 : 24
             color: root.distanceMode ? "#f8f9f9" : "#fff8e8"
             border.color: root.distanceMode ? "#d7dbde" : "#e1c98d"
-
             RowLayout {
                 anchors.fill: parent
                 anchors.leftMargin: 8
                 anchors.rightMargin: 8
                 spacing: 6
-
                 Label { visible: root.distanceMode; text: "Earth kL"; color: "#646d73"; font.pixelSize: 8; font.weight: Font.DemiBold }
                 TextField {
                     visible: root.distanceMode
@@ -354,10 +332,7 @@ Rectangle {
                     font.pixelSize: 7
                 }
                 Label {
-                    visible: root.distanceMode
-                             && (!root.zoneController
-                                 || !root.zoneController.groundingFactorValid
-                                 || Math.abs(root.kLMagnitude) < 1.0e-12)
+                    visible: root.distanceMode && (!root.zoneController || !root.zoneController.groundingFactorValid || Math.abs(root.kLMagnitude) < 1.0e-12)
                     text: "UNCOMPENSATED EARTH LOOPS"
                     color: "#9a5c00"
                     font.pixelSize: 7
@@ -373,20 +348,8 @@ Rectangle {
                     Layout.maximumWidth: 430
                 }
                 Item { Layout.fillWidth: true }
-                Label {
-                    visible: root.distanceMode
-                    text: "CONFORMAL AUTO · full record"
-                    color: "#52636b"
-                    font.pixelSize: 7
-                    font.weight: Font.DemiBold
-                }
-                Label {
-                    visible: !root.distanceMode
-                    text: "RAW PHASE V/I · diagnostic only"
-                    color: "#785b1a"
-                    font.pixelSize: 8
-                    font.weight: Font.DemiBold
-                }
+                Label { visible: root.distanceMode; text: "CONFORMAL AUTO · full record"; color: "#52636b"; font.pixelSize: 7; font.weight: Font.DemiBold }
+                Label { visible: !root.distanceMode; text: "RAW PHASE V/I · diagnostic only"; color: "#785b1a"; font.pixelSize: 8; font.weight: Font.DemiBold }
             }
         }
 
@@ -396,7 +359,6 @@ Rectangle {
             visible: root.distanceMode
             color: "#ffffff"
             border.color: "#d4d8db"
-
             RowLayout {
                 anchors.fill: parent
                 anchors.leftMargin: 8
@@ -513,9 +475,6 @@ Rectangle {
                         return {r:r, x:x}
                     }
 
-                    // SIGRA-style "ideal display": impedance has no useful finite maximum.
-                    // Fit the stable/core locus and zones; extreme low-current excursions stay in
-                    // the data and simply clip at the viewport edge instead of destroying scale.
                     function coreTarget(series, zones) {
                         let rs = []
                         let xs = []
@@ -535,15 +494,12 @@ Rectangle {
                         }
                     }
 
-                    function earthZoneColor(index) {
-                        return index % 2 === 0 ? "#008a2f" : "#075ec7"
-                    }
-                    function phaseZoneColor(index) {
-                        return index % 2 === 0 ? "#c7a000" : "#e300cb"
-                    }
+                    function earthZoneColor(index) { return index % 2 === 0 ? "#008a2f" : "#075ec7" }
+                    function phaseZoneColor(index) { return index % 2 === 0 ? "#c7a000" : "#e300cb" }
 
-                    function zoneLegendLabel(zone, earthFamily, ordinal, semanticOrdinal) {
-                        let index = semanticOrdinal ? ordinal + 1 : Number(zone.index)
+                    function zoneLegendLabel(zone, earthFamily, ordinal, zones) {
+                        const legacyOrdered = zones && zones.some(function(z) { return root.isOverreachZone(z) })
+                        let index = legacyOrdered ? ordinal + 1 : Number(zone.index)
                         if (!Number.isFinite(index) || index <= 0) index = ordinal + 1
                         return "Zone_" + index + (earthFamily ? "E" : "")
                     }
@@ -581,16 +537,32 @@ Rectangle {
                         if (!finitePoint(point)) return
                         const px = mapX(point.r)
                         const py = mapY(point.x)
+                        ctx.save()
+                        ctx.setLineDash([])
                         ctx.strokeStyle = color
-                        ctx.lineWidth = 1.3
+                        ctx.lineWidth = 1.15
                         ctx.beginPath(); ctx.moveTo(px - size, py); ctx.lineTo(px + size, py); ctx.stroke()
                         ctx.beginPath(); ctx.moveTo(px, py - size); ctx.lineTo(px, py + size); ctx.stroke()
+                        ctx.restore()
+                    }
+
+                    function drawSampleSquare(px, py, color) {
+                        ctx.save()
+                        ctx.setLineDash([])
+                        ctx.fillStyle = "#ffffff"
+                        ctx.fillRect(px - 1.65, py - 1.65, 3.3, 3.3)
+                        ctx.strokeStyle = color
+                        ctx.lineWidth = 0.75
+                        ctx.strokeRect(px - 1.65, py - 1.65, 3.3, 3.3)
+                        ctx.restore()
                     }
 
                     function drawSeries(item, mapX, mapY, left, top, right, bottom) {
                         const selected = root.selectedLoop === item.loop
+                        ctx.save()
+                        ctx.setLineDash([])
                         ctx.strokeStyle = item.color
-                        ctx.lineWidth = selected ? 1.35 : 0.95
+                        ctx.lineWidth = selected ? 1.05 : 0.85
                         ctx.beginPath()
                         let active = false
                         for (let p of item.points) {
@@ -601,47 +573,66 @@ Rectangle {
                             else ctx.lineTo(px, py)
                         }
                         ctx.stroke()
+                        ctx.restore()
 
-                        // Small square sampling markers, sparse enough to stay readable.
-                        const markerStride = Math.max(1, Math.ceil(item.points.length / 45))
-                        ctx.strokeStyle = item.color
-                        ctx.lineWidth = 0.8
-                        for (let n = 0; n < item.points.length; n += markerStride) {
-                            const p = item.points[n]
-                            if (!finitePoint(p)) continue
+                        // SIGRA-like markers are placed by travelled screen distance, not by
+                        // sample count. Density therefore stays readable across zoom/record size.
+                        const markerGapPx = 10.0
+                        let lastMarkerX = NaN
+                        let lastMarkerY = NaN
+                        let segmentStarted = false
+                        for (let p of item.points) {
+                            if (!finitePoint(p)) {
+                                segmentStarted = false
+                                lastMarkerX = NaN
+                                lastMarkerY = NaN
+                                continue
+                            }
                             const px = mapX(p.r)
                             const py = mapY(p.x)
                             if (!insidePlot(px, py, left, top, right, bottom)) continue
-                            ctx.strokeRect(px - 1.8, py - 1.8, 3.6, 3.6)
+                            if (!segmentStarted || !Number.isFinite(lastMarkerX)
+                                    || Math.hypot(px - lastMarkerX, py - lastMarkerY) >= markerGapPx) {
+                                drawSampleSquare(px, py, item.color)
+                                lastMarkerX = px
+                                lastMarkerY = py
+                                segmentStarted = true
+                            }
                         }
 
                         if (selected) {
-                            drawCross(item.cursorA, mapX, mapY, "#d89a00", 4.0)
-                            drawCross(item.cursorB, mapX, mapY, "#009fc8", 4.0)
+                            drawCross(item.cursorA, mapX, mapY, "#d89a00", 3.5)
+                            drawCross(item.cursorB, mapX, mapY, "#009fc8", 3.5)
                         }
                     }
 
                     function drawLegend(px, py, pw, earthFamily, series, zones) {
                         let x = px + 8
                         const y = py + 13
-                        const semanticOrdinal = zones.some(function(zone) { return root.isOverreachZone(zone) })
                         ctx.font = "7px sans-serif"
                         ctx.textAlign = "left"
                         ctx.textBaseline = "middle"
                         for (let z = 0; z < zones.length; ++z) {
                             const color = earthFamily ? earthZoneColor(z) : phaseZoneColor(z)
-                            ctx.fillStyle = color
-                            ctx.fillRect(x, y - 3, 6, 6)
+                            ctx.save()
+                            ctx.strokeStyle = color
+                            ctx.lineWidth = 0.9
+                            ctx.setLineDash([3, 2])
+                            ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + 10, y); ctx.stroke()
+                            ctx.restore()
                             ctx.fillStyle = "#333a40"
-                            const label = zoneLegendLabel(zones[z], earthFamily, z, semanticOrdinal)
-                            ctx.fillText(label, x + 9, y)
+                            const label = zoneLegendLabel(zones[z], earthFamily, z, zones)
+                            ctx.fillText(label, x + 13, y)
                             x += 58
                         }
                         for (let item of series) {
+                            ctx.save()
+                            ctx.setLineDash([])
                             ctx.strokeStyle = item.color
-                            ctx.lineWidth = root.selectedLoop === item.loop ? 1.5 : 1.0
+                            ctx.lineWidth = root.selectedLoop === item.loop ? 1.05 : 0.85
                             ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + 13, y); ctx.stroke()
-                            ctx.strokeRect(x + 5, y - 1.8, 3.6, 3.6)
+                            ctx.restore()
+                            drawSampleSquare(x + 6, y, item.color)
                             ctx.fillStyle = "#333a40"
                             ctx.fillText(root.signalLegendName(item.loop), x + 17, y)
                             x += 58
@@ -653,13 +644,14 @@ Rectangle {
                     function drawDistancePanel(px, py, pw, ph, earthFamily, series, zones) {
                         ctx.fillStyle = "#ffffff"
                         ctx.fillRect(px, py, pw, ph)
-                        ctx.strokeStyle = "#bfc5ca"
-                        ctx.lineWidth = 1
+                        ctx.strokeStyle = "#c5c9cc"
+                        ctx.lineWidth = 0.8
                         ctx.strokeRect(px + 0.5, py + 0.5, pw - 1, ph - 1)
 
                         const legendH = 24
                         drawLegend(px, py, pw, earthFamily, series, zones)
-                        ctx.strokeStyle = "#e0e3e5"
+                        ctx.strokeStyle = "#eceeef"
+                        ctx.lineWidth = 0.7
                         ctx.beginPath(); ctx.moveTo(px, py + legendH); ctx.lineTo(px + pw, py + legendH); ctx.stroke()
 
                         const left = px + 58
@@ -670,7 +662,7 @@ Rectangle {
                         const plotH = Math.max(20, bottom - top)
                         const target = coreTarget(series, zones)
 
-                        // Conformal R-X mapping: one ohm is the same number of pixels in both axes.
+                        // Conformal R-X mapping: one ohm is the same number of pixels on R and X.
                         const scale = Math.max(1e-9, Math.min(plotW / (2 * target.r), plotH / (2 * target.x)))
                         const rHalf = plotW / (2 * scale)
                         const xHalf = plotH / (2 * scale)
@@ -684,8 +676,10 @@ Rectangle {
 
                         const rStep = niceStep(rHalf / 4.0)
                         const xStep = niceStep(xHalf / 3.5)
-                        ctx.strokeStyle = "#edf0f2"
-                        ctx.lineWidth = 0.8
+                        // P1: keep grid deliberately subordinate to relay characteristics.
+                        ctx.strokeStyle = "#f2f3f4"
+                        ctx.lineWidth = 0.55
+                        ctx.setLineDash([])
                         for (let rv = Math.ceil(-rHalf / rStep) * rStep; rv <= rHalf + 1e-9; rv += rStep) {
                             if (Math.abs(rv) < rStep * 0.1) continue
                             const gx = mapX(rv)
@@ -698,23 +692,31 @@ Rectangle {
                         }
 
                         ctx.strokeStyle = "#20252a"
-                        ctx.lineWidth = 1.0
+                        ctx.lineWidth = 0.9
                         ctx.beginPath(); ctx.moveTo(left, cy); ctx.lineTo(right, cy); ctx.stroke()
                         ctx.beginPath(); ctx.moveTo(cx, top); ctx.lineTo(cx, bottom); ctx.stroke()
 
-                        ctx.fillStyle = "#4e565c"
+                        ctx.fillStyle = "#535b61"
                         ctx.font = "7px sans-serif"
                         ctx.textBaseline = "top"
                         ctx.textAlign = "center"
                         for (let rv = Math.ceil(-rHalf / rStep) * rStep; rv <= rHalf + 1e-9; rv += rStep) {
                             if (Math.abs(rv) < rStep * 0.1) continue
-                            ctx.fillText(rv.toFixed(Math.abs(rv) < 10 ? 1 : 0), mapX(rv), bottom + 4)
+                            const tx = mapX(rv)
+                            ctx.fillText(rv.toFixed(Math.abs(rv) < 10 ? 1 : 0), tx, bottom + 4)
+                            ctx.strokeStyle = "#5e666c"
+                            ctx.lineWidth = 0.7
+                            ctx.beginPath(); ctx.moveTo(tx, cy - 2); ctx.lineTo(tx, cy + 2); ctx.stroke()
                         }
                         ctx.textAlign = "right"
                         ctx.textBaseline = "middle"
                         for (let xv = Math.ceil(-xHalf / xStep) * xStep; xv <= xHalf + 1e-9; xv += xStep) {
                             if (Math.abs(xv) < xStep * 0.1) continue
-                            ctx.fillText(xv.toFixed(Math.abs(xv) < 10 ? 1 : 0), left - 5, mapY(xv))
+                            const ty = mapY(xv)
+                            ctx.fillText(xv.toFixed(Math.abs(xv) < 10 ? 1 : 0), left - 5, ty)
+                            ctx.strokeStyle = "#5e666c"
+                            ctx.lineWidth = 0.7
+                            ctx.beginPath(); ctx.moveTo(cx - 2, ty); ctx.lineTo(cx + 2, ty); ctx.stroke()
                         }
                         ctx.textAlign = "center"
                         ctx.textBaseline = "alphabetic"
@@ -722,13 +724,11 @@ Rectangle {
 
                         ctx.save()
                         ctx.beginPath(); ctx.rect(left, top, plotW, plotH); ctx.clip()
-                        for (let z = 0; z < zones.length; ++z) {
+                        for (let z = 0; z < zones.length; ++z)
                             drawZone(zones[z], mapX, mapY, earthFamily ? earthZoneColor(z) : phaseZoneColor(z))
-                        }
                         for (let item of series) drawSeries(item, mapX, mapY, left, top, right, bottom)
                         ctx.restore()
 
-                        // Vertical axis title outside plot, kept compact like classic disturbance tools.
                         ctx.save()
                         ctx.translate(px + 12, cy)
                         ctx.rotate(-Math.PI / 2)
@@ -753,12 +753,12 @@ Rectangle {
                         const cx = left + plotW * 0.5, cy = top + plotH * 0.5
                         const mapX = function(r) { return cx + r * scale }
                         const mapY = function(x) { return cy - x * scale }
-                        ctx.strokeStyle = "#20252a"; ctx.lineWidth = 1
+                        ctx.strokeStyle = "#20252a"; ctx.lineWidth = 0.9
                         ctx.beginPath(); ctx.moveTo(left, cy); ctx.lineTo(right, cy); ctx.stroke()
                         ctx.beginPath(); ctx.moveTo(cx, top); ctx.lineTo(cx, bottom); ctx.stroke()
                         ctx.save(); ctx.beginPath(); ctx.rect(left, top, plotW, plotH); ctx.clip()
                         for (let item of series) {
-                            ctx.strokeStyle = item.color; ctx.lineWidth = 1.0; ctx.beginPath()
+                            ctx.strokeStyle = item.color; ctx.lineWidth = 0.9; ctx.beginPath()
                             let active = false
                             for (let p of item.points) {
                                 if (!finitePoint(p)) { active = false; continue }
