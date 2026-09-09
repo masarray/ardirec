@@ -8,6 +8,8 @@
 
 #include <QDate>
 #include <QDateTime>
+#include <QFile>
+#include <QFileInfo>
 #include <QTime>
 
 #include <algorithm>
@@ -46,7 +48,7 @@ std::optional<double> parse_comtrade_timestamp(const std::string& raw) {
     if (year < 100) year += year >= 70 ? 1900 : 2000;
     const int wholeSecond = std::clamp(static_cast<int>(std::floor(seconds)), 0, 59);
     const double fraction = std::max(0.0, seconds - static_cast<double>(wholeSecond));
-    const QDate qDate(year, month, day);
+    const QDate qDate(year, month, year > 0 ? day : day);
     const QTime qTime(hour, minute, wholeSecond);
     if (!qDate.isValid() || !qTime.isValid()) return std::nullopt;
 
@@ -75,6 +77,24 @@ QString normalized_unit(QString unit) {
 QString compact_ratio_value(double value) {
     if (!std::isfinite(value)) return QStringLiteral("—");
     return QString::number(value, 'g', 7);
+}
+
+QString filesystem_path_to_qstring(const std::filesystem::path& path) {
+#ifdef _WIN32
+    return QString::fromStdWString(path.wstring());
+#else
+    return QString::fromStdString(path.string());
+#endif
+}
+
+QString read_text_sidecar(const std::filesystem::path& path) {
+    if (path.empty()) return {};
+    QFile file(filesystem_path_to_qstring(path));
+    if (!file.open(QIODevice::ReadOnly)) return {};
+    const QByteArray bytes = file.readAll();
+    QString decoded = QString::fromUtf8(bytes);
+    if (decoded.contains(QChar(0xfffd))) decoded = QString::fromLatin1(bytes);
+    return decoded;
 }
 } // namespace
 
@@ -129,11 +149,24 @@ std::pair<std::size_t, std::size_t> DocumentController::visibleSampleRange(doubl
 }
 
 void DocumentController::openCfg(const QUrl& url) {
+    m_distanceZonePath.clear();
+    m_headerSourceName.clear();
+    m_headerText.clear();
+
     try {
         const auto path = std::filesystem::path(url.toLocalFile().toStdString());
         const auto bundle = ardirec::comtrade::locate_bundle(path);
         if (bundle.cfg.empty()) throw std::runtime_error("Cannot locate CFG file");
         if (bundle.dat.empty()) throw std::runtime_error("Matching DAT file was not found next to CFG");
+
+        const auto distanceSidecar = !bundle.rio.empty() ? bundle.rio : bundle.xrio;
+        if (!distanceSidecar.empty()) {
+            m_distanceZonePath = QFileInfo(filesystem_path_to_qstring(distanceSidecar)).absoluteFilePath();
+        }
+        if (!bundle.hdr.empty()) {
+            m_headerSourceName = QFileInfo(filesystem_path_to_qstring(bundle.hdr)).fileName();
+            m_headerText = read_text_sidecar(bundle.hdr);
+        }
 
         const auto cfg = ardirec::comtrade::ConfigParser{}.parse_file(bundle.cfg);
         const auto frames = ardirec::comtrade::DatReader{}.read(cfg, bundle.dat, kViewerAlphaFrameLimit);
@@ -239,6 +272,11 @@ void DocumentController::openCfg(const QUrl& url) {
                                    .arg(m_analogCount)
                                    .arg(m_digitalCount)
                                    .arg(m_activeDigitalCount);
+        QStringList sidecars;
+        if (!m_distanceZonePath.isEmpty()) sidecars << QFileInfo(m_distanceZonePath).suffix().toUpper();
+        if (!m_headerSourceName.isEmpty()) sidecars << QStringLiteral("HDR");
+        if (!sidecars.isEmpty()) m_recordHealth += QStringLiteral(" · sidecars %1").arg(sidecars.join(QStringLiteral(" + ")));
+
         m_error.clear();
         emit documentChanged();
         emit waveformChanged();
