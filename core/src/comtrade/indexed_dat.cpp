@@ -2,6 +2,7 @@
 #include "ardirec/comtrade/indexed_dat.hpp"
 
 #include <algorithm>
+#include <array>
 #include <bit>
 #include <charconv>
 #include <cmath>
@@ -9,7 +10,6 @@
 #include <fstream>
 #include <limits>
 #include <mutex>
-#include <span>
 #include <string_view>
 #include <system_error>
 #include <type_traits>
@@ -70,11 +70,9 @@ bool parse_u32(std::string_view text, std::uint32_t& value) {
     text = trim_view(text);
     if (text.empty()) return false;
     std::uint64_t wide = 0;
-    const auto result = std::from_chars(text.data(), text.data() + text.size(), wide, 10);
-    if (result.ec != std::errc{} || result.ptr != text.data() + text.size()
-        || wide > std::numeric_limits<std::uint32_t>::max()) {
-        return false;
-    }
+    const auto parsed = std::from_chars(text.data(), text.data() + text.size(), wide, 10);
+    if (parsed.ec != std::errc{} || parsed.ptr != text.data() + text.size()
+        || wide > std::numeric_limits<std::uint32_t>::max()) return false;
     value = static_cast<std::uint32_t>(wide);
     return true;
 }
@@ -82,9 +80,9 @@ bool parse_u32(std::string_view text, std::uint32_t& value) {
 bool parse_double(std::string_view text, double& value) {
     text = trim_view(text);
     if (text.empty()) return false;
-    const auto result = std::from_chars(text.data(), text.data() + text.size(), value,
+    const auto parsed = std::from_chars(text.data(), text.data() + text.size(), value,
                                         std::chars_format::general);
-    return result.ec == std::errc{} && result.ptr == text.data() + text.size()
+    return parsed.ec == std::errc{} && parsed.ptr == text.data() + text.size()
            && std::isfinite(value);
 }
 
@@ -98,11 +96,11 @@ bool parse_bool(std::string_view text, bool& value) {
 template <typename T>
 T byte_swap(T value) noexcept {
     static_assert(std::is_trivially_copyable_v<T>);
-    unsigned char source[sizeof(T)]{};
-    unsigned char target[sizeof(T)]{};
-    std::memcpy(source, &value, sizeof(T));
+    std::array<unsigned char, sizeof(T)> source{};
+    std::array<unsigned char, sizeof(T)> target{};
+    std::memcpy(source.data(), &value, sizeof(T));
     for (std::size_t i = 0; i < sizeof(T); ++i) target[i] = source[sizeof(T) - 1u - i];
-    std::memcpy(&value, target, sizeof(T));
+    std::memcpy(&value, target.data(), sizeof(T));
     return value;
 }
 
@@ -128,15 +126,44 @@ std::size_t sample_width(DataFormat format) noexcept {
     }
 }
 
+bool is_binary_family(DataFormat format) noexcept {
+    return format == DataFormat::Binary16 || format == DataFormat::Binary32
+           || format == DataFormat::Float32;
+}
+
 std::size_t binary_frame_size(const RecordConfig& config) noexcept {
     const std::size_t width = sample_width(config.data_format);
     if (width == 0) return 0;
     const std::size_t statusWords = (config.status_channels.size() + 15u) / 16u;
+    if (statusWords > (std::numeric_limits<std::size_t>::max() - kBinaryHeaderBytes) / 2u) return 0;
+    const std::size_t statusBytes = statusWords * sizeof(std::uint16_t);
     if (config.analog_channels.size()
-        > (std::numeric_limits<std::size_t>::max() - kBinaryHeaderBytes - statusWords * 2u) / width) {
-        return 0;
+        > (std::numeric_limits<std::size_t>::max() - kBinaryHeaderBytes - statusBytes) / width) return 0;
+    return kBinaryHeaderBytes + config.analog_channels.size() * width + statusBytes;
+}
+
+double decode_raw_analog(DataFormat format,
+                         int revision,
+                         const AnalogChannel& definition,
+                         const std::byte* bytes) noexcept {
+    if (!bytes) return std::numeric_limits<double>::quiet_NaN();
+    double raw = std::numeric_limits<double>::quiet_NaN();
+    bool missing = false;
+    if (format == DataFormat::Binary16) {
+        const auto value = read_le_bytes<std::int16_t>(bytes);
+        missing = missing_i16(value, revision);
+        raw = static_cast<double>(value);
+    } else if (format == DataFormat::Binary32) {
+        const auto value = read_le_bytes<std::int32_t>(bytes);
+        missing = value == std::numeric_limits<std::int32_t>::min();
+        raw = static_cast<double>(value);
+    } else if (format == DataFormat::Float32) {
+        const auto value = read_le_bytes<float>(bytes);
+        raw = static_cast<double>(value);
+        missing = !std::isfinite(raw) || value == std::numeric_limits<float>::lowest();
     }
-    return kBinaryHeaderBytes + config.analog_channels.size() * width + statusWords * sizeof(std::uint16_t);
+    if (missing || !std::isfinite(raw)) return std::numeric_limits<double>::quiet_NaN();
+    return definition.a * raw + definition.b;
 }
 
 double decode_binary_analog(const RecordConfig& config,
@@ -146,25 +173,9 @@ double decode_binary_analog(const RecordConfig& config,
         return std::numeric_limits<double>::quiet_NaN();
     }
     const std::size_t width = sample_width(config.data_format);
-    const std::byte* valueBytes = frame + kBinaryHeaderBytes + channel * width;
-    double raw = std::numeric_limits<double>::quiet_NaN();
-    bool missing = false;
-    if (config.data_format == DataFormat::Binary16) {
-        const auto value = read_le_bytes<std::int16_t>(valueBytes);
-        missing = missing_i16(value, config.revision_year);
-        raw = static_cast<double>(value);
-    } else if (config.data_format == DataFormat::Binary32) {
-        const auto value = read_le_bytes<std::int32_t>(valueBytes);
-        missing = value == std::numeric_limits<std::int32_t>::min();
-        raw = static_cast<double>(value);
-    } else if (config.data_format == DataFormat::Float32) {
-        const auto value = read_le_bytes<float>(valueBytes);
-        raw = static_cast<double>(value);
-        missing = !std::isfinite(raw) || value == std::numeric_limits<float>::lowest();
-    }
-    if (missing || !std::isfinite(raw)) return std::numeric_limits<double>::quiet_NaN();
-    const auto& definition = config.analog_channels[channel];
-    return definition.a * raw + definition.b;
+    return decode_raw_analog(config.data_format, config.revision_year,
+                             config.analog_channels[channel],
+                             frame + kBinaryHeaderBytes + channel * width);
 }
 
 bool decode_binary_status(const RecordConfig& config,
@@ -186,7 +197,7 @@ public:
     ReadOnlyMapping(const ReadOnlyMapping&) = delete;
     ReadOnlyMapping& operator=(const ReadOnlyMapping&) = delete;
 
-    bool open(const std::filesystem::path& path, std::string& reason) noexcept {
+    bool open(const std::filesystem::path& path, std::string& reason) {
         close();
 #ifdef _WIN32
         file_ = CreateFileW(path.c_str(), GENERIC_READ,
@@ -261,8 +272,6 @@ public:
     }
 
     [[nodiscard]] const std::byte* data() const noexcept { return data_; }
-    [[nodiscard]] std::uint64_t size() const noexcept { return size_; }
-    [[nodiscard]] bool mapped() const noexcept { return size_ == 0 || data_ != nullptr; }
 
 private:
     const std::byte* data_{nullptr};
@@ -288,7 +297,7 @@ struct IndexedDatFile::Impl {
     mutable std::mutex fallback_mutex;
     mutable std::ifstream fallback_stream;
 
-    [[nodiscard]] bool mapped() const noexcept { return mapping.mapped() && mapping.data() != nullptr; }
+    [[nodiscard]] bool binaryFamily() const noexcept { return is_binary_family(config.data_format); }
 
     bool readBytes(std::uint64_t offset, void* destination, std::size_t count) const noexcept {
         if (!destination || count == 0) return count == 0;
@@ -303,7 +312,7 @@ struct IndexedDatFile::Impl {
         fallback_stream.clear();
         fallback_stream.seekg(static_cast<std::streamoff>(offset), std::ios::beg);
         fallback_stream.read(static_cast<char*>(destination), static_cast<std::streamsize>(count));
-        return fallback_stream.good() || fallback_stream.gcount() == static_cast<std::streamsize>(count);
+        return fallback_stream.gcount() == static_cast<std::streamsize>(count);
     }
 
     bool asciiLine(std::size_t frame, std::string& scratch, std::string_view& line) const noexcept {
@@ -367,13 +376,12 @@ IndexedDatFile::OpenResult IndexedDatFile::open(const RecordConfig& config,
         auto acceptLine = [&](std::uint64_t offset, std::string_view line) {
             if (!line.empty() && line.back() == '\r') line.remove_suffix(1);
             line = trim_view(line);
-            if (line.empty()) return;
+            if (line.empty()) return false;
             std::uint32_t sample = 0;
             std::uint32_t timestamp = 0;
-            if (!parse_u32(field_view(line, 0), sample) || !parse_u32(field_view(line, 1), timestamp)) {
-                return;
-            }
+            if (!parse_u32(field_view(line, 0), sample) || !parse_u32(field_view(line, 1), timestamp)) return false;
             impl->ascii_offsets.push_back(offset);
+            return true;
         };
 
         std::size_t rejectedRows = 0;
@@ -384,9 +392,7 @@ IndexedDatFile::OpenResult IndexedDatFile::open(const RecordConfig& config,
                 if (i == impl->file_size || bytes[i] == '\n') {
                     std::string_view line(bytes + static_cast<std::size_t>(begin),
                                           static_cast<std::size_t>(i - begin));
-                    const std::size_t before = impl->ascii_offsets.size();
-                    acceptLine(begin, line);
-                    if (!trim_view(line).empty() && impl->ascii_offsets.size() == before) ++rejectedRows;
+                    if (!trim_view(line).empty() && !acceptLine(begin, line)) ++rejectedRows;
                     begin = i + 1u;
                 }
             }
@@ -396,9 +402,7 @@ IndexedDatFile::OpenResult IndexedDatFile::open(const RecordConfig& config,
             while (stream) {
                 const auto position = stream.tellg();
                 if (position < 0 || !std::getline(stream, line)) break;
-                const std::size_t before = impl->ascii_offsets.size();
-                acceptLine(static_cast<std::uint64_t>(position), line);
-                if (!trim_view(line).empty() && impl->ascii_offsets.size() == before) ++rejectedRows;
+                if (!trim_view(line).empty() && !acceptLine(static_cast<std::uint64_t>(position), line)) ++rejectedRows;
             }
         }
         impl->frame_count = impl->ascii_offsets.size();
@@ -406,15 +410,18 @@ IndexedDatFile::OpenResult IndexedDatFile::open(const RecordConfig& config,
             result.diagnostics.emplace_back("ASCII DAT: skipped " + std::to_string(rejectedRows)
                                             + " row(s) with invalid sample/timestamp fields.");
         }
-    } else if (config.data_format == DataFormat::Binary16
-               || config.data_format == DataFormat::Binary32
-               || config.data_format == DataFormat::Float32) {
+    } else if (is_binary_family(config.data_format)) {
         impl->frame_size = binary_frame_size(config);
         if (impl->frame_size == 0) {
             result.diagnostics.emplace_back("Invalid binary DAT frame layout.");
             return result;
         }
-        impl->frame_count = static_cast<std::size_t>(impl->file_size / impl->frame_size);
+        const std::uint64_t completeFrames = impl->file_size / impl->frame_size;
+        if (completeFrames > std::numeric_limits<std::size_t>::max()) {
+            result.diagnostics.emplace_back("DAT contains more frames than this process can index.");
+            return result;
+        }
+        impl->frame_count = static_cast<std::size_t>(completeFrames);
         const std::uint64_t remainder = impl->file_size % impl->frame_size;
         if (remainder != 0) {
             result.diagnostics.emplace_back("Binary DAT truncated tail: ignored " + std::to_string(remainder)
@@ -439,15 +446,8 @@ std::size_t IndexedDatFile::frameCount() const noexcept { return m_impl ? m_impl
 std::size_t IndexedDatFile::analogCount() const noexcept { return m_impl ? m_impl->config.analog_channels.size() : 0; }
 std::size_t IndexedDatFile::statusCount() const noexcept { return m_impl ? m_impl->config.status_channels.size() : 0; }
 bool IndexedDatFile::memoryMapped() const noexcept { return m_impl && m_impl->mapping.data() != nullptr; }
-bool IndexedDatFile::binaryFamily() const noexcept {
-    if (!m_impl) return false;
-    return m_impl->config.data_format == DataFormat::Binary16
-           || m_impl->config.data_format == DataFormat::Binary32
-           || m_impl->config.data_format == DataFormat::Float32;
-}
-DataFormat IndexedDatFile::dataFormat() const noexcept {
-    return m_impl ? m_impl->config.data_format : DataFormat::Unknown;
-}
+bool IndexedDatFile::binaryFamily() const noexcept { return m_impl && m_impl->binaryFamily(); }
+DataFormat IndexedDatFile::dataFormat() const noexcept { return m_impl ? m_impl->config.data_format : DataFormat::Unknown; }
 const std::filesystem::path& IndexedDatFile::path() const noexcept {
     static const std::filesystem::path empty;
     return m_impl ? m_impl->dat_path : empty;
@@ -456,14 +456,10 @@ const std::filesystem::path& IndexedDatFile::path() const noexcept {
 std::uint32_t IndexedDatFile::sampleNumber(std::size_t frame) const noexcept {
     if (!m_impl || frame >= m_impl->frame_count) return 0;
     if (m_impl->binaryFamily()) {
-        if (m_impl->mapping.data()) {
-            const auto* bytes = m_impl->mapping.data() + frame * m_impl->frame_size;
-            return read_le_bytes<std::uint32_t>(bytes);
-        }
-        std::uint32_t value = 0;
-        if (!m_impl->readBytes(frame * m_impl->frame_size, &value, sizeof(value))) return 0;
-        if constexpr (std::endian::native == std::endian::big) value = byte_swap(value);
-        return value;
+        if (m_impl->mapping.data()) return read_le_bytes<std::uint32_t>(m_impl->mapping.data() + frame * m_impl->frame_size);
+        std::array<std::byte, sizeof(std::uint32_t)> bytes{};
+        if (!m_impl->readBytes(static_cast<std::uint64_t>(frame) * m_impl->frame_size, bytes.data(), bytes.size())) return 0;
+        return read_le_bytes<std::uint32_t>(bytes.data());
     }
     std::string scratch;
     std::string_view line;
@@ -474,16 +470,11 @@ std::uint32_t IndexedDatFile::sampleNumber(std::size_t frame) const noexcept {
 std::uint32_t IndexedDatFile::rawTimestamp(std::size_t frame) const noexcept {
     if (!m_impl || frame >= m_impl->frame_count) return 0;
     if (m_impl->binaryFamily()) {
-        if (m_impl->mapping.data()) {
-            const auto* bytes = m_impl->mapping.data() + frame * m_impl->frame_size + sizeof(std::uint32_t);
-            return read_le_bytes<std::uint32_t>(bytes);
-        }
-        std::uint32_t value = 0;
-        const std::uint64_t offset = static_cast<std::uint64_t>(frame) * m_impl->frame_size
-                                     + sizeof(std::uint32_t);
-        if (!m_impl->readBytes(offset, &value, sizeof(value))) return 0;
-        if constexpr (std::endian::native == std::endian::big) value = byte_swap(value);
-        return value;
+        const std::uint64_t offset = static_cast<std::uint64_t>(frame) * m_impl->frame_size + sizeof(std::uint32_t);
+        if (m_impl->mapping.data()) return read_le_bytes<std::uint32_t>(m_impl->mapping.data() + static_cast<std::size_t>(offset));
+        std::array<std::byte, sizeof(std::uint32_t)> bytes{};
+        if (!m_impl->readBytes(offset, bytes.data(), bytes.size())) return 0;
+        return read_le_bytes<std::uint32_t>(bytes.data());
     }
     std::string scratch;
     std::string_view line;
@@ -496,33 +487,25 @@ double IndexedDatFile::analogValue(std::size_t frame, std::size_t channel) const
         return std::numeric_limits<double>::quiet_NaN();
     }
     if (m_impl->binaryFamily()) {
-        if (m_impl->mapping.data()) {
-            return decode_binary_analog(m_impl->config,
-                                        m_impl->mapping.data() + frame * m_impl->frame_size,
-                                        channel);
-        }
-        std::array<std::byte, sizeof(std::int32_t)> storage{};
         const std::size_t width = sample_width(m_impl->config.data_format);
         const std::uint64_t offset = static_cast<std::uint64_t>(frame) * m_impl->frame_size
                                      + kBinaryHeaderBytes + channel * width;
-        if (!m_impl->readBytes(offset, storage.data(), width)) {
-            return std::numeric_limits<double>::quiet_NaN();
+        if (m_impl->mapping.data()) {
+            return decode_raw_analog(m_impl->config.data_format, m_impl->config.revision_year,
+                                     m_impl->config.analog_channels[channel],
+                                     m_impl->mapping.data() + static_cast<std::size_t>(offset));
         }
-        std::array<std::byte, kBinaryHeaderBytes + sizeof(std::int32_t)> fake{};
-        std::copy_n(storage.data(), width, fake.data() + kBinaryHeaderBytes);
-        RecordConfig one = m_impl->config;
-        if (channel != 0) one.analog_channels = {m_impl->config.analog_channels[channel]};
-        else one.analog_channels.resize(1);
-        return decode_binary_analog(one, fake.data(), 0);
+        std::array<std::byte, sizeof(std::int32_t)> bytes{};
+        if (!m_impl->readBytes(offset, bytes.data(), width)) return std::numeric_limits<double>::quiet_NaN();
+        return decode_raw_analog(m_impl->config.data_format, m_impl->config.revision_year,
+                                 m_impl->config.analog_channels[channel], bytes.data());
     }
 
     std::string scratch;
     std::string_view line;
     if (!m_impl->asciiLine(frame, scratch, line)) return std::numeric_limits<double>::quiet_NaN();
     double raw = 0.0;
-    if (!parse_double(field_view(line, 2u + channel), raw)) {
-        return std::numeric_limits<double>::quiet_NaN();
-    }
+    if (!parse_double(field_view(line, 2u + channel), raw)) return std::numeric_limits<double>::quiet_NaN();
     const auto& definition = m_impl->config.analog_channels[channel];
     return definition.a * raw + definition.b;
 }
@@ -538,11 +521,11 @@ bool IndexedDatFile::statusValue(std::size_t frame, std::size_t channel) const n
         const std::size_t width = sample_width(m_impl->config.data_format);
         const std::size_t statusBase = kBinaryHeaderBytes + m_impl->config.analog_channels.size() * width;
         const std::size_t word = channel / 16u;
-        std::uint16_t packed = 0;
         const std::uint64_t offset = static_cast<std::uint64_t>(frame) * m_impl->frame_size
                                      + statusBase + word * sizeof(std::uint16_t);
-        if (!m_impl->readBytes(offset, &packed, sizeof(packed))) return false;
-        if constexpr (std::endian::native == std::endian::big) packed = byte_swap(packed);
+        std::array<std::byte, sizeof(std::uint16_t)> bytes{};
+        if (!m_impl->readBytes(offset, bytes.data(), bytes.size())) return false;
+        const auto packed = read_le_bytes<std::uint16_t>(bytes.data());
         return (packed & static_cast<std::uint16_t>(1u << (channel % 16u))) != 0u;
     }
 
@@ -566,12 +549,12 @@ void IndexedDatFile::copyAnalogRange(std::size_t channel,
     if (m_impl->binaryFamily() && !m_impl->mapping.data()) {
         std::ifstream stream(m_impl->dat_path, std::ios::binary);
         if (!stream) return;
-        std::vector<std::byte> frame(m_impl->frame_size);
+        std::vector<std::byte> frameBuffer(m_impl->frame_size);
         stream.seekg(static_cast<std::streamoff>(first * m_impl->frame_size), std::ios::beg);
         for (std::size_t index = first; index < end; ++index) {
-            stream.read(reinterpret_cast<char*>(frame.data()), static_cast<std::streamsize>(frame.size()));
-            if (stream.gcount() != static_cast<std::streamsize>(frame.size())) break;
-            destination.push_back(decode_binary_analog(m_impl->config, frame.data(), channel));
+            stream.read(reinterpret_cast<char*>(frameBuffer.data()), static_cast<std::streamsize>(frameBuffer.size()));
+            if (stream.gcount() != static_cast<std::streamsize>(frameBuffer.size())) break;
+            destination.push_back(decode_binary_analog(m_impl->config, frameBuffer.data(), channel));
         }
         return;
     }
@@ -644,12 +627,10 @@ DatIndexSummary IndexedDatFile::buildIndex(double timestamp_scale_seconds,
             std::string_view line;
             if (m_impl->mapping.data()) {
                 const std::uint64_t offset = m_impl->ascii_offsets[frameIndex];
-                const char* begin = reinterpret_cast<const char*>(m_impl->mapping.data()
-                                                                  + static_cast<std::size_t>(offset));
+                const char* begin = reinterpret_cast<const char*>(m_impl->mapping.data() + static_cast<std::size_t>(offset));
                 const auto remaining = static_cast<std::size_t>(m_impl->file_size - offset);
                 const void* newline = std::memchr(begin, '\n', remaining);
-                const auto length = newline ? static_cast<std::size_t>(static_cast<const char*>(newline) - begin)
-                                            : remaining;
+                const auto length = newline ? static_cast<std::size_t>(static_cast<const char*>(newline) - begin) : remaining;
                 line = std::string_view(begin, length);
                 if (!line.empty() && line.back() == '\r') line.remove_suffix(1);
             } else {
@@ -659,6 +640,7 @@ DatIndexSummary IndexedDatFile::buildIndex(double timestamp_scale_seconds,
                 if (!asciiScratch.empty() && asciiScratch.back() == '\r') asciiScratch.pop_back();
                 line = asciiScratch;
             }
+
             split_views(line, fields);
             if (fields.size() < 2 || !parse_u32(fields[1], timestamp)) continue;
             for (std::size_t channel = 0; channel < m_impl->config.analog_channels.size(); ++channel) {
@@ -689,11 +671,7 @@ DatIndexSummary IndexedDatFile::buildIndex(double timestamp_scale_seconds,
         havePreviousStatus = true;
     }
 
-    if (summary.time_seconds.size() < m_impl->frame_count) {
-        // A streaming fallback may encounter an unexpected short read even if
-        // file_size initially suggested more data. Keep only the valid prefix.
-        summary.cancelled = cancel && cancel->load(std::memory_order_relaxed);
-    }
+    if (cancel && cancel->load(std::memory_order_relaxed)) summary.cancelled = true;
     return summary;
 }
 
