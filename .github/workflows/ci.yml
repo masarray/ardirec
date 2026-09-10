@@ -33,6 +33,8 @@ jobs:
         run: cmake --build build-bench --target ardirec-large-record-benchmark --parallel 2
       - name: Exercise 10M-sample / ~210 MiB record
         run: ./build-bench/benchmarks/ardirec-large-record-benchmark --samples 10000000 --analog 6 --digital 8 --sample-rate 10000
+      - name: Exercise 120-channel / ~238 MiB record
+        run: ./build-bench/benchmarks/ardirec-large-record-benchmark --samples 1000000 --analog 120 --digital 8 --sample-rate 10000
 
   desktop-linux:
     runs-on: ubuntu-latest
