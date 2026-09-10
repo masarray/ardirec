@@ -114,17 +114,21 @@ QVariantMap TableSnapshotController::snapshotAt(int channelIndex, double absolut
     const QString key = cacheKey(channelIndex, absoluteTimeSeconds);
     if (const auto it = m_cache.constFind(key); it != m_cache.constEnd()) return it.value();
 
-    const auto& samples = m_document->analogSamples(channelIndex);
     const auto& times = m_document->timeSeconds();
     const auto [first, end] = oneCycleWindow(absoluteTimeSeconds);
-    const std::size_t cappedEnd = std::min({end, samples.size(), times.size()});
+    const std::size_t cappedEnd = std::min(end, times.size());
     if (first >= cappedEnd || cappedEnd - first < 4) return {{QStringLiteral("valid"), false}};
+
+    std::vector<double> samples;
+    m_document->copyRecordedAnalogRange(channelIndex, first, cappedEnd, samples);
+    const std::size_t count = std::min(samples.size(), cappedEnd - first);
+    if (count < 4) return {{QStringLiteral("valid"), false}};
 
     const double scale = m_document->channelDisplayScale(channelIndex);
     long double sumSquares = 0.0L;
     double cyclePeakAbs = 0.0;
     std::size_t finiteCount = 0;
-    for (std::size_t i = first; i < cappedEnd; ++i) {
+    for (std::size_t i = 0; i < count; ++i) {
         const double value = samples[i];
         if (!std::isfinite(value)) continue;
         sumSquares += static_cast<long double>(value) * static_cast<long double>(value);
@@ -135,25 +139,16 @@ QVariantMap TableSnapshotController::snapshotAt(int channelIndex, double absolut
 
     const double recordedRms = std::sqrt(static_cast<double>(sumSquares / static_cast<long double>(finiteCount)));
     const double frequency = m_document->nominalFrequency() > 1.0 ? m_document->nominalFrequency() : 50.0;
-    const std::size_t count = cappedEnd - first;
+    const auto timeWindow = std::span<const double>(times.data() + first, count);
     const auto spectrum = ardirec::power::harmonic_spectrum(
-        std::span<const double>(samples.data() + first, count),
-        std::span<const double>(times.data() + first, count),
+        std::span<const double>(samples.data(), count),
+        timeWindow,
         frequency,
         25,
         absoluteTimeSeconds);
 
-    const auto nearestIt = std::lower_bound(times.begin(), times.end(), absoluteTimeSeconds);
-    std::size_t sampleIndex = nearestIt == times.end()
-                                  ? times.size() - 1
-                                  : static_cast<std::size_t>(std::distance(times.begin(), nearestIt));
-    if (sampleIndex > 0 && sampleIndex < times.size()
-        && std::abs(times[sampleIndex - 1] - absoluteTimeSeconds)
-               < std::abs(times[sampleIndex] - absoluteTimeSeconds)) {
-        --sampleIndex;
-    }
-    sampleIndex = std::min(sampleIndex, samples.size() - 1);
-    const double instantaneous = std::isfinite(samples[sampleIndex]) ? samples[sampleIndex] * scale : 0.0;
+    const double instantaneous = m_document->sampleValue(channelIndex, absoluteTimeSeconds);
+    const double safeInstantaneous = std::isfinite(instantaneous) ? instantaneous : 0.0;
 
     const double absScale = std::abs(scale);
     const double h1Recorded = spectrum.valid ? spectrum.fundamental_rms : 0.0;
@@ -163,7 +158,8 @@ QVariantMap TableSnapshotController::snapshotAt(int channelIndex, double absolut
     const double dcRecorded = spectrum.valid ? spectrum.dc_component : 0.0;
     const double dcPercent = h1Recorded > kMinimumMagnitude ? std::abs(dcRecorded) / h1Recorded * 100.0 : 0.0;
     const double displayedRms = recordedRms * absScale;
-    const auto lastExtremeRecorded = ardirec::power::last_extreme_value(samples, times, absoluteTimeSeconds);
+    const auto lastExtremeRecorded = ardirec::power::last_extreme_value(
+        std::span<const double>(samples.data(), count), timeWindow, absoluteTimeSeconds);
     const double displayedExtremum = lastExtremeRecorded.value_or(0.0) * scale;
     const double displayedCyclePeak = cyclePeakAbs * absScale;
     const double crestFactor = displayedRms > kMinimumMagnitude ? displayedCyclePeak / displayedRms : 0.0;
@@ -186,7 +182,7 @@ QVariantMap TableSnapshotController::snapshotAt(int channelIndex, double absolut
                        {QStringLiteral("role"), m_document->analogRole(channelIndex)},
                        {QStringLiteral("phase"), channelPhase(channelIndex)},
                        {QStringLiteral("unit"), m_document->channelUnit(channelIndex)},
-                       {QStringLiteral("instant"), instantaneous},
+                       {QStringLiteral("instant"), safeInstantaneous},
                        {QStringLiteral("rms"), displayedRms},
                        {QStringLiteral("fundamental"), h1},
                        {QStringLiteral("angle"), angle},
