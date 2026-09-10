@@ -116,6 +116,12 @@ int main() {
     try {
         const auto directory = std::filesystem::temp_directory_path() / "ardirec_binary_field_robustness";
         std::error_code ignored;
+        // Tests can be interrupted on Windows while an mmap-backed fixture is
+        // still alive. Recreate the directory when possible, but use distinct
+        // DAT names for later cases so the test never relies on truncating an
+        // actively mapped file.
+        std::filesystem::remove_all(directory, ignored);
+        ignored.clear();
         std::filesystem::create_directories(directory, ignored);
         require(!ignored, "temporary binary robustness directory creates");
         const auto cfgPath = directory / "record.cfg";
@@ -132,24 +138,31 @@ int main() {
 
         // A valid complete frame followed by damaged bytes remains readable.
         write_cfg(cfgPath, 2013, "BINARY");
+        const auto truncatedDatPath = directory / "truncated.dat";
         auto truncatedTail = binary16_frame(123u);
         truncatedTail.push_back(static_cast<std::byte>(0x5au));
-        write_bytes(datPath, truncatedTail);
+        write_bytes(truncatedDatPath, truncatedTail);
         const auto parsed = ardirec::comtrade::ConfigParser{}.try_parse_file(cfgPath);
         require(parsed.ok(), "truncated-tail CFG parses");
-        const auto salvaged = ardirec::comtrade::IndexedDatFile::open(*parsed.config, datPath);
+        const auto salvaged = ardirec::comtrade::IndexedDatFile::open(*parsed.config, truncatedDatPath);
         require(salvaged.file != nullptr, "complete prefix survives damaged binary tail");
         require(salvaged.file->frameCount() == 1u, "damaged binary tail is not exposed as a frame");
         require(!salvaged.diagnostics.empty(), "damaged binary tail is diagnosed");
         require(std::abs(salvaged.file->analogValue(0u, 0u) - 123.0) < 1e-12,
                 "complete binary prefix remains numerically valid");
 
-        // A file containing no complete frame is a controlled failure, never a partial decode.
-        write_bytes(datPath, std::vector<std::byte>(5u, static_cast<std::byte>(0xa5u)));
-        const auto unusable = ardirec::comtrade::IndexedDatFile::open(*parsed.config, datPath);
+        // A file containing no complete frame is a controlled failure, never a
+        // partial decode. Use a separate path so Windows never needs to truncate
+        // an mmap-backed file from the previous assertion scope.
+        const auto unusableDatPath = directory / "unusable.dat";
+        write_bytes(unusableDatPath, std::vector<std::byte>(5u, static_cast<std::byte>(0xa5u)));
+        const auto unusable = ardirec::comtrade::IndexedDatFile::open(*parsed.config, unusableDatPath);
         require(unusable.file == nullptr, "binary DAT without complete frame is rejected");
         require(!unusable.diagnostics.empty(), "binary DAT without complete frame reports diagnostics");
 
+        // Best-effort cleanup: an mmap may still be held until local objects
+        // unwind on Windows, which is not a test failure and has no production
+        // lifecycle implication.
         std::filesystem::remove_all(directory, ignored);
         std::cout << "ardirec binary field robustness tests: PASS\n";
         return 0;
