@@ -1,13 +1,16 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "ardirec/comtrade/bundle.hpp"
 #include "ardirec/comtrade/dat_reader.hpp"
+#include "ardirec/comtrade/indexed_dat.hpp"
 #include "ardirec/comtrade/parser.hpp"
 #include "ardirec/comtrade/value_representation.hpp"
 
 #include <cmath>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <stdexcept>
+#include <string>
 
 namespace {
 void require(bool condition, const char* message) {
@@ -45,17 +48,58 @@ int main() {
                 "parsed primary-recorded data scales to secondary");
 
         const auto frames = ardirec::comtrade::DatReader{}.read(cfg, dir / "minimal_1999.dat");
-        require(frames.size() == 4, "DAT frame count");
-        require(std::abs(frames[1].analog[0] - 10.0) < 1e-12, "analog scaling");
-        require(frames[2].status[0], "digital state");
+        require(frames.size() == 4, "reference DAT frame count");
+        require(std::abs(frames[1].analog[0] - 10.0) < 1e-12, "reference analog scaling");
+        require(frames[2].status[0], "reference digital state");
+
+        const auto asciiOpened = ardirec::comtrade::IndexedDatFile::open(cfg, dir / "minimal_1999.dat");
+        require(asciiOpened.file != nullptr, "indexed ASCII DAT opens");
+        require(asciiOpened.file->frameCount() == 4, "indexed ASCII frame count");
+        require(std::abs(asciiOpened.file->analogValue(1, 0) - 10.0) < 1e-12,
+                "indexed ASCII analog scaling matches reference decoder");
+        require(asciiOpened.file->statusValue(2, 0), "indexed ASCII digital decode");
+        const auto asciiIndex = asciiOpened.file->buildIndex(cfg.time_multiplier * 1.0e-6);
+        require(asciiIndex.time_seconds.size() == 4, "indexed ASCII timestamp count");
+        require(asciiIndex.analog_abs_peaks.size() == cfg.analog_channels.size(), "indexed ASCII peak summary");
+        require(asciiIndex.status_active.size() == cfg.status_channels.size(), "indexed ASCII status summary");
 
         for (const auto* stem : {"binary", "binary32", "float32"}) {
-            const auto binary_cfg = ardirec::comtrade::ConfigParser{}.parse_file(dir / (std::string(stem) + ".cfg"));
-            const auto binary_frames = ardirec::comtrade::DatReader{}.read(binary_cfg, dir / (std::string(stem) + ".dat"));
-            require(binary_frames.size() == 2, "binary-family frame count");
-            require(std::abs(binary_frames[1].analog[0] - 10.0) < 1e-5, "binary-family analog scaling");
-            require(binary_frames[1].status[0] && binary_frames[1].status[1], "packed status decode");
+            const std::string base(stem);
+            const auto binary_cfg = ardirec::comtrade::ConfigParser{}.parse_file(dir / (base + ".cfg"));
+            const auto binary_frames = ardirec::comtrade::DatReader{}.read(binary_cfg, dir / (base + ".dat"));
+            require(binary_frames.size() == 2, "binary-family reference frame count");
+            require(std::abs(binary_frames[1].analog[0] - 10.0) < 1e-5, "binary-family reference analog scaling");
+            require(binary_frames[1].status[0] && binary_frames[1].status[1], "binary-family reference status decode");
+
+            const auto indexed = ardirec::comtrade::IndexedDatFile::open(binary_cfg, dir / (base + ".dat"));
+            require(indexed.file != nullptr, "binary-family indexed DAT opens");
+            require(indexed.file->frameCount() == 2, "binary-family indexed frame count");
+            require(std::abs(indexed.file->analogValue(1, 0) - binary_frames[1].analog[0]) < 1e-5,
+                    "binary-family lazy analog equals reference decoder");
+            require(indexed.file->statusValue(1, 0) && indexed.file->statusValue(1, 1),
+                    "binary-family lazy packed status decode");
+            const auto index = indexed.file->buildIndex(binary_cfg.time_multiplier * 1.0e-6);
+            require(index.time_seconds.size() == 2, "binary-family compact index count");
         }
+
+        // A non-integral final binary frame must not discard valid frames or throw.
+        const auto binaryCfg = ardirec::comtrade::ConfigParser{}.parse_file(dir / "binary.cfg");
+        const auto sourcePath = dir / "binary.dat";
+        const auto temporaryPath = std::filesystem::temp_directory_path() / "ardirec_truncated_tail_binary.dat";
+        {
+            std::ifstream source(sourcePath, std::ios::binary);
+            std::ofstream target(temporaryPath, std::ios::binary | std::ios::trunc);
+            require(static_cast<bool>(source) && static_cast<bool>(target), "temporary truncated-tail fixture opens");
+            target << source.rdbuf();
+            const char damage = static_cast<char>(0x5a);
+            target.write(&damage, 1);
+        }
+        const auto truncated = ardirec::comtrade::IndexedDatFile::open(binaryCfg, temporaryPath);
+        require(truncated.file != nullptr, "truncated-tail binary DAT remains readable");
+        require(truncated.file->frameCount() == 2, "truncated-tail binary DAT salvages complete frames");
+        require(!truncated.diagnostics.empty(), "truncated-tail binary DAT reports a diagnostic");
+        std::error_code removeError;
+        std::filesystem::remove(temporaryPath, removeError);
 
         AnalogChannel secondary_recorded;
         secondary_recorded.primary = 500000.0;
