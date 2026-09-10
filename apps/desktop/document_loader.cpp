@@ -13,6 +13,9 @@
 
 namespace {
 
+constexpr std::uintmax_t kMaximumCfgBytes = 32u * 1024u * 1024u;
+constexpr std::uintmax_t kMaximumHeaderPreviewBytes = 4u * 1024u * 1024u;
+
 std::string join_diagnostics(const std::vector<std::string>& diagnostics) {
     std::ostringstream out;
     for (std::size_t i = 0; i < diagnostics.size(); ++i) {
@@ -27,8 +30,38 @@ void append_diagnostics(std::vector<std::string>& destination,
     destination.insert(destination.end(), source.begin(), source.end());
 }
 
+bool validate_regular_file(const std::filesystem::path& path,
+                           const char* label,
+                           std::string& error) {
+    std::error_code ec;
+    const bool regular = std::filesystem::is_regular_file(path, ec);
+    if (ec) {
+        error = std::string("Cannot inspect ") + label + " file: " + ec.message();
+        return false;
+    }
+    if (!regular) {
+        error = std::string(label) + " path is not a regular file";
+        return false;
+    }
+    return true;
+}
+
+bool validate_cfg_size(const std::filesystem::path& path, std::string& error) {
+    std::error_code ec;
+    const auto size = std::filesystem::file_size(path, ec);
+    if (ec) {
+        error = "Cannot stat CFG file: " + ec.message();
+        return false;
+    }
+    if (size > kMaximumCfgBytes) {
+        error = "CFG exceeds 32 MiB safety limit; refusing unbounded metadata parsing";
+        return false;
+    }
+    return true;
+}
+
 std::string read_text_file_bounded(const std::filesystem::path& path,
-                                   std::size_t maximumBytes = 4u * 1024u * 1024u) {
+                                   std::size_t maximumBytes = static_cast<std::size_t>(kMaximumHeaderPreviewBytes)) {
     if (path.empty()) return {};
     std::ifstream stream(path, std::ios::binary);
     if (!stream) return {};
@@ -101,6 +134,11 @@ loadDocumentData(const std::filesystem::path& cfgPath,
             result->error = "Matching DAT file was not found next to CFG";
             return result;
         }
+        if (!validate_regular_file(result->bundle.cfg, "CFG", result->error)
+            || !validate_cfg_size(result->bundle.cfg, result->error)
+            || !validate_regular_file(result->bundle.dat, "DAT", result->error)) {
+            return result;
+        }
 
         auto parsed = ardirec::comtrade::ConfigParser{}.try_parse_file(result->bundle.cfg);
         if (!parsed) {
@@ -153,7 +191,14 @@ loadDocumentData(const std::filesystem::path& cfgPath,
         result->status_active = std::move(index.status_active);
         result->digital_edge_times = std::move(index.digital_edge_times);
 
-        if (!result->bundle.hdr.empty()) result->header_text = read_text_file_bounded(result->bundle.hdr);
+        if (!result->bundle.hdr.empty()) {
+            result->header_text = read_text_file_bounded(result->bundle.hdr);
+            std::error_code headerSizeError;
+            const auto headerSize = std::filesystem::file_size(result->bundle.hdr, headerSizeError);
+            if (!headerSizeError && headerSize > kMaximumHeaderPreviewBytes) {
+                result->diagnostics.emplace_back("HDR preview truncated to 4 MiB to keep UI memory bounded.");
+            }
+        }
     } catch (const std::exception& ex) {
         result->error = std::string("Unexpected background load failure: ") + ex.what();
     } catch (...) {
