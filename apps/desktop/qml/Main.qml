@@ -340,7 +340,9 @@ ApplicationWindow {
                 anchors.fill: parent
                 visible: window.hasRecord && window.viewMode === "phasor"
                 document: documentController
-                analysis: analysisController
+                // Suspend hidden analysis views so representation toggles update only the view the
+                // operator can see. This prevents background DFT/locus work from blocking the UI.
+                analysis: window.viewMode === "phasor" ? analysisController : null
                 cursorATime: window.cursorATime
                 cursorBTime: window.cursorBTime
                 activeCursor: window.activeAnalysisCursor
@@ -350,7 +352,7 @@ ApplicationWindow {
                 anchors.fill: parent
                 visible: window.hasRecord && window.viewMode === "locus"
                 document: documentController
-                analysis: analysisController
+                analysis: window.viewMode === "locus" ? analysisController : null
                 viewStart: window.viewStart
                 visibleDuration: window.visibleDuration
                 cursorATime: window.cursorATime
@@ -361,8 +363,8 @@ ApplicationWindow {
                 anchors.fill: parent
                 visible: window.hasRecord && window.viewMode === "harmonics"
                 document: documentController
-                analysis: analysisController
-                snapshot: harmonicSnapshotController
+                analysis: window.viewMode === "harmonics" ? analysisController : null
+                snapshot: window.viewMode === "harmonics" ? harmonicSnapshotController : null
                 visibleChannels: window.visibleChannels
                 cursorTime: window.cursorATime
             }
@@ -371,8 +373,8 @@ ApplicationWindow {
                 anchors.fill: parent
                 visible: window.hasRecord && window.viewMode === "table"
                 document: documentController
-                analysis: analysisController
-                snapshot: tableSnapshotController
+                analysis: window.viewMode === "table" ? analysisController : null
+                snapshot: window.viewMode === "table" ? tableSnapshotController : null
                 visibleChannels: window.visibleChannels
                 cursorTime: window.cursorATime
                 valueRepresentation: documentController.valueRepresentation

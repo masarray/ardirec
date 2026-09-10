@@ -5,7 +5,7 @@ import QtQuick.Layouts
 
 Rectangle {
     id: root
-    height: compactMode ? 38 : 62
+    height: 40
     color: "#f2f2f2"
     border.color: "#b7b7b7"
 
@@ -15,13 +15,68 @@ Rectangle {
     property bool hasRecord: false
     property var diagnostics: documentController.diagnostics
     readonly property int diagnosticCount: diagnostics ? diagnostics.length : 0
-    readonly property bool compactMode: currentViewLabel === "ENGINEERING TABLE"
+
     signal openRequested()
     signal signalsRequested()
     signal fitRequested()
     signal triggerRequested()
     signal zoomInRequested()
     signal zoomOutRequested()
+
+    Popup {
+        id: aboutPopup
+        width: 390
+        height: 164
+        x: Math.max(8, root.width - width - 10)
+        y: root.height + 2
+        padding: 0
+        modal: false
+        focus: true
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        background: Rectangle { color: "#ffffff"; border.color: "#aeb4ba"; radius: 2 }
+        contentItem: ColumnLayout {
+            spacing: 4
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 42
+                color: "#eef1f3"
+                border.color: "#d2d6da"
+                Label {
+                    anchors.left: parent.left
+                    anchors.leftMargin: 12
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "ArdIREC — COMTRADE Workstation"
+                    color: "#293139"
+                    font.pixelSize: 11
+                    font.weight: Font.DemiBold
+                }
+            }
+            Label {
+                Layout.leftMargin: 12
+                Layout.rightMargin: 12
+                Layout.topMargin: 6
+                text: "Protection disturbance-record analysis workstation"
+                color: "#515b63"
+                font.pixelSize: 9
+            }
+            Label {
+                Layout.leftMargin: 12
+                text: "Version " + Qt.application.version
+                color: "#69727a"
+                font.pixelSize: 8
+            }
+            Label {
+                Layout.leftMargin: 12
+                Layout.rightMargin: 12
+                Layout.fillWidth: true
+                text: "COMTRADE waveform, phasor, harmonics, engineering table and distance R-X analysis."
+                color: "#69727a"
+                font.pixelSize: 8
+                wrapMode: Text.Wrap
+            }
+            Item { Layout.fillHeight: true }
+        }
+    }
 
     Popup {
         id: diagnosticsPopup
@@ -116,137 +171,123 @@ Rectangle {
         }
     }
 
-    ColumnLayout {
+    RowLayout {
         anchors.fill: parent
-        spacing: 0
+        anchors.leftMargin: 3
+        anchors.rightMargin: 8
+        spacing: 2
 
-        Rectangle {
-            Layout.fillWidth: true
-            Layout.preferredHeight: root.compactMode ? 0 : 24
-            visible: !root.compactMode
-            color: "#fafafa"
-            border.color: "#d0d0d0"
-            RowLayout {
-                anchors.fill: parent
-                anchors.leftMargin: 8
-                spacing: 14
-                Repeater {
-                    model: ["File", "Edit", "View", "Signals", "Analysis", "Help"]
-                    Label {
-                        required property string modelData
-                        text: modelData
-                        color: "#202020"
-                        font.pixelSize: 10
-                    }
-                }
-                Item { Layout.fillWidth: true }
-                Label {
-                    text: "ardirec"
-                    color: "#3a3a3a"
-                    font.pixelSize: 10
-                    font.weight: Font.DemiBold
-                }
-                Item { Layout.preferredWidth: 8 }
+        MenuBar {
+            id: menuBar
+            Layout.fillHeight: true
+
+            Menu {
+                title: "&File"
+                MenuItem { text: "Open COMTRADE…"; onTriggered: root.openRequested() }
+                MenuSeparator { }
+                MenuItem { text: "Exit"; onTriggered: Qt.quit() }
+            }
+            Menu {
+                title: "&View"
+                MenuItem { text: "Fit complete record"; enabled: root.hasRecord; onTriggered: root.fitRequested() }
+                MenuItem { text: "Focus trigger"; enabled: root.hasRecord; onTriggered: root.triggerRequested() }
+                MenuSeparator { }
+                MenuItem { text: "Zoom in"; enabled: root.hasRecord; onTriggered: root.zoomInRequested() }
+                MenuItem { text: "Zoom out"; enabled: root.hasRecord; onTriggered: root.zoomOutRequested() }
+            }
+            Menu {
+                title: "&Signals"
+                MenuItem { text: "Select visible signals…"; enabled: root.hasRecord; onTriggered: root.signalsRequested() }
+            }
+            Menu {
+                title: "&Help"
+                MenuItem { text: "About ArdIREC"; onTriggered: aboutPopup.open() }
             }
         }
 
-        RowLayout {
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            Layout.leftMargin: 7
-            Layout.rightMargin: 8
-            spacing: 3
+        Rectangle { width: 1; height: 22; color: "#c5c9cc"; Layout.leftMargin: 2; Layout.rightMargin: 4 }
 
-            ToolButton {
-                text: "Open"
-                font.pixelSize: root.compactMode ? 9 : 10
-                onClicked: root.openRequested()
-                ToolTip.visible: hovered
-                ToolTip.text: "Open COMTRADE CFG"
-            }
-            ToolButton {
-                text: "Signals"
-                font.pixelSize: root.compactMode ? 9 : 10
-                enabled: root.hasRecord
-                onClicked: root.signalsRequested()
-            }
-            ToolButton {
-                visible: root.hasRecord && root.diagnosticCount > 0
-                text: "Diag " + root.diagnosticCount
-                font.pixelSize: root.compactMode ? 9 : 10
-                onClicked: diagnosticsPopup.open()
-                ToolTip.visible: hovered
-                ToolTip.text: "Show recoverable COMTRADE record diagnostics"
-            }
-            Rectangle { width: 1; height: root.compactMode ? 18 : 24; color: "#c8c8c8" }
-            ToolButton {
-                visible: !root.compactMode
-                text: "Fit"
-                font.pixelSize: 10
-                enabled: root.hasRecord
-                onClicked: root.fitRequested()
-                ToolTip.visible: hovered
-                ToolTip.text: "Fit complete record"
-            }
-            ToolButton {
-                visible: !root.compactMode
-                text: "Trigger"
-                font.pixelSize: 10
-                enabled: root.hasRecord
-                onClicked: root.triggerRequested()
-                ToolTip.visible: hovered
-                ToolTip.text: "Center common time view around COMTRADE trigger"
-            }
-            ToolButton {
-                visible: !root.compactMode
-                text: "Zoom +"
-                font.pixelSize: 10
-                enabled: root.hasRecord
-                onClicked: root.zoomInRequested()
-            }
-            ToolButton {
-                visible: !root.compactMode
-                text: "Zoom −"
-                font.pixelSize: 10
-                enabled: root.hasRecord
-                onClicked: root.zoomOutRequested()
-            }
-            Rectangle { visible: !root.compactMode; width: 1; height: 24; color: "#c8c8c8" }
+        ToolButton {
+            text: "Fit"
+            font.pixelSize: 9
+            enabled: root.hasRecord
+            Layout.preferredWidth: 36
+            onClicked: root.fitRequested()
+            ToolTip.visible: hovered
+            ToolTip.text: "Fit complete record (Ctrl+0)"
+        }
+        ToolButton {
+            text: "Trigger"
+            font.pixelSize: 9
+            enabled: root.hasRecord
+            Layout.preferredWidth: 54
+            onClicked: root.triggerRequested()
+            ToolTip.visible: hovered
+            ToolTip.text: "Focus common time view around COMTRADE trigger"
+        }
+        ToolButton {
+            text: "−"
+            font.pixelSize: 11
+            enabled: root.hasRecord
+            Layout.preferredWidth: 30
+            onClicked: root.zoomOutRequested()
+            ToolTip.visible: hovered
+            ToolTip.text: "Zoom out"
+        }
+        ToolButton {
+            text: "+"
+            font.pixelSize: 11
+            enabled: root.hasRecord
+            Layout.preferredWidth: 30
+            onClicked: root.zoomInRequested()
+            ToolTip.visible: hovered
+            ToolTip.text: "Zoom in"
+        }
+        ToolButton {
+            visible: root.hasRecord && root.diagnosticCount > 0
+            text: "Diag " + root.diagnosticCount
+            font.pixelSize: 8
+            onClicked: diagnosticsPopup.open()
+            ToolTip.visible: hovered
+            ToolTip.text: "Show recoverable COMTRADE diagnostics"
+        }
 
-            ColumnLayout {
-                Layout.leftMargin: 5
-                spacing: 0
-                Label {
-                    text: root.recordTitle
-                    color: "#1d1d1d"
-                    font.pixelSize: root.compactMode ? 9 : 10
-                    font.weight: Font.DemiBold
-                    elide: Text.ElideRight
-                    Layout.maximumWidth: root.compactMode ? 360 : 300
-                }
-                Label {
-                    visible: !root.compactMode
-                    text: root.recordMetadata
-                    color: "#696969"
-                    font.pixelSize: 8
-                    elide: Text.ElideRight
-                    Layout.maximumWidth: 450
-                }
-            }
-            Item { Layout.fillWidth: true }
+        Rectangle { width: 1; height: 22; color: "#c5c9cc"; Layout.leftMargin: 4; Layout.rightMargin: 5 }
+
+        ColumnLayout {
+            spacing: 0
+            Layout.maximumWidth: 500
             Label {
-                text: root.currentViewLabel
-                color: "#555555"
+                text: root.recordTitle
+                color: "#1d1d1d"
                 font.pixelSize: 9
-                font.weight: root.compactMode ? Font.DemiBold : Font.Normal
-                font.letterSpacing: 0.6
+                font.weight: Font.DemiBold
+                elide: Text.ElideRight
+                Layout.maximumWidth: 480
             }
             Label {
-                visible: root.compactMode
-                text: "ardirec"
-                color: "#747b81"
-                font.pixelSize: 8
+                text: root.recordMetadata
+                color: "#696969"
+                font.pixelSize: 7
+                elide: Text.ElideRight
+                Layout.maximumWidth: 480
             }
+        }
+
+        Item { Layout.fillWidth: true }
+        Label {
+            text: root.currentViewLabel
+            color: "#4f5961"
+            font.pixelSize: 8
+            font.weight: Font.DemiBold
+            font.letterSpacing: 0.6
+        }
+        Rectangle { width: 1; height: 16; color: "#d0d3d5"; Layout.leftMargin: 5; Layout.rightMargin: 5 }
+        Label {
+            text: "ardirec"
+            color: "#747b81"
+            font.pixelSize: 8
+            font.weight: Font.DemiBold
         }
     }
 }

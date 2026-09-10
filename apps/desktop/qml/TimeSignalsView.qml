@@ -24,8 +24,12 @@ Rectangle {
     property real axisWidth: 170
     property real analogTrackHeight: 148
     property real digitalTrackHeight: 28
-    property real cursorHoverRadius: 8
+    property real cursorHoverRadius: 16
     property real cursorSnapRadius: 12
+    readonly property bool digitalFilterUseful: document
+                                                        && document.digitalCount > 1
+                                                        && document.activeDigitalCount > 0
+                                                        && document.activeDigitalCount < document.digitalCount
 
     signal cursorARequested(real timeSeconds)
     signal cursorBRequested(real timeSeconds)
@@ -185,22 +189,36 @@ Rectangle {
                     Label { text: "DIGITAL EVENTS"; color: "#30363c"; font.pixelSize: 9; font.weight: Font.DemiBold; font.letterSpacing: 0.7; anchors.verticalCenter: parent.verticalCenter }
                     Label { text: root.displayedDigitalChannels.length + " / " + (root.document ? root.document.digitalCount : 0); color: "#6c757d"; font.pixelSize: 8; anchors.verticalCenter: parent.verticalCenter }
                     Label { text: root.document ? root.document.activeDigitalCount + " active" : ""; color: "#7b8187"; font.pixelSize: 8; anchors.verticalCenter: parent.verticalCenter }
-                    Item { width: Math.max(0, parent.width - 430); height: 1 }
+                    Item { width: Math.max(0, parent.width - (root.digitalFilterUseful ? 430 : 300)); height: 1 }
+                    Label {
+                        visible: root.digitalFilterUseful
+                        text: "SHOW"
+                        color: "#6f777e"
+                        font.pixelSize: 7
+                        font.weight: Font.DemiBold
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
                     ToolButton {
+                        visible: root.digitalFilterUseful
                         text: "Active"
                         checkable: true
                         checked: root.digitalDisplayMode === "active"
                         font.pixelSize: 8
                         anchors.verticalCenter: parent.verticalCenter
                         onClicked: root.digitalDisplayModeRequested("active")
+                        ToolTip.visible: hovered
+                        ToolTip.text: "Show only digital channels that change or assert in this record"
                     }
                     ToolButton {
+                        visible: root.digitalFilterUseful
                         text: "All"
                         checkable: true
                         checked: root.digitalDisplayMode === "all"
                         font.pixelSize: 8
                         anchors.verticalCenter: parent.verticalCenter
                         onClicked: root.digitalDisplayModeRequested("all")
+                        ToolTip.visible: hovered
+                        ToolTip.text: "Show every configured digital channel"
                     }
                 }
             }
