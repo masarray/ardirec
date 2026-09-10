@@ -44,6 +44,8 @@ class DocumentController final : public QObject {
     Q_PROPERTY(QString startTimeText READ startTimeText NOTIFY documentChanged)
     Q_PROPERTY(QString triggerTimeText READ triggerTimeText NOTIFY documentChanged)
     Q_PROPERTY(QString recordHealth READ recordHealth NOTIFY documentChanged)
+    Q_PROPERTY(QStringList diagnostics READ diagnostics NOTIFY documentChanged)
+    Q_PROPERTY(int diagnosticCount READ diagnosticCount NOTIFY documentChanged)
     Q_PROPERTY(QString valueRepresentation READ valueRepresentation NOTIFY representationChanged)
     Q_PROPERTY(bool transformerRatiosAvailable READ transformerRatiosAvailable NOTIFY documentChanged)
     Q_PROPERTY(QString transformerRatioSummary READ transformerRatioSummary NOTIFY documentChanged)
@@ -77,6 +79,8 @@ public:
     QString startTimeText() const { return m_startTimeText; }
     QString triggerTimeText() const { return m_triggerTimeText; }
     QString recordHealth() const { return m_recordHealth; }
+    QStringList diagnostics() const { return m_diagnostics; }
+    int diagnosticCount() const { return m_diagnostics.size(); }
     QString valueRepresentation() const { return m_valueRepresentation; }
     bool transformerRatiosAvailable() const { return m_transformerRatiosAvailable; }
     QString transformerRatioSummary() const { return m_transformerRatioSummary; }
@@ -136,6 +140,7 @@ private:
     QStringList m_channelNames;
     QStringList m_channelUnits;
     QStringList m_statusNames;
+    QStringList m_diagnostics;
     QString m_error;
     QString m_loadingStatus;
     QString m_selectedSignal{QStringLiteral("No signal")};
