@@ -2,6 +2,7 @@
 #pragma once
 
 #include "ardirec/comtrade/indexed_dat.hpp"
+#include "ardirec/comtrade/parser.hpp"
 #include "ardirec/comtrade/record.hpp"
 
 #include <QObject>
