@@ -49,6 +49,11 @@ private:
     QPointer<DocumentController> m_document;
     std::shared_ptr<const ardirec::comtrade::IndexedDatFile> m_data;
     std::shared_ptr<const std::vector<double>> m_times;
+    std::shared_ptr<const ardirec::comtrade::AnalogLodIndex> m_lod;
+    // Render-thread scratch arrays keep capacity between paints to avoid heap
+    // churn during pan/zoom. They are not engineering data caches.
+    std::vector<double> m_bucketLows;
+    std::vector<double> m_bucketHighs;
     int m_channelIndex{0};
     QColor m_traceColor{QStringLiteral("#406a9b")};
     double m_displayScale{1.0};
