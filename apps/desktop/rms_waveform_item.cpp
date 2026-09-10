@@ -116,6 +116,8 @@ QSGNode* RmsWaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*
     std::size_t end = static_cast<std::size_t>(std::distance(times->begin(), last));
     start = std::min(start, count - 1);
     end = std::min(end, count);
+    if (start > 0) --start;
+    if (end < count) ++end;
     if (end <= start + 1) end = std::min(count, start + 2);
     if (end <= start + 1) {
         delete node;
