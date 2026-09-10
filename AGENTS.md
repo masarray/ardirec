@@ -141,7 +141,25 @@ A successful compile and unit test are not sufficient proof that the desktop app
 
 Any change to QML types, plugin registration, deployment, or startup wiring must preserve this gate.
 
-## 12. Required implementation workflow
+## 12. Exception-free parser/analysis hot paths and bounded asynchronous diagnostics
+
+Exceptions must not be used as normal control flow inside repeated COMTRADE frame parsing, sample conversion, waveform preparation, harmonic/phasor/locus loops, cursor-driven calculations, or rendering hot paths.
+
+Prefer one coherent explicit status/result model such as compact result structs/enums, `std::expected` when available in the configured toolchain, or `std::optional` only when detailed failure context is unnecessary. Normal recoverable conditions such as malformed row, invalid numeric field, truncated tail, unavailable channel, unsupported encoding/value, or failed sample conversion should produce deterministic status rather than stack unwinding.
+
+For parsing large records, aggregate failures instead of producing one expensive diagnostic per row. A parser should be able to report summaries such as `validFrames`, `malformedRows`, `truncatedRows`, `invalidNumericFields`, and representative first/last locations while continuing to salvage valid data according to the existing parsing policy.
+
+Qt, filesystem, mapping, OS, STL, or third-party exceptions may still occur at outer boundaries. Catch them at the nearest meaningful file/worker/application boundary, convert them to the same structured error/result model, and never permit exception unwinding into the Qt event loop or inner parse/render loops. Do not silently swallow exceptions.
+
+Hot paths must not synchronously format large error strings, write log files, print repeated console output, emit one QML/UI event per error, serialize JSON, or perform telemetry. Enqueue only compact machine-readable diagnostic events into a bounded asynchronous queue/channel owned by a background diagnostic consumer.
+
+The diagnostic queue must have a fixed/bounded capacity and explicit overload behavior. Duplicate storms must be coalesced/rate-limited and represented with counters. If the queue is full, increment dropped/coalesced counters and preserve the most useful high-severity/latest context according to policy; parsing, cursor motion, waveform rendering, and GUI responsiveness must never block on diagnostic persistence.
+
+Human-readable message formatting and user-facing summaries belong outside hot paths. Diagnostic infrastructure is observational, not a correctness dependency: logging failure must never crash the workstation or prevent valid COMTRADE data from being analyzed.
+
+Do not create multiple incompatible result/error abstractions across parser, analysis, and rendering subsystems. Reuse a lightweight machine-readable error taxonomy and translate it to UI text at a non-hot boundary.
+
+## 13. Required implementation workflow
 
 Before modifying a performance-critical path:
 1. identify the actual hot path and its data lifetime;
