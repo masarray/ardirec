@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cmath>
 #include <span>
+#include <vector>
 
 namespace {
 double wrap_degrees(double angle) {
@@ -79,20 +80,23 @@ QVariantMap HarmonicSnapshotController::spectrumAt(int channelIndex,
     const QString key = cacheKey(channelIndex, absoluteTimeSeconds, maximumOrder);
     if (const auto it = m_cache.constFind(key); it != m_cache.constEnd()) return it.value();
 
-    const auto& samples = m_document->analogSamples(channelIndex);
     const auto& times = m_document->timeSeconds();
     const auto [first, end] = oneCycleWindow(absoluteTimeSeconds);
-    const std::size_t cappedEnd = std::min({end, samples.size(), times.size()});
+    const std::size_t cappedEnd = std::min(end, times.size());
     if (first >= cappedEnd || cappedEnd - first < 4) {
         return {{QStringLiteral("valid"), false}, {QStringLiteral("bins"), bins}};
     }
 
+    std::vector<double> samples;
+    m_document->copyRecordedAnalogRange(channelIndex, first, cappedEnd, samples);
+    const std::size_t count = std::min(samples.size(), cappedEnd - first);
+    if (count < 4) return {{QStringLiteral("valid"), false}, {QStringLiteral("bins"), bins}};
+
     const double frequency = m_document->nominalFrequency() > 1.0
                                  ? m_document->nominalFrequency()
                                  : 50.0;
-    const std::size_t count = cappedEnd - first;
     const auto spectrum = ardirec::power::harmonic_spectrum(
-        std::span<const double>(samples.data() + first, count),
+        std::span<const double>(samples.data(), count),
         std::span<const double>(times.data() + first, count),
         frequency,
         maximumOrder,
