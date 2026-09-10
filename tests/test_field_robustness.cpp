@@ -97,9 +97,11 @@ int main() {
         const auto index = opened.file->buildIndex(1.0e-6);
         require(index.time_seconds.size() == 4,
                 "valid-time frames remain in the compact index");
-        require(index.digital_edge_times.size() == 1,
-                "unknown digital sample does not create a synthetic edge");
-        require(std::abs(index.digital_edge_times.front() - 0.003) < 1e-12,
+        require(index.digital_edge_times.size() == 2,
+                "unknown digital sample creates no extra synthetic edge");
+        require(std::abs(index.digital_edge_times[0] - 0.001) < 1e-12,
+                "first real digital edge is retained");
+        require(std::abs(index.digital_edge_times[1] - 0.003) < 1e-12,
                 "real post-gap digital edge is retained");
         require(index.diagnostics.size() >= 2,
                 "invalid analog and digital payloads produce aggregated diagnostics");
