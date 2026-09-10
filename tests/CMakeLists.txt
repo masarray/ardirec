@@ -5,6 +5,13 @@ ardirec_set_warnings(ardirec_core_tests)
 ardirec_enable_sanitizers(ardirec_core_tests)
 add_test(NAME ardirec_core_tests COMMAND ardirec_core_tests)
 
+add_executable(ardirec_lod_tests test_lod.cpp)
+target_link_libraries(ardirec_lod_tests PRIVATE ardirec::core)
+target_compile_definitions(ardirec_lod_tests PRIVATE ARDIREC_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
+ardirec_set_warnings(ardirec_lod_tests)
+ardirec_enable_sanitizers(ardirec_lod_tests)
+add_test(NAME ardirec_lod_tests COMMAND ardirec_lod_tests)
+
 add_executable(ardirec_field_robustness_tests test_field_robustness.cpp)
 target_link_libraries(ardirec_field_robustness_tests PRIVATE ardirec::core)
 ardirec_set_warnings(ardirec_field_robustness_tests)
