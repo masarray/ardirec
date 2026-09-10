@@ -91,7 +91,9 @@ public:
     [[nodiscard]] const std::vector<double>& timeSeconds() const;
     [[nodiscard]] std::shared_ptr<const std::vector<double>> timeIndexSnapshot() const { return m_timeSeconds; }
     [[nodiscard]] std::shared_ptr<const ardirec::comtrade::IndexedDatFile> dataStoreSnapshot() const { return m_datStore; }
-    [[nodiscard]] std::shared_ptr<const ardirec::comtrade::AnalogLodIndex> analogLodSnapshot() const { return m_analogLod; }
+    [[nodiscard]] std::shared_ptr<const ardirec::comtrade::AnalogLodIndex> analogLodSnapshot() const {
+        return m_datStore ? m_datStore->analogLodSnapshot() : nullptr;
+    }
     [[nodiscard]] double recordedAnalogSampleAt(int channelIndex, std::size_t frameIndex) const noexcept;
     [[nodiscard]] bool recordedDigitalSampleAt(int channelIndex, std::size_t frameIndex) const noexcept;
     void copyRecordedAnalogRange(int channelIndex,
@@ -168,7 +170,6 @@ private:
     std::shared_ptr<std::atomic_bool> m_activeLoadCancel;
     std::shared_ptr<const ardirec::comtrade::IndexedDatFile> m_datStore;
     std::shared_ptr<const std::vector<double>> m_timeSeconds{std::make_shared<const std::vector<double>>()};
-    std::shared_ptr<const ardirec::comtrade::AnalogLodIndex> m_analogLod;
     std::vector<ardirec::comtrade::AnalogChannel> m_channelConfigs;
     std::vector<std::uint8_t> m_statusActive;
     std::vector<int> m_statusNormalState;
