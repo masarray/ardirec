@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -18,6 +19,7 @@ struct DatIndexSummary {
     std::vector<double> analog_abs_peaks;
     std::vector<std::uint8_t> status_active;
     std::vector<double> digital_edge_times;
+    std::vector<std::string> diagnostics;
     bool cancelled{false};
 };
 
@@ -58,6 +60,14 @@ public:
     [[nodiscard]] std::uint32_t rawTimestamp(std::size_t frame) const noexcept;
     [[nodiscard]] double analogValue(std::size_t frame,
                                      std::size_t channel) const noexcept;
+
+    // Tri-state field access for damaged ASCII rows. Binary complete frames are
+    // always known; malformed/missing ASCII status fields return nullopt.
+    [[nodiscard]] std::optional<bool> statusState(std::size_t frame,
+                                                  std::size_t channel) const noexcept;
+
+    // Compatibility/safe-display accessor. Unknown status values fall back to
+    // the CFG normal state rather than inventing an active transition.
     [[nodiscard]] bool statusValue(std::size_t frame,
                                    std::size_t channel) const noexcept;
 
@@ -71,7 +81,9 @@ public:
 
     // Builds only the compact metadata needed by the viewer: timestamps,
     // channel peaks, active-digital flags and the union of digital edge times.
-    // The scan is designed to run on a background worker and is cancellable.
+    // Invalid analog/status fields are counted and diagnosed without aborting
+    // the valid record. The scan is designed for a background worker and is
+    // cancellable.
     [[nodiscard]] DatIndexSummary buildIndex(double timestamp_scale_seconds,
                                              const std::atomic_bool* cancel = nullptr) const;
 
