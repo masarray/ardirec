@@ -7,6 +7,7 @@
 #include <QPointer>
 #include <QQuickItem>
 
+#include <memory>
 #include <vector>
 
 class WaveformItem : public QQuickItem {
@@ -42,14 +43,14 @@ protected:
     QSGNode* updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*) override;
 
 private:
-    void reloadSamples();
+    void reloadData();
     void refreshRepresentation();
 
     QPointer<DocumentController> m_document;
+    std::shared_ptr<const ardirec::comtrade::IndexedDatFile> m_data;
+    std::shared_ptr<const std::vector<double>> m_times;
     int m_channelIndex{0};
     QColor m_traceColor{QStringLiteral("#406a9b")};
-    std::vector<double> m_samples;
-    std::vector<double> m_times;
     double m_displayScale{1.0};
     double m_zoomFactor{1.0};
     double m_panFraction{0.0};
