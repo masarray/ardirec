@@ -16,6 +16,13 @@ namespace {
 void require(bool condition, const char* message) {
     if (!condition) throw std::runtime_error(message);
 }
+
+void write_text(const std::filesystem::path& path, const std::string& text) {
+    std::ofstream out(path, std::ios::binary | std::ios::trunc);
+    require(static_cast<bool>(out), "temporary field-robustness fixture opens");
+    out << text;
+    require(static_cast<bool>(out), "temporary field-robustness fixture writes");
+}
 }
 
 int main() {
@@ -100,6 +107,67 @@ int main() {
         require(!truncated.diagnostics.empty(), "truncated-tail binary DAT reports a diagnostic");
         std::error_code removeError;
         std::filesystem::remove(temporaryPath, removeError);
+
+        // P0 Field Robustness: recoverable CFG field damage must not abort the record.
+        const auto robustCfgPath = std::filesystem::temp_directory_path() / "ardirec_field_robust.cfg";
+        write_text(robustCfgPath,
+                   "FIELD TEST,,not-a-year\n"
+                   "2,1A,1D\n"
+                   "oops,,A,LINE,V,bad,,oops,,bad\n"
+                   "oops,,A,LINE,2\n"
+                   "bad-frequency\n"
+                   "1\n"
+                   "bad-rate,not-a-sample\n"
+                   "01/01/2020,00:00:00.000000\n"
+                   "01/01/2020,00:00:00.010000\n"
+                   "ASCII\n"
+                   "bad-multiplier\n");
+        const auto robustParsed = ardirec::comtrade::ConfigParser{}.try_parse_file(robustCfgPath);
+        require(robustParsed.ok(), "recoverable CFG field damage is salvaged");
+        require(robustParsed.config->revision_year == 1991, "invalid revision falls back to 1991 semantics");
+        require(robustParsed.config->analog_channels.size() == 1, "damaged analog definition is retained");
+        require(robustParsed.config->status_channels.size() == 1, "damaged status definition is retained");
+        require(robustParsed.config->analog_channels[0].id == "A1", "missing analog id gets deterministic fallback");
+        require(std::abs(robustParsed.config->analog_channels[0].a - 1.0) < 1e-12,
+                "invalid analog scale uses safe unity fallback");
+        require(robustParsed.config->status_channels[0].normal_state == 0,
+                "invalid digital normal state falls back safely");
+        require(std::abs(robustParsed.config->nominal_frequency - 50.0) < 1e-12,
+                "invalid nominal frequency uses 50 Hz fallback");
+        require(std::abs(robustParsed.config->time_multiplier - 1.0) < 1e-12,
+                "invalid time multiplier uses unity fallback");
+        require(!robustParsed.config->diagnostics.empty(), "salvaged CFG records diagnostics");
+
+        // Structurally truncated CFG is rejected as a result, not by an uncaught parser exception.
+        const auto brokenCfgPath = std::filesystem::temp_directory_path() / "ardirec_structurally_broken.cfg";
+        write_text(brokenCfgPath, "BROKEN,RECORDER,1999\n1,1A,0D\n");
+        const auto brokenParsed = ardirec::comtrade::ConfigParser{}.try_parse_file(brokenCfgPath);
+        require(!brokenParsed.ok(), "structurally truncated CFG is rejected");
+        require(!brokenParsed.error.empty(), "structurally truncated CFG reports an error");
+
+        // Corrupt ASCII DAT rows: bad sample/timestamp rows are skipped; valid-time rows
+        // remain indexed and bad analog values become NaN instead of crashing.
+        const auto robustDatPath = std::filesystem::temp_directory_path() / "ardirec_field_robust.dat";
+        write_text(robustDatPath,
+                   "1,0,1,0\n"
+                   "junk-row\n"
+                   "2,1000,bad,1\n"
+                   "3,2000\n"
+                   "4,3000,4,0\n");
+        const auto robustDat = ardirec::comtrade::IndexedDatFile::open(*robustParsed.config, robustDatPath);
+        require(robustDat.file != nullptr, "corrupt ASCII DAT retains readable rows");
+        require(robustDat.file->frameCount() == 4, "invalid sample/timestamp row is skipped only");
+        require(!robustDat.diagnostics.empty(), "skipped ASCII row reports diagnostics");
+        require(std::isnan(robustDat.file->analogValue(1, 0)), "invalid analog field maps to NaN");
+        require(std::isnan(robustDat.file->analogValue(2, 0)), "missing analog field maps to NaN");
+        require(std::abs(robustDat.file->analogValue(3, 0) - 4.0) < 1e-12,
+                "valid data after damaged rows remains accessible");
+        const auto robustIndex = robustDat.file->buildIndex(1.0e-6);
+        require(robustIndex.time_seconds.size() == 4, "corrupt ASCII DAT builds a valid-time index");
+
+        std::filesystem::remove(robustCfgPath, removeError);
+        std::filesystem::remove(brokenCfgPath, removeError);
+        std::filesystem::remove(robustDatPath, removeError);
 
         AnalogChannel secondary_recorded;
         secondary_recorded.primary = 500000.0;
