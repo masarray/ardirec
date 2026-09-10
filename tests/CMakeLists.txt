@@ -11,6 +11,17 @@ ardirec_set_warnings(ardirec_field_robustness_tests)
 ardirec_enable_sanitizers(ardirec_field_robustness_tests)
 add_test(NAME ardirec_field_robustness_tests COMMAND ardirec_field_robustness_tests)
 
+add_executable(ardirec_document_loader_tests
+    test_document_loader.cpp
+    ../apps/desktop/document_loader.cpp
+    ../apps/desktop/document_loader.hpp
+)
+target_include_directories(ardirec_document_loader_tests PRIVATE ../apps/desktop)
+target_link_libraries(ardirec_document_loader_tests PRIVATE ardirec::core)
+ardirec_set_warnings(ardirec_document_loader_tests)
+ardirec_enable_sanitizers(ardirec_document_loader_tests)
+add_test(NAME ardirec_document_loader_tests COMMAND ardirec_document_loader_tests)
+
 add_executable(ardirec_power_tests test_power.cpp)
 target_link_libraries(ardirec_power_tests PRIVATE ardirec::core)
 ardirec_set_warnings(ardirec_power_tests)
