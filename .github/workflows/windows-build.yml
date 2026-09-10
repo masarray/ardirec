@@ -83,6 +83,33 @@ jobs:
           Write-Host "VC runtime staged from: $($crtDir.FullName)"
           Get-ChildItem $folder -Filter '*140*.dll' | Select-Object Name, Length
 
+      - name: Smoke test packaged application startup
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $folder = Resolve-Path 'ardirec-v0.2.0-alpha.14-windows-x64'
+          $exe = Join-Path $folder 'ardirec.exe'
+          $stdout = Join-Path $env:RUNNER_TEMP 'ardirec-startup.stdout.log'
+          $stderr = Join-Path $env:RUNNER_TEMP 'ardirec-startup.stderr.log'
+
+          $env:QT_QPA_PLATFORM = 'offscreen'
+          $env:QT_LOGGING_TO_CONSOLE = '1'
+          $process = Start-Process -FilePath $exe -WorkingDirectory $folder -PassThru `
+            -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+          Start-Sleep -Seconds 5
+
+          if ($process.HasExited) {
+            Write-Host "ardirec.exe exited during startup smoke test with code $($process.ExitCode)"
+            if (Test-Path $stdout) { Write-Host '--- stdout ---'; Get-Content $stdout }
+            if (Test-Path $stderr) { Write-Host '--- stderr ---'; Get-Content $stderr }
+            throw 'Packaged ardirec.exe did not stay alive for 5 seconds.'
+          }
+
+          Stop-Process -Id $process.Id -Force
+          Write-Host 'Packaged ardirec.exe startup smoke test passed.'
+          if (Test-Path $stdout) { Get-Content $stdout }
+          if (Test-Path $stderr) { Get-Content $stderr }
+
       - name: Build portable ZIP
         shell: pwsh
         run: |
