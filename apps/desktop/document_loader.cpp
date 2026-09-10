@@ -15,6 +15,7 @@ namespace {
 
 constexpr std::uintmax_t kMaximumCfgBytes = 32u * 1024u * 1024u;
 constexpr std::uintmax_t kMaximumHeaderPreviewBytes = 4u * 1024u * 1024u;
+constexpr std::string_view kNormalMmapDiagnostic = "DAT access: read-only memory map.";
 
 std::string join_diagnostics(const std::vector<std::string>& diagnostics) {
     std::ostringstream out;
@@ -28,6 +29,14 @@ std::string join_diagnostics(const std::vector<std::string>& diagnostics) {
 void append_diagnostics(std::vector<std::string>& destination,
                         const std::vector<std::string>& source) {
     destination.insert(destination.end(), source.begin(), source.end());
+}
+
+void append_operator_dat_diagnostics(std::vector<std::string>& destination,
+                                     const std::vector<std::string>& source) {
+    for (const auto& diagnostic : source) {
+        if (diagnostic == kNormalMmapDiagnostic) continue;
+        destination.push_back(diagnostic);
+    }
 }
 
 bool validate_regular_file(const std::filesystem::path& path,
@@ -154,7 +163,7 @@ loadDocumentData(const std::filesystem::path& cfgPath,
         }
 
         auto opened = ardirec::comtrade::IndexedDatFile::open(result->config, result->bundle.dat);
-        append_diagnostics(result->diagnostics, opened.diagnostics);
+        append_operator_dat_diagnostics(result->diagnostics, opened.diagnostics);
         result->dat = std::move(opened.file);
         if (!result->dat) {
             result->error = result->diagnostics.empty()
