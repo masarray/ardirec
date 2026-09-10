@@ -34,6 +34,7 @@ if(TARGET Qt6::Core)
     qt_add_executable(ardirec_analysis_tests
         test_analysis.cpp
         ../apps/desktop/analysis_controller.cpp
+        ../apps/desktop/analysis_cursor_batch.cpp
         ../apps/desktop/analysis_controller.hpp
         ../apps/desktop/document_controller.cpp
         ../apps/desktop/document_controller.hpp

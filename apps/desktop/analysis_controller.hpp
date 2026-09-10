@@ -42,6 +42,11 @@ public:
                                            double absoluteTimeSeconds,
                                            double groundingFactorMagnitude,
                                            double groundingFactorAngleDegrees) const;
+    // Fast cursor path: computes the six base V/I phasors once, then derives every
+    // available distance loop from that shared snapshot.
+    Q_INVOKABLE QVariantMap distanceLoopsAt(double absoluteTimeSeconds,
+                                            double groundingFactorMagnitude,
+                                            double groundingFactorAngleDegrees) const;
     Q_INVOKABLE QVariantList distanceLocus(const QString& loopId,
                                            double viewStartSeconds,
                                            double visibleDurationSeconds,
