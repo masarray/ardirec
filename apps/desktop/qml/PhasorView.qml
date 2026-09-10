@@ -34,7 +34,7 @@ Rectangle {
             }
             Item { Layout.fillWidth: true }
             Label {
-                text: "Full-cycle DFT · RMS magnitude · common phase reference"
+                text: "Full-cycle DFT · RMS magnitude · fixed record phase reference"
                 color: "#747c83"
                 font.pixelSize: 8
             }
