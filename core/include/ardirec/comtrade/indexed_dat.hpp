@@ -14,12 +14,30 @@
 
 namespace ardirec::comtrade {
 
+// Compact visual level-of-detail cache built during the single DAT index scan.
+// Extrema are stored as floats because this cache drives screen geometry only;
+// engineering calculations continue to read original double-precision samples.
+// Layout is block-major so each index-scan frame updates adjacent channel cells.
+struct AnalogLodIndex {
+    std::size_t block_size{0};
+    std::size_t block_count{0};
+    std::size_t channel_count{0};
+    std::vector<float> minima;
+    std::vector<float> maxima;
+
+    [[nodiscard]] bool blockExtrema(std::size_t channel,
+                                    std::size_t block,
+                                    double& minimum,
+                                    double& maximum) const noexcept;
+};
+
 struct DatIndexSummary {
     std::vector<double> time_seconds;
     std::vector<double> analog_abs_peaks;
     std::vector<std::uint8_t> status_active;
     std::vector<double> digital_edge_times;
     std::vector<std::string> diagnostics;
+    std::shared_ptr<const AnalogLodIndex> analog_lod;
     bool cancelled{false};
 };
 
@@ -79,11 +97,9 @@ public:
                          std::size_t end,
                          std::vector<double>& destination) const;
 
-    // Builds only the compact metadata needed by the viewer: timestamps,
-    // channel peaks, active-digital flags and the union of digital edge times.
-    // Invalid analog/status fields are counted and diagnosed without aborting
-    // the valid record. The scan is designed for a background worker and is
-    // cancellable.
+    // Builds compact metadata and a bounded visual LOD cache in one background
+    // pass: timestamps, channel peaks, digital activity/edges and analog block
+    // extrema. Invalid fields are diagnosed without aborting the valid record.
     [[nodiscard]] DatIndexSummary buildIndex(double timestamp_scale_seconds,
                                              const std::atomic_bool* cancel = nullptr) const;
 
