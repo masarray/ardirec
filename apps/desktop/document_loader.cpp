@@ -5,8 +5,8 @@
 #include "ardirec/comtrade/parser.hpp"
 
 #include <algorithm>
+#include <array>
 #include <fstream>
-#include <iterator>
 #include <sstream>
 
 namespace {
