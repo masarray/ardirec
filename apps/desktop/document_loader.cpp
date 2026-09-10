@@ -196,6 +196,7 @@ loadDocumentData(const std::filesystem::path& cfgPath,
         }
 
         result->time_seconds = std::make_shared<const std::vector<double>>(std::move(index.time_seconds));
+        result->analog_lod = std::move(index.analog_lod);
         result->channel_peaks = std::move(index.analog_abs_peaks);
         result->status_active = std::move(index.status_active);
         result->digital_edge_times = std::move(index.digital_edge_times);
