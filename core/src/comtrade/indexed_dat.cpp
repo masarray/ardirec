@@ -32,6 +32,8 @@ namespace {
 
 constexpr std::size_t kBinaryHeaderBytes = sizeof(std::uint32_t) * 2u;
 constexpr std::size_t kCancellationInterval = 4096u;
+constexpr std::size_t kBaseLodBlockFrames = 256u;
+constexpr std::size_t kMaximumLodCells = 2'000'000u;
 
 std::string_view trim_view(std::string_view value) {
     while (!value.empty() && (value.front() == ' ' || value.front() == '\t' || value.front() == '\r')) {
@@ -191,6 +193,56 @@ bool decode_binary_status(const RecordConfig& config,
     return (packed & static_cast<std::uint16_t>(1u << bit)) != 0u;
 }
 
+float lod_value(double value) noexcept {
+    constexpr double maximum = static_cast<double>(std::numeric_limits<float>::max());
+    if (value > maximum) return std::numeric_limits<float>::max();
+    if (value < -maximum) return -std::numeric_limits<float>::max();
+    return static_cast<float>(value);
+}
+
+std::shared_ptr<AnalogLodIndex> make_lod_index(std::size_t frames,
+                                               std::size_t channels) {
+    if (frames == 0 || channels == 0) return {};
+    std::size_t blockSize = std::min(kBaseLodBlockFrames, frames);
+    if (blockSize == 0) blockSize = 1;
+
+    std::size_t blockCount = (frames - 1u) / blockSize + 1u;
+    while (blockCount > kMaximumLodCells / channels) {
+        if (blockSize >= frames) break;
+        if (blockSize > std::numeric_limits<std::size_t>::max() / 2u) {
+            blockSize = frames;
+        } else {
+            blockSize = std::min(frames, blockSize * 2u);
+        }
+        blockCount = (frames - 1u) / blockSize + 1u;
+    }
+    if (blockCount > std::numeric_limits<std::size_t>::max() / channels) return {};
+    const std::size_t cells = blockCount * channels;
+    if (cells > kMaximumLodCells) return {};
+
+    auto lod = std::make_shared<AnalogLodIndex>();
+    lod->block_size = blockSize;
+    lod->block_count = blockCount;
+    lod->channel_count = channels;
+    lod->minima.assign(cells, std::numeric_limits<float>::infinity());
+    lod->maxima.assign(cells, -std::numeric_limits<float>::infinity());
+    return lod;
+}
+
+void update_lod(AnalogLodIndex* lod,
+                std::size_t frame,
+                std::size_t channel,
+                double value) noexcept {
+    if (!lod || lod->block_size == 0 || channel >= lod->channel_count || !std::isfinite(value)) return;
+    const std::size_t block = frame / lod->block_size;
+    if (block >= lod->block_count) return;
+    const std::size_t cell = block * lod->channel_count + channel;
+    if (cell >= lod->minima.size() || cell >= lod->maxima.size()) return;
+    const float visual = lod_value(value);
+    lod->minima[cell] = std::min(lod->minima[cell], visual);
+    lod->maxima[cell] = std::max(lod->maxima[cell], visual);
+}
+
 class ReadOnlyMapping final {
 public:
     ReadOnlyMapping() = default;
@@ -286,6 +338,22 @@ private:
 };
 
 } // namespace
+
+bool AnalogLodIndex::blockExtrema(std::size_t channel,
+                                  std::size_t block,
+                                  double& minimum,
+                                  double& maximum) const noexcept {
+    if (channel >= channel_count || block >= block_count || channel_count == 0) return false;
+    if (block > (std::numeric_limits<std::size_t>::max() - channel) / channel_count) return false;
+    const std::size_t cell = block * channel_count + channel;
+    if (cell >= minima.size() || cell >= maxima.size()) return false;
+    const float low = minima[cell];
+    const float high = maxima[cell];
+    if (!std::isfinite(low) || !std::isfinite(high) || low > high) return false;
+    minimum = static_cast<double>(low);
+    maximum = static_cast<double>(high);
+    return true;
+}
 
 struct IndexedDatFile::Impl {
     RecordConfig config;
@@ -585,6 +653,11 @@ DatIndexSummary IndexedDatFile::buildIndex(double timestamp_scale_seconds,
     summary.time_seconds.reserve(m_impl->frame_count);
     summary.analog_abs_peaks.assign(m_impl->config.analog_channels.size(), 0.0);
     summary.status_active.assign(m_impl->config.status_channels.size(), std::uint8_t{0});
+    auto lod = make_lod_index(m_impl->frame_count, m_impl->config.analog_channels.size());
+    if (!lod && !m_impl->config.analog_channels.empty()) {
+        summary.diagnostics.emplace_back("Analog visual LOD cache could not be allocated within its bounded safety budget.");
+    }
+
     std::vector<std::uint8_t> previousStatus(m_impl->config.status_channels.size(), std::uint8_t{0});
     std::vector<std::uint8_t> havePreviousStatus(m_impl->config.status_channels.size(), std::uint8_t{0});
     std::size_t invalidAnalogFields = 0;
@@ -642,6 +715,7 @@ DatIndexSummary IndexedDatFile::buildIndex(double timestamp_scale_seconds,
                 const double value = decode_binary_analog(m_impl->config, frame, channel);
                 if (std::isfinite(value)) {
                     summary.analog_abs_peaks[channel] = std::max(summary.analog_abs_peaks[channel], std::abs(value));
+                    update_lod(lod.get(), frameIndex, channel, value);
                 } else {
                     ++missingBinaryAnalogValues;
                 }
@@ -692,6 +766,7 @@ DatIndexSummary IndexedDatFile::buildIndex(double timestamp_scale_seconds,
                 const double value = definition.a * raw + definition.b;
                 if (std::isfinite(value)) {
                     summary.analog_abs_peaks[channel] = std::max(summary.analog_abs_peaks[channel], std::abs(value));
+                    update_lod(lod.get(), frameIndex, channel, value);
                 } else {
                     ++invalidAnalogFields;
                 }
@@ -731,7 +806,11 @@ DatIndexSummary IndexedDatFile::buildIndex(double timestamp_scale_seconds,
         summary.diagnostics.emplace_back("Binary DAT: " + std::to_string(missingBinaryAnalogValues)
                                          + " missing/non-finite analog value(s) retained as NaN.");
     }
-    if (cancel && cancel->load(std::memory_order_relaxed)) summary.cancelled = true;
+    if (cancel && cancel->load(std::memory_order_relaxed)) {
+        summary.cancelled = true;
+        return summary;
+    }
+    summary.analog_lod = std::move(lod);
     return summary;
 }
 
