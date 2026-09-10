@@ -10,6 +10,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace ardirec::comtrade {
@@ -103,10 +104,21 @@ public:
     [[nodiscard]] DatIndexSummary buildIndex(double timestamp_scale_seconds,
                                              const std::atomic_bool* cancel = nullptr) const;
 
+    // Published exactly once by the background loader before the data source is
+    // exposed to the UI. Afterwards the snapshot is immutable and safe for the
+    // Qt Quick render thread to retain independently of DocumentController.
+    void publishAnalogLod(std::shared_ptr<const AnalogLodIndex> lod) noexcept {
+        m_visual_lod = std::move(lod);
+    }
+    [[nodiscard]] std::shared_ptr<const AnalogLodIndex> analogLodSnapshot() const noexcept {
+        return m_visual_lod;
+    }
+
 private:
     struct Impl;
     explicit IndexedDatFile(std::unique_ptr<Impl> impl);
     std::unique_ptr<Impl> m_impl;
+    std::shared_ptr<const AnalogLodIndex> m_visual_lod;
 };
 
 } // namespace ardirec::comtrade
