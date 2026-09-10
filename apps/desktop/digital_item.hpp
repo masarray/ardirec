@@ -7,7 +7,7 @@
 #include <QPointer>
 #include <QQuickItem>
 
-#include <cstdint>
+#include <memory>
 #include <vector>
 
 class DigitalItem : public QQuickItem {
@@ -44,10 +44,11 @@ protected:
     QSGNode* updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*) override;
 
 private:
-    void reloadSamples();
+    void reloadData();
 
     QPointer<DocumentController> m_document;
-    std::vector<std::uint8_t> m_samples;
+    std::shared_ptr<const ardirec::comtrade::IndexedDatFile> m_data;
+    std::shared_ptr<const std::vector<double>> m_times;
     int m_channelIndex{-1};
     double m_zoomFactor{1.0};
     double m_panFraction{0.0};
