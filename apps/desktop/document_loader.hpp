@@ -15,6 +15,7 @@ struct LoadedDocumentData {
     ardirec::comtrade::RecordConfig config;
     std::shared_ptr<ardirec::comtrade::IndexedDatFile> dat;
     std::shared_ptr<const std::vector<double>> time_seconds;
+    std::shared_ptr<const ardirec::comtrade::AnalogLodIndex> analog_lod;
     std::vector<double> channel_peaks;
     std::vector<std::uint8_t> status_active;
     std::vector<double> digital_edge_times;
