@@ -42,6 +42,31 @@ int main(int argc, char* argv[]) {
         require_near(analysis.distanceCurrentFloor(), 0.001, 1.0e-12,
                      "distance current floor is 0.1 percent of the displayed record peak");
 
+        // P1 cursor hot path: all six loops must be derivable from one shared phasor snapshot
+        // without changing the numerical result of the established single-loop API.
+        constexpr double cursorTime = 0.022;
+        const QVariantMap batched = analysis.distanceLoopsAt(cursorTime, 0.0, 0.0);
+        require(batched.size() == 6, "batched cursor API returns all six protection loops");
+        for (const char* loopName : {"L1-E", "L2-E", "L3-E", "L1-L2", "L2-L3", "L3-L1"}) {
+            const QString loop = QString::fromLatin1(loopName);
+            const QVariantMap batchValue = batched.value(loop).toMap();
+            const QVariantMap singleValue = analysis.distanceLoopAt(loop, cursorTime, 0.0, 0.0);
+            require(batchValue.value(QStringLiteral("valid")).toBool()
+                        == singleValue.value(QStringLiteral("valid")).toBool(),
+                    "batched and single-loop cursor validity agree");
+            if (singleValue.value(QStringLiteral("valid")).toBool()) {
+                require_near(batchValue.value(QStringLiteral("r")).toDouble(),
+                             singleValue.value(QStringLiteral("r")).toDouble(), 1.0e-12,
+                             "batched and single-loop R agree");
+                require_near(batchValue.value(QStringLiteral("x")).toDouble(),
+                             singleValue.value(QStringLiteral("x")).toDouble(), 1.0e-12,
+                             "batched and single-loop X agree");
+                require_near(batchValue.value(QStringLiteral("measuringCurrent")).toDouble(),
+                             singleValue.value(QStringLiteral("measuringCurrent")).toDouble(), 1.0e-12,
+                             "batched and single-loop measuring current agree");
+            }
+        }
+
         const QVariantList locus = analysis.distanceLocus(QStringLiteral("L1-E"),
                                                            document.dataStartSeconds(),
                                                            document.durationSeconds(),

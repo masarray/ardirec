@@ -19,6 +19,11 @@ Rectangle {
     property string selectedLoop: "L1-E"
     property string analysisMode: "distance"
 
+    // P1 keeps the R-X plane conformal while allowing an operator-controlled zoom around origin.
+    // 1.0 is the robust engineering Fit frame; visibility changes never alter this base frame.
+    property real locusZoom: 1.0
+    readonly property int locusZoomPercent: Math.round(locusZoom * 100.0)
+
     // Static plot transforms are produced only when the static canvas is rebuilt.
     // Cursor movement consumes these cached transforms and never repaints the large canvas.
     property var earthPanelTransform: ({valid:false})
@@ -38,8 +43,8 @@ Rectangle {
     readonly property var phaseLoops: ["L1-L2", "L2-L3", "L3-L1"]
     readonly property var allLoops: earthLoops.concat(phaseLoops)
 
-    // Cursor values are intentionally separated from static locus series. One cursor move now
-    // performs six point calculations, rather than rebuilding every full-record trajectory.
+    // Cursor values are intentionally separated from static locus series. P1 uses the C++ batch
+    // path so the six base V/I phasors are calculated once for each cursor timestamp.
     readonly property var cursorAValues: {
         const representationDependency = valueRepresentation
         return distanceMode ? buildCursorValues(cursorATime) : ({})
@@ -136,6 +141,16 @@ Rectangle {
         requestStaticRepaint()
     }
 
+    function setLocusZoom(value) {
+        const next = Math.max(0.50, Math.min(8.0, value))
+        if (Math.abs(next - locusZoom) < 1.0e-9) return
+        locusZoom = next
+    }
+
+    function zoomLocusIn() { setLocusZoom(locusZoom * 1.25) }
+    function zoomLocusOut() { setLocusZoom(locusZoom / 1.25) }
+    function fitLocus() { setLocusZoom(1.0) }
+
     function fullRecordStart() {
         return document ? document.dataStartSeconds : viewStart
     }
@@ -163,13 +178,10 @@ Rectangle {
     }
 
     function buildCursorValues(timeSeconds) {
-        let result = ({})
-        if (!analysis) return result
-        for (let loop of allLoops) {
-            if (!analysis.distanceLoopAvailable(loop)) continue
-            result[loop] = analysis.distanceLoopAt(loop, timeSeconds, kLMagnitude, kLAngle)
-        }
-        return result
+        if (!analysis) return ({})
+        // P0 introduced this API; P1 makes it the actual QML hot path. This avoids six repeated
+        // DFT passes per cursor by sharing one six-channel phasor snapshot.
+        return analysis.distanceLoopsAt(timeSeconds, kLMagnitude, kLAngle)
     }
 
     function isOverreachZone(zone) {
@@ -272,11 +284,12 @@ Rectangle {
         return 10 * base
     }
 
-    function zoneMagnitude(zones, earthFamily) {
+    // The fit envelope deliberately ignores presentation visibility. Hiding a locus/zone must not
+    // make the engineering plane jump under the operator's pointer.
+    function zoneMagnitude(zones) {
         let r = 0.0
         let x = 0.0
         for (let zi = 0; zi < zones.length; ++zi) {
-            if (!zoneVisible(earthFamily, zi)) continue
             const zone = zones[zi]
             if (zone.kind === "circle") {
                 r = Math.max(r, Math.abs(zone.centerR) + Math.abs(zone.radius))
@@ -292,18 +305,17 @@ Rectangle {
         return {r:r, x:x}
     }
 
-    function coreTarget(series, zones, earthFamily) {
+    function coreTarget(series, zones) {
         let rs = []
         let xs = []
         for (let item of series) {
-            if (!loopVisible(item.loop)) continue
             for (let p of item.points) {
                 if (!finitePoint(p)) continue
                 rs.push(Math.abs(p.r))
                 xs.push(Math.abs(p.x))
             }
         }
-        const zone = zoneMagnitude(zones, earthFamily)
+        const zone = zoneMagnitude(zones)
         const robustR = percentile(rs, 0.80)
         const robustX = percentile(xs, 0.80)
         return {
@@ -320,8 +332,9 @@ Rectangle {
         const bottom = py + ph - 28
         const plotW = Math.max(20, right - left)
         const plotH = Math.max(20, bottom - top)
-        const target = coreTarget(series, zones, earthFamily)
-        const scale = Math.max(1e-9, Math.min(plotW / (2 * target.r), plotH / (2 * target.x)))
+        const target = coreTarget(series, zones)
+        const autoScale = Math.max(1e-9, Math.min(plotW / (2 * target.r), plotH / (2 * target.x)))
+        const scale = autoScale * locusZoom
         return {
             valid: true,
             px: px, py: py, pw: pw, ph: ph,
@@ -385,6 +398,7 @@ Rectangle {
     onLoopVisibilityChanged: requestStaticRepaint()
     onEarthZoneVisibilityChanged: requestStaticRepaint()
     onPhaseZoneVisibilityChanged: requestStaticRepaint()
+    onLocusZoomChanged: requestStaticRepaint()
     onAnalysisModeChanged: { ensureAvailableLoop(); requestStaticRepaint() }
     onWidthChanged: requestStaticRepaint()
     onHeightChanged: requestStaticRepaint()
@@ -392,7 +406,7 @@ Rectangle {
 
     Connections {
         target: root.document
-        function onDocumentChanged() { root.ensureAvailableLoop(); root.resetVisibility() }
+        function onDocumentChanged() { root.fitLocus(); root.ensureAvailableLoop(); root.resetVisibility() }
         function onRepresentationChanged() { root.requestStaticRepaint() }
     }
     Connections {
@@ -400,6 +414,7 @@ Rectangle {
         function onModelChanged() {
             root.earthZoneVisibility = []
             root.phaseZoneVisibility = []
+            root.fitLocus()
             root.requestStaticRepaint()
         }
         function onGroundingFactorChanged() { root.requestStaticRepaint() }
@@ -435,6 +450,43 @@ Rectangle {
                 ToolButton { visible: root.distanceMode; text: root.zoneController && root.zoneController.hasZones ? "Zones ✓" : "Load RIO/XRIO"; font.pixelSize: 8; onClicked: zoneDialog.open() }
                 ToolButton { visible: root.distanceMode && root.zoneController && root.zoneController.hasZones; text: "Clear"; font.pixelSize: 8; onClicked: root.zoneController.clearZones() }
                 ToolButton { visible: root.distanceMode; text: "Show all"; font.pixelSize: 8; onClicked: root.resetVisibility() }
+                Rectangle { visible: root.distanceMode; width: 1; height: 17; color: "#c4c9cd"; Layout.leftMargin: 2; Layout.rightMargin: 2 }
+                ToolButton {
+                    visible: root.distanceMode
+                    text: "-"
+                    font.pixelSize: 10
+                    Layout.preferredWidth: 25
+                    ToolTip.visible: hovered
+                    ToolTip.text: "Zoom out R-X plane"
+                    onClicked: root.zoomLocusOut()
+                }
+                ToolButton {
+                    visible: root.distanceMode
+                    text: "Fit"
+                    font.pixelSize: 8
+                    Layout.preferredWidth: 34
+                    ToolTip.visible: hovered
+                    ToolTip.text: "Restore robust conformal auto-fit"
+                    onClicked: root.fitLocus()
+                }
+                ToolButton {
+                    visible: root.distanceMode
+                    text: "+"
+                    font.pixelSize: 10
+                    Layout.preferredWidth: 25
+                    ToolTip.visible: hovered
+                    ToolTip.text: "Zoom in R-X plane"
+                    onClicked: root.zoomLocusIn()
+                }
+                Label {
+                    visible: root.distanceMode
+                    text: root.locusZoomPercent + "%"
+                    color: Math.abs(root.locusZoom - 1.0) < 1.0e-9 ? "#697178" : "#2f596f"
+                    font.pixelSize: 7
+                    font.weight: Font.DemiBold
+                    Layout.preferredWidth: 31
+                    horizontalAlignment: Text.AlignRight
+                }
                 Item { Layout.fillWidth: true }
                 Label { text: (root.valueRepresentation === "primary" ? "PRIMARY" : "SECONDARY") + " Ω"; color: "#566068"; font.pixelSize: 8; font.weight: Font.DemiBold }
             }
@@ -639,12 +691,15 @@ Rectangle {
                             const tx = mapX(rv); ctx.fillText(rv.toFixed(Math.abs(rv) < 10 ? 1 : 0), tx, transform.bottom + 4)
                             ctx.strokeStyle = "#5e666c"; ctx.lineWidth = 0.7; ctx.beginPath(); ctx.moveTo(tx, transform.cy - 2); ctx.lineTo(tx, transform.cy + 2); ctx.stroke()
                         }
+                        // A visible zero reference makes manual comparison with SIGRA easier.
+                        ctx.fillText("0", transform.cx, transform.bottom + 4)
                         ctx.textAlign = "right"; ctx.textBaseline = "middle"
                         for (let xv = Math.ceil(-transform.xHalf / xStep) * xStep; xv <= transform.xHalf + 1e-9; xv += xStep) {
                             if (Math.abs(xv) < xStep * 0.1) continue
                             const ty = mapY(xv); ctx.fillText(xv.toFixed(Math.abs(xv) < 10 ? 1 : 0), transform.left - 5, ty)
                             ctx.strokeStyle = "#5e666c"; ctx.lineWidth = 0.7; ctx.beginPath(); ctx.moveTo(transform.cx - 2, ty); ctx.lineTo(transform.cx + 2, ty); ctx.stroke()
                         }
+                        ctx.fillText("0", transform.left - 5, transform.cy)
                         ctx.textAlign = "center"; ctx.textBaseline = "alphabetic"; ctx.fillText("R/Ohm(" + (root.valueRepresentation === "primary" ? "primary" : "secondary") + ")", transform.cx, transform.py + transform.ph - 7)
 
                         ctx.save(); ctx.beginPath(); ctx.rect(transform.left, transform.top, transform.plotW, transform.plotH); ctx.clip()
@@ -696,6 +751,11 @@ Rectangle {
                     anchors.fill: parent
                     enabled: root.distanceMode
                     acceptedButtons: Qt.LeftButton
+                    onWheel: function(wheel) {
+                        if (wheel.angleDelta.y === 0) return
+                        root.setLocusZoom(root.locusZoom * (wheel.angleDelta.y > 0 ? 1.15 : (1.0 / 1.15)))
+                        wheel.accepted = true
+                    }
                     onClicked: function(mouse) {
                         const gap = 6; const panelH = (locusCanvas.height - gap) * 0.5
                         const earthFamily = mouse.y < panelH; const panelY = earthFamily ? 0 : panelH + gap
