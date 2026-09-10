@@ -53,6 +53,15 @@ typedef enum ardirec_phase_role {
     ARDIREC_PHASE_NEUTRAL = 4
 } ardirec_phase_role;
 
+typedef enum ardirec_distance_loop {
+    ARDIREC_DISTANCE_L1_E = 0,
+    ARDIREC_DISTANCE_L2_E = 1,
+    ARDIREC_DISTANCE_L3_E = 2,
+    ARDIREC_DISTANCE_L1_L2 = 3,
+    ARDIREC_DISTANCE_L2_L3 = 4,
+    ARDIREC_DISTANCE_L3_L1 = 5
+} ardirec_distance_loop;
+
 typedef struct ardirec_record_info {
     uint32_t abi_version;
     int32_t revision_year;
@@ -168,6 +177,22 @@ typedef struct ardirec_harmonic_spectrum_info {
     uint64_t window_end_exclusive;
 } ardirec_harmonic_spectrum_info;
 
+// Protection distance/locus result. Invalid points are intentionally retained with
+// their source frame/time so renderers can break a trajectory across low-current gaps.
+typedef struct ardirec_distance_point {
+    int32_t valid;
+    int32_t loop;
+    uint64_t reference_frame;
+    uint32_t raw_timestamp;
+    double time_seconds;
+    double r;
+    double x;
+    double magnitude;
+    double angle_degrees;
+    double measuring_current;
+    double minimum_current;
+} ardirec_distance_point;
+
 // Return codes: 0 success, negative values are bridge errors.
 ARDIREC_BRIDGE_API uint32_t ardirec_bridge_abi_version(void);
 ARDIREC_BRIDGE_API uint64_t ardirec_bridge_capabilities(void);
@@ -245,6 +270,39 @@ ARDIREC_BRIDGE_API int32_t ardirec_record_get_harmonic_spectrum(
     ardirec_harmonic_spectrum_info* out_info,
     ardirec_harmonic_bin* bins,
     uint32_t bin_capacity);
+
+// Distance/locus extension. These exports intentionally reuse the existing
+// ArdIrec distance equations and bridge phasor engine; no presentation-layer
+// impedance formula is introduced. The caller should cache current_floor per
+// record/representation and pass it to cursor/locus calls.
+ARDIREC_BRIDGE_API int32_t ardirec_record_get_distance_current_floor(
+    ardirec_record_handle handle,
+    int32_t representation,
+    double* out_minimum_current);
+ARDIREC_BRIDGE_API int32_t ardirec_record_get_distance_loops(
+    ardirec_record_handle handle,
+    uint64_t reference_frame,
+    int32_t representation,
+    double grounding_factor_magnitude,
+    double grounding_factor_angle_degrees,
+    double minimum_current,
+    ardirec_distance_point* points,
+    uint32_t point_capacity);
+// Query mode: pass points=NULL/point_capacity=0; out_point_count receives the
+// bounded required size. Copy mode requires point_capacity >= out_point_count.
+ARDIREC_BRIDGE_API int32_t ardirec_record_get_distance_locus(
+    ardirec_record_handle handle,
+    int32_t loop,
+    uint64_t start_frame,
+    uint64_t frame_count,
+    uint32_t maximum_points,
+    int32_t representation,
+    double grounding_factor_magnitude,
+    double grounding_factor_angle_degrees,
+    double minimum_current,
+    ardirec_distance_point* points,
+    uint32_t point_capacity,
+    uint32_t* out_point_count);
 
 #ifdef __cplusplus
 }
