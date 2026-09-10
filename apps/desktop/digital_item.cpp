@@ -18,16 +18,16 @@ void DigitalItem::setDocument(QObject* document) {
     if (m_document) disconnect(m_document, nullptr, this, nullptr);
     m_document = controller;
     if (m_document) {
-        connect(m_document, &DocumentController::documentChanged, this, &DigitalItem::reloadSamples);
+        connect(m_document, &DocumentController::documentChanged, this, &DigitalItem::reloadData);
     }
-    reloadSamples();
+    reloadData();
     emit documentChanged();
 }
 
 void DigitalItem::setChannelIndex(int value) {
     if (m_channelIndex == value) return;
     m_channelIndex = value;
-    reloadSamples();
+    reloadData();
     emit channelChanged();
 }
 
@@ -54,58 +54,74 @@ void DigitalItem::setActiveColor(const QColor& value) {
     emit activeColorChanged();
 }
 
-void DigitalItem::reloadSamples() {
-    m_samples = m_document ? m_document->statusSamples(m_channelIndex) : std::vector<std::uint8_t>{};
+void DigitalItem::reloadData() {
+    if (!m_document) {
+        m_data.reset();
+        m_times.reset();
+    } else {
+        m_data = m_document->dataStoreSnapshot();
+        m_times = m_document->timeIndexSnapshot();
+    }
     update();
 }
 
 QSGNode* DigitalItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*) {
     auto* node = static_cast<QSGGeometryNode*>(oldNode);
-    if (!m_document || m_samples.empty() || width() <= 1.0 || height() <= 1.0) {
+    const auto data = m_data;
+    const auto times = m_times;
+    const std::size_t count = data && times ? std::min(data->frameCount(), times->size()) : 0;
+    if (count == 0 || m_channelIndex < 0
+        || static_cast<std::size_t>(m_channelIndex) >= (data ? data->statusCount() : 0)
+        || width() <= 1.0 || height() <= 1.0) {
         delete node;
         return nullptr;
     }
 
-    const auto range = m_document->visibleSampleRange(m_zoomFactor, m_panFraction);
-    const std::size_t start = range.first;
-    const std::size_t end = std::min(range.second, m_samples.size());
-    const auto& times = m_document->timeSeconds();
-    if (start >= end || start >= times.size()) {
-        delete node;
-        return nullptr;
-    }
-
-    const double fullDuration = m_document->durationSeconds();
-    const double visibleDuration = fullDuration > 0.0 ? fullDuration / m_zoomFactor : 0.0;
-    const double movable = std::max(0.0, fullDuration - visibleDuration);
-    const double viewStart = m_document->dataStartSeconds() + m_panFraction * movable;
-    const double viewEnd = viewStart + visibleDuration;
+    const double dataStart = times->front();
+    const double dataEnd = (*times)[count - 1];
+    const double fullDuration = std::max(0.0, dataEnd - dataStart);
+    const double visibleDuration = fullDuration > 0.0 ? fullDuration / std::clamp(m_zoomFactor, 1.0, 500.0) : 0.0;
     if (visibleDuration <= 0.0) {
+        delete node;
+        return nullptr;
+    }
+    const double movable = std::max(0.0, fullDuration - visibleDuration);
+    const double viewStart = dataStart + std::clamp(m_panFraction, 0.0, 1.0) * movable;
+    const double viewEnd = viewStart + visibleDuration;
+
+    const auto firstIt = std::lower_bound(times->begin(), times->begin() + static_cast<std::ptrdiff_t>(count), viewStart);
+    const auto endIt = std::upper_bound(times->begin(), times->begin() + static_cast<std::ptrdiff_t>(count), viewEnd);
+    std::size_t start = static_cast<std::size_t>(std::distance(times->begin(), firstIt));
+    std::size_t end = static_cast<std::size_t>(std::distance(times->begin(), endIt));
+    start = std::min(start, count - 1);
+    end = std::min(end, count);
+    if (end <= start) {
         delete node;
         return nullptr;
     }
 
     struct Run { double begin; double end; };
     std::vector<Run> runs;
+    runs.reserve(32);
     bool inRun = false;
     double runStart = viewStart;
+    const std::size_t channel = static_cast<std::size_t>(m_channelIndex);
 
     const auto sampleBoundary = [&](std::size_t index) {
-        if (index < times.size()) return times[index];
-        return viewEnd;
+        return index < count ? (*times)[index] : viewEnd;
     };
 
     for (std::size_t i = start; i < end; ++i) {
-        const bool high = m_samples[i] != 0;
+        const bool high = data->statusValue(i, channel);
         const double t0 = std::clamp(sampleBoundary(i), viewStart, viewEnd);
         if (high && !inRun) {
             runStart = t0;
             inRun = true;
         }
-        const bool nextHigh = (i + 1 < end) ? (m_samples[i + 1] != 0) : false;
+        const bool nextHigh = (i + 1 < end) ? data->statusValue(i + 1, channel) : false;
         if (inRun && (!nextHigh || i + 1 >= end)) {
             double t1 = viewEnd;
-            if (i + 1 < times.size()) t1 = std::clamp(times[i + 1], viewStart, viewEnd);
+            if (i + 1 < count) t1 = std::clamp((*times)[i + 1], viewStart, viewEnd);
             if (t1 <= runStart) t1 = std::min(viewEnd, runStart + visibleDuration / std::max(1.0, width()));
             runs.push_back({runStart, t1});
             inRun = false;
@@ -117,7 +133,7 @@ QSGNode* DigitalItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*) {
         return nullptr;
     }
 
-    const std::size_t vertexCount = runs.size() * 6;
+    const std::size_t vertexCount = runs.size() * 6u;
     if (!node) {
         node = new QSGGeometryNode;
         auto* material = new QSGFlatColorMaterial;

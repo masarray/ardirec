@@ -7,6 +7,7 @@
 #include <cmath>
 #include <limits>
 #include <span>
+#include <vector>
 
 namespace {
 constexpr double kPi = 3.141592653589793238462643383279502884;
@@ -138,15 +139,13 @@ double AnalysisController::rmsValue(int channelIndex, double absoluteTimeSeconds
     if (!m_document || channelIndex < 0 || channelIndex >= m_document->analogCount()) {
         return std::numeric_limits<double>::quiet_NaN();
     }
-    const auto& samples = m_document->analogSamples(channelIndex);
     const auto [first, end] = oneCycleWindow(absoluteTimeSeconds);
-    if (first >= end || first >= samples.size()) return std::numeric_limits<double>::quiet_NaN();
-    const std::size_t cappedEnd = std::min(end, samples.size());
+    if (first >= end) return std::numeric_limits<double>::quiet_NaN();
 
     long double sumSquares = 0.0L;
     std::size_t count = 0;
-    for (std::size_t i = first; i < cappedEnd; ++i) {
-        const double value = samples[i];
+    for (std::size_t i = first; i < end; ++i) {
+        const double value = m_document->recordedAnalogSampleAt(channelIndex, i);
         if (!std::isfinite(value)) continue;
         sumSquares += static_cast<long double>(value) * static_cast<long double>(value);
         ++count;
@@ -171,10 +170,9 @@ std::complex<double> AnalysisController::phasorComplex(int channelIndex,
         || harmonicOrder < 1) {
         return {};
     }
-    const auto& samples = m_document->analogSamples(channelIndex);
     const auto& times = m_document->timeSeconds();
     const auto [first, end] = oneCycleWindow(absoluteTimeSeconds);
-    const std::size_t cappedEnd = std::min({end, samples.size(), times.size()});
+    const std::size_t cappedEnd = std::min(end, times.size());
     if (first >= cappedEnd || cappedEnd - first < 4) return {};
 
     const double frequency = m_document->nominalFrequency() > 1.0 ? m_document->nominalFrequency() : 50.0;
@@ -184,7 +182,7 @@ std::complex<double> AnalysisController::phasorComplex(int channelIndex,
     std::size_t count = 0;
 
     for (std::size_t i = first; i < cappedEnd; ++i) {
-        const double value = samples[i];
+        const double value = m_document->recordedAnalogSampleAt(channelIndex, i);
         if (!std::isfinite(value)) continue;
         const long double angle = -static_cast<long double>(omega * (times[i] - referenceTime));
         const std::complex<long double> basis{std::cos(angle), std::sin(angle)};
@@ -219,15 +217,18 @@ ardirec::power::HarmonicSpectrum AnalysisController::harmonicSpectrum(int channe
                                                                       int maximumOrder) const {
     if (!m_document || channelIndex < 0 || channelIndex >= m_document->analogCount()) return {};
 
-    const auto& samples = m_document->analogSamples(channelIndex);
     const auto& times = m_document->timeSeconds();
     const auto [first, end] = oneCycleWindow(absoluteTimeSeconds);
-    const std::size_t cappedEnd = std::min({end, samples.size(), times.size()});
+    const std::size_t cappedEnd = std::min(end, times.size());
     if (first >= cappedEnd || cappedEnd - first < 4) return {};
 
+    std::vector<double> samples;
+    m_document->copyRecordedAnalogRange(channelIndex, first, cappedEnd, samples);
+    const std::size_t count = std::min(samples.size(), cappedEnd - first);
+    if (count < 4) return {};
+
     const double frequency = m_document->nominalFrequency() > 1.0 ? m_document->nominalFrequency() : 50.0;
-    const std::size_t count = cappedEnd - first;
-    return ardirec::power::harmonic_spectrum(std::span<const double>(samples.data() + first, count),
+    return ardirec::power::harmonic_spectrum(std::span<const double>(samples.data(), count),
                                              std::span<const double>(times.data() + first, count),
                                              frequency,
                                              maximumOrder,

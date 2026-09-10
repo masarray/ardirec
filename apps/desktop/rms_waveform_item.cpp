@@ -6,8 +6,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <limits>
-#include <vector>
 
 RmsWaveformItem::RmsWaveformItem(QQuickItem* parent) : QQuickItem(parent) {
     setFlag(ItemHasContents, true);
@@ -19,17 +17,17 @@ void RmsWaveformItem::setDocument(QObject* document) {
     if (m_document) disconnect(m_document, nullptr, this, nullptr);
     m_document = controller;
     if (m_document) {
-        connect(m_document, &DocumentController::documentChanged, this, &RmsWaveformItem::reloadSamples);
+        connect(m_document, &DocumentController::documentChanged, this, &RmsWaveformItem::reloadData);
         connect(m_document, &DocumentController::representationChanged, this, &RmsWaveformItem::refreshRepresentation);
     }
-    reloadSamples();
+    reloadData();
     emit documentChanged();
 }
 
 void RmsWaveformItem::setChannelIndex(int value) {
     if (m_channelIndex == value) return;
     m_channelIndex = value;
-    reloadSamples();
+    reloadData();
     emit channelIndexChanged();
 }
 
@@ -56,69 +54,50 @@ void RmsWaveformItem::setPanFraction(double value) {
     emit viewChanged();
 }
 
-void RmsWaveformItem::reloadSamples() {
+void RmsWaveformItem::reloadData() {
     if (!m_document) {
-        m_samples.clear();
-        m_times.clear();
-        m_rmsSamples.clear();
+        m_data.reset();
+        m_times.reset();
         m_displayScale = 1.0;
+        m_scalePeak = 1.0;
+        m_nominalFrequency = 50.0;
     } else {
-        m_samples = m_document->analogSamples(m_channelIndex);
-        m_times = m_document->timeSeconds();
-        if (m_times.size() > m_samples.size()) m_times.resize(m_samples.size());
-        if (m_samples.size() > m_times.size()) m_samples.resize(m_times.size());
+        m_data = m_document->dataStoreSnapshot();
+        m_times = m_document->timeIndexSnapshot();
         m_displayScale = m_document->channelDisplayScale(m_channelIndex);
-        rebuildRms();
+        m_scalePeak = m_document->channelPeak(m_channelIndex) / std::sqrt(2.0);
+        m_nominalFrequency = m_document->nominalFrequency() > 1.0 ? m_document->nominalFrequency() : 50.0;
     }
+    if (!std::isfinite(m_scalePeak) || m_scalePeak < 1.0e-12) m_scalePeak = 1.0;
     update();
 }
 
 void RmsWaveformItem::refreshRepresentation() {
-    m_displayScale = m_document ? m_document->channelDisplayScale(m_channelIndex) : 1.0;
-    update();
-}
-
-void RmsWaveformItem::rebuildRms() {
-    m_rmsSamples.assign(m_samples.size(), 0.0);
-    if (!m_document || m_samples.empty() || m_times.size() != m_samples.size()) return;
-
-    const double frequency = m_document->nominalFrequency() > 1.0 ? m_document->nominalFrequency() : 50.0;
-    const double period = 1.0 / frequency;
-    std::size_t left = 0;
-    long double sumSquares = 0.0L;
-    std::size_t finiteCount = 0;
-
-    for (std::size_t right = 0; right < m_samples.size(); ++right) {
-        const double value = m_samples[right];
-        if (std::isfinite(value)) {
-            sumSquares += static_cast<long double>(value) * static_cast<long double>(value);
-            ++finiteCount;
-        }
-
-        while (left < right && m_times[right] - m_times[left] >= period) {
-            const double old = m_samples[left];
-            if (std::isfinite(old)) {
-                sumSquares -= static_cast<long double>(old) * static_cast<long double>(old);
-                if (finiteCount > 0) --finiteCount;
-            }
-            ++left;
-        }
-
-        m_rmsSamples[right] = finiteCount > 0
-                                  ? std::sqrt(static_cast<double>(sumSquares / static_cast<long double>(finiteCount)))
-                                  : 0.0;
+    if (m_document) {
+        m_displayScale = m_document->channelDisplayScale(m_channelIndex);
+        m_scalePeak = m_document->channelPeak(m_channelIndex) / std::sqrt(2.0);
+    } else {
+        m_displayScale = 1.0;
+        m_scalePeak = 1.0;
     }
+    if (!std::isfinite(m_scalePeak) || m_scalePeak < 1.0e-12) m_scalePeak = 1.0;
+    update();
 }
 
 QSGNode* RmsWaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*) {
     auto* node = static_cast<QSGGeometryNode*>(oldNode);
-    if (m_rmsSamples.size() < 2 || m_times.size() < 2 || width() <= 1.0 || height() <= 1.0) {
+    const auto data = m_data;
+    const auto times = m_times;
+    const std::size_t count = data && times ? std::min(data->frameCount(), times->size()) : 0;
+    if (count < 2 || m_channelIndex < 0
+        || static_cast<std::size_t>(m_channelIndex) >= (data ? data->analogCount() : 0)
+        || width() <= 1.0 || height() <= 1.0) {
         delete node;
         return nullptr;
     }
 
-    const double dataStart = m_times.front();
-    const double dataEnd = m_times.back();
+    const double dataStart = times->front();
+    const double dataEnd = (*times)[count - 1];
     const double fullDuration = std::max(0.0, dataEnd - dataStart);
     if (fullDuration <= 0.0) {
         delete node;
@@ -130,27 +109,26 @@ QSGNode* RmsWaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*
     const double startTime = dataStart + std::clamp(m_panFraction, 0.0, 1.0) * movable;
     const double endTime = startTime + visibleDuration;
 
-    auto first = std::lower_bound(m_times.begin(), m_times.end(), startTime);
-    auto last = std::upper_bound(m_times.begin(), m_times.end(), endTime);
-    std::size_t start = static_cast<std::size_t>(std::distance(m_times.begin(), first));
-    std::size_t end = static_cast<std::size_t>(std::distance(m_times.begin(), last));
-    start = std::min(start, m_rmsSamples.size() - 1);
-    end = std::min(end, m_rmsSamples.size());
-    if (end <= start + 1) end = std::min(m_rmsSamples.size(), start + 2);
+    const auto logicalEnd = times->begin() + static_cast<std::ptrdiff_t>(count);
+    auto first = std::lower_bound(times->begin(), logicalEnd, startTime);
+    auto last = std::upper_bound(times->begin(), logicalEnd, endTime);
+    std::size_t start = static_cast<std::size_t>(std::distance(times->begin(), first));
+    std::size_t end = static_cast<std::size_t>(std::distance(times->begin(), last));
+    start = std::min(start, count - 1);
+    end = std::min(end, count);
+    if (end <= start + 1) end = std::min(count, start + 2);
+    if (end <= start + 1) {
+        delete node;
+        return nullptr;
+    }
     const std::size_t visibleCount = end - start;
 
-    double scalePeak = m_document ? m_document->channelPeak(m_channelIndex) / std::sqrt(2.0) : 1.0;
-    if (!std::isfinite(scalePeak) || scalePeak < 1.0e-12) scalePeak = 1.0;
-    const double absoluteScale = std::abs(m_displayScale);
-    for (std::size_t i = start; i < end; ++i) {
-        const double displayed = m_rmsSamples[i] * absoluteScale;
-        if (std::isfinite(displayed)) scalePeak = std::max(scalePeak, displayed * 1.03);
-    }
-
     const std::size_t pixelWidth = std::clamp<std::size_t>(static_cast<std::size_t>(width()), 64, 4096);
-    const std::size_t targetPoints = std::max<std::size_t>(64, pixelWidth * 2);
+    const std::size_t targetPoints = std::min(visibleCount, std::max<std::size_t>(64, pixelWidth * 2));
     const std::size_t stride = std::max<std::size_t>(1, (visibleCount + targetPoints - 1) / targetPoints);
-    const std::size_t pointCount = std::max<std::size_t>(2, (visibleCount + stride - 1) / stride);
+    std::size_t pointCount = (visibleCount + stride - 1) / stride;
+    const bool appendFinal = start + (pointCount - 1) * stride != end - 1;
+    if (appendFinal) ++pointCount;
 
     if (!node) {
         node = new QSGGeometryNode;
@@ -175,6 +153,10 @@ QSGNode* RmsWaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*
     auto* vertices = geometry->vertexDataAsPoint2D();
     const float w = static_cast<float>(width());
     const float h = static_cast<float>(height());
+    const double scalePeak = std::max(1.0e-12, m_scalePeak);
+    const double period = 1.0 / std::max(1.0, m_nominalFrequency);
+    const std::size_t channel = static_cast<std::size_t>(m_channelIndex);
+
     const auto xForTime = [&](double value) {
         const double fraction = std::clamp((value - startTime) / visibleDuration, 0.0, 1.0);
         return static_cast<float>(fraction * static_cast<double>(w));
@@ -183,17 +165,39 @@ QSGNode* RmsWaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*
         const double normalized = std::clamp(value / scalePeak, 0.0, 1.0);
         return static_cast<float>(static_cast<double>(h) * (0.90 - normalized * 0.80));
     };
+    const auto rmsAt = [&](std::size_t index) {
+        const double windowEnd = (*times)[index];
+        const double windowStart = windowEnd - period;
+        const auto firstIt = std::lower_bound(times->begin(),
+                                              times->begin() + static_cast<std::ptrdiff_t>(index + 1),
+                                              windowStart);
+        const std::size_t firstIndex = static_cast<std::size_t>(std::distance(times->begin(), firstIt));
+        long double sumSquares = 0.0L;
+        std::size_t finiteCount = 0;
+        for (std::size_t sample = firstIndex; sample <= index; ++sample) {
+            const double value = data->analogValue(sample, channel);
+            if (!std::isfinite(value)) continue;
+            sumSquares += static_cast<long double>(value) * static_cast<long double>(value);
+            ++finiteCount;
+        }
+        if (finiteCount == 0) return 0.0;
+        return std::sqrt(static_cast<double>(sumSquares / static_cast<long double>(finiteCount)))
+               * std::abs(m_displayScale);
+    };
 
     std::size_t out = 0;
+    std::size_t lastIndex = start;
     for (std::size_t i = start; i < end && out < pointCount; i += stride) {
-        const double value = m_rmsSamples[i] * absoluteScale;
-        vertices[out++].set(xForTime(m_times[i]), std::isfinite(value) ? yFor(value) : h * 0.9F);
+        const double value = rmsAt(i);
+        vertices[out++].set(xForTime((*times)[i]), std::isfinite(value) ? yFor(value) : h * 0.9F);
+        lastIndex = i;
     }
-    while (out < pointCount) {
+    if (lastIndex != end - 1 && out < pointCount) {
         const std::size_t i = end - 1;
-        const double value = m_rmsSamples[i] * absoluteScale;
-        vertices[out++].set(xForTime(m_times[i]), std::isfinite(value) ? yFor(value) : h * 0.9F);
+        const double value = rmsAt(i);
+        vertices[out++].set(xForTime((*times)[i]), std::isfinite(value) ? yFor(value) : h * 0.9F);
     }
+    while (out < pointCount) vertices[out++] = vertices[out - 1];
 
     node->markDirty(QSGNode::DirtyGeometry);
     return node;

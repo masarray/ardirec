@@ -3,6 +3,9 @@
 #include "document_controller.hpp"
 
 #include <QCoreApplication>
+#include <QElapsedTimer>
+#include <QEventLoop>
+#include <QThread>
 #include <QString>
 #include <QUrl>
 #include <QVariantMap>
@@ -22,6 +25,17 @@ void require_near(double actual, double expected, double tolerance, const char* 
         throw std::runtime_error(message);
     }
 }
+
+void wait_for_document(DocumentController& document, int timeoutMs = 10000) {
+    QElapsedTimer timer;
+    timer.start();
+    while (document.loading() && timer.elapsed() < timeoutMs) {
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
+        QThread::msleep(1);
+    }
+    QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
+    require(!document.loading(), "background COMTRADE load completes before timeout");
+}
 } // namespace
 
 int main(int argc, char* argv[]) {
@@ -31,8 +45,11 @@ int main(int argc, char* argv[]) {
 
         DocumentController document;
         document.openCfg(QUrl::fromLocalFile(QString::fromStdString(cfgPath.string())));
+        require(document.loading(), "COMTRADE open is asynchronous");
+        wait_for_document(document);
         require(document.error().isEmpty(), "distance P1 fixture opens without error");
         require(document.sampleCount() == 48, "distance P1 fixture sample count");
+        require(document.dataStoreSnapshot() != nullptr, "lazy DAT source is retained by the document");
 
         AnalysisController analysis(&document);
         for (const char* loop : {"L1-E", "L2-E", "L3-E", "L1-L2", "L2-L3", "L3-L1"}) {
@@ -42,8 +59,6 @@ int main(int argc, char* argv[]) {
         require_near(analysis.distanceCurrentFloor(), 0.001, 1.0e-12,
                      "distance current floor is 0.1 percent of the displayed record peak");
 
-        // P1 cursor hot path: all six loops must be derivable from one shared phasor snapshot
-        // without changing the numerical result of the established single-loop API.
         constexpr double cursorTime = 0.022;
         const QVariantMap batched = analysis.distanceLoopsAt(cursorTime, 0.0, 0.0);
         require(batched.size() == 6, "batched cursor API returns all six protection loops");
