@@ -242,6 +242,11 @@ void DocumentController::applyLoadedDocument(const std::shared_ptr<LoadedDocumen
     m_channelPeaks = loaded->channel_peaks;
     m_statusActive = loaded->status_active;
     m_digitalEdgeTimes = loaded->digital_edge_times;
+    m_diagnostics.clear();
+    m_diagnostics.reserve(static_cast<qsizetype>(loaded->diagnostics.size()));
+    for (const auto& diagnostic : loaded->diagnostics) {
+        m_diagnostics.push_back(QString::fromStdString(diagnostic));
+    }
 
     m_distanceZonePath.clear();
     m_headerSourceName.clear();
@@ -328,9 +333,8 @@ void DocumentController::applyLoadedDocument(const std::shared_ptr<LoadedDocumen
     if (!sidecars.isEmpty()) {
         m_recordHealth += QStringLiteral(" · sidecars %1").arg(sidecars.join(QStringLiteral(" + ")));
     }
-    if (!loaded->diagnostics.empty()) {
-        m_recordHealth += QStringLiteral(" · %1 diagnostic(s)")
-                              .arg(static_cast<qulonglong>(loaded->diagnostics.size()));
+    if (!m_diagnostics.isEmpty()) {
+        m_recordHealth += QStringLiteral(" · %1 diagnostic(s)").arg(m_diagnostics.size());
     }
 
     m_error.clear();
