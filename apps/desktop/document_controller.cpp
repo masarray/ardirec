@@ -1,26 +1,23 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "document_controller.hpp"
 
-#include "ardirec/comtrade/bundle.hpp"
-#include "ardirec/comtrade/dat_reader.hpp"
-#include "ardirec/comtrade/parser.hpp"
+#include "document_loader.hpp"
 #include "ardirec/comtrade/value_representation.hpp"
 
 #include <QDate>
 #include <QDateTime>
-#include <QFile>
 #include <QFileInfo>
+#include <QFutureWatcher>
 #include <QTime>
+#include <QtConcurrent/QtConcurrentRun>
 
 #include <algorithm>
 #include <cmath>
 #include <filesystem>
 #include <limits>
 #include <optional>
-#include <stdexcept>
 
 namespace {
-constexpr std::size_t kViewerAlphaFrameLimit = 500'000;
 
 std::optional<double> parse_comtrade_timestamp(const std::string& raw) {
     const QString text = QString::fromStdString(raw).trimmed();
@@ -95,212 +92,260 @@ std::filesystem::path qstring_to_filesystem_path(const QString& value) {
 #endif
 }
 
-QString read_text_sidecar(const std::filesystem::path& path) {
-    if (path.empty()) return {};
-    QFile file(filesystem_path_to_qstring(path));
-    if (!file.open(QIODevice::ReadOnly)) return {};
-    const QByteArray bytes = file.readAll();
-    QString decoded = QString::fromUtf8(bytes);
-    if (decoded.contains(QChar(0xfffd))) decoded = QString::fromLatin1(bytes);
+QString decoded_text(const std::string& bytes) {
+    if (bytes.empty()) return {};
+    QString decoded = QString::fromUtf8(bytes.data(), static_cast<qsizetype>(bytes.size()));
+    if (decoded.contains(QChar(0xfffd))) {
+        decoded = QString::fromLatin1(bytes.data(), static_cast<qsizetype>(bytes.size()));
+    }
     return decoded;
 }
+
 } // namespace
 
+DocumentController::DocumentController(QObject* parent) : QObject(parent) {}
+
+DocumentController::~DocumentController() {
+    if (m_activeLoadCancel) m_activeLoadCancel->store(true, std::memory_order_relaxed);
+}
+
+const std::vector<double>& DocumentController::timeSeconds() const {
+    static const std::vector<double> empty;
+    return m_timeSeconds ? *m_timeSeconds : empty;
+}
+
 double DocumentController::durationSeconds() const {
-    if (m_timeSeconds.size() < 2) return 0.0;
-    return std::max(0.0, m_timeSeconds.back() - m_timeSeconds.front());
+    const auto& times = timeSeconds();
+    if (times.size() < 2) return 0.0;
+    return std::max(0.0, times.back() - times.front());
 }
 
 double DocumentController::dataStartSeconds() const {
-    return m_timeSeconds.empty() ? 0.0 : m_timeSeconds.front();
+    const auto& times = timeSeconds();
+    return times.empty() ? 0.0 : times.front();
 }
 
 double DocumentController::dataEndSeconds() const {
-    return m_timeSeconds.empty() ? 0.0 : m_timeSeconds.back();
+    const auto& times = timeSeconds();
+    return times.empty() ? 0.0 : times.back();
 }
 
-const std::vector<double>& DocumentController::analogSamples(int index) const {
-    static const std::vector<double> empty;
-    if (index < 0 || index >= static_cast<int>(m_analogSamples.size())) return empty;
-    return m_analogSamples[static_cast<std::size_t>(index)];
+double DocumentController::recordedAnalogSampleAt(int channelIndex, std::size_t frameIndex) const noexcept {
+    if (!m_datStore || channelIndex < 0 || channelIndex >= m_analogCount
+        || frameIndex >= timeSeconds().size()) {
+        return std::numeric_limits<double>::quiet_NaN();
+    }
+    return m_datStore->analogValue(frameIndex, static_cast<std::size_t>(channelIndex));
 }
 
-const std::vector<std::uint8_t>& DocumentController::statusSamples(int index) const {
-    static const std::vector<std::uint8_t> empty;
-    if (index < 0 || index >= static_cast<int>(m_statusSamples.size())) return empty;
-    return m_statusSamples[static_cast<std::size_t>(index)];
+bool DocumentController::recordedDigitalSampleAt(int channelIndex, std::size_t frameIndex) const noexcept {
+    if (!m_datStore || channelIndex < 0 || channelIndex >= m_digitalCount
+        || frameIndex >= timeSeconds().size()) {
+        return false;
+    }
+    return m_datStore->statusValue(frameIndex, static_cast<std::size_t>(channelIndex));
+}
+
+void DocumentController::copyRecordedAnalogRange(int channelIndex,
+                                                 std::size_t first,
+                                                 std::size_t end,
+                                                 std::vector<double>& destination) const {
+    destination.clear();
+    if (!m_datStore || channelIndex < 0 || channelIndex >= m_analogCount) return;
+    end = std::min(end, timeSeconds().size());
+    if (first >= end) return;
+    m_datStore->copyAnalogRange(static_cast<std::size_t>(channelIndex), first, end, destination);
 }
 
 std::pair<std::size_t, std::size_t> DocumentController::visibleSampleRange(double zoomFactor,
                                                                            double panFraction) const {
-    if (m_timeSeconds.empty()) return {0, 0};
-    if (m_timeSeconds.size() == 1) return {0, 1};
+    const auto& times = timeSeconds();
+    if (times.empty()) return {0, 0};
+    if (times.size() == 1) return {0, 1};
 
     zoomFactor = std::clamp(zoomFactor, 1.0, 500.0);
     panFraction = std::clamp(panFraction, 0.0, 1.0);
     const double fullDuration = durationSeconds();
-    if (fullDuration <= 0.0) return {0, m_timeSeconds.size()};
+    if (fullDuration <= 0.0) return {0, times.size()};
 
     const double visibleDuration = fullDuration / zoomFactor;
     const double movable = std::max(0.0, fullDuration - visibleDuration);
     const double startTime = dataStartSeconds() + panFraction * movable;
     const double endTime = startTime + visibleDuration;
 
-    auto first = std::lower_bound(m_timeSeconds.begin(), m_timeSeconds.end(), startTime);
-    auto last = std::upper_bound(m_timeSeconds.begin(), m_timeSeconds.end(), endTime);
-    std::size_t start = static_cast<std::size_t>(std::distance(m_timeSeconds.begin(), first));
-    std::size_t end = static_cast<std::size_t>(std::distance(m_timeSeconds.begin(), last));
-    if (start >= m_timeSeconds.size()) start = m_timeSeconds.size() - 1;
-    end = std::min(end, m_timeSeconds.size());
-    if (end <= start + 1) end = std::min(m_timeSeconds.size(), start + 2);
+    auto first = std::lower_bound(times.begin(), times.end(), startTime);
+    auto last = std::upper_bound(times.begin(), times.end(), endTime);
+    std::size_t start = static_cast<std::size_t>(std::distance(times.begin(), first));
+    std::size_t end = static_cast<std::size_t>(std::distance(times.begin(), last));
+    if (start >= times.size()) start = times.size() - 1;
+    end = std::min(end, times.size());
+    if (end <= start + 1) end = std::min(times.size(), start + 2);
     return {start, end};
 }
 
 void DocumentController::openCfg(const QUrl& url) {
-    try {
-        const auto path = qstring_to_filesystem_path(url.toLocalFile());
-        const auto bundle = ardirec::comtrade::locate_bundle(path);
-        if (bundle.cfg.empty()) throw std::runtime_error("Cannot locate CFG file");
-        if (bundle.dat.empty()) throw std::runtime_error("Matching DAT file was not found next to CFG");
-
-        const auto cfg = ardirec::comtrade::ConfigParser{}.parse_file(bundle.cfg);
-        const auto frames = ardirec::comtrade::DatReader{}.read(cfg, bundle.dat, kViewerAlphaFrameLimit);
-        if (frames.empty()) throw std::runtime_error("DAT contains no readable sample frames");
-
-        m_distanceZonePath.clear();
-        m_headerSourceName.clear();
-        m_headerText.clear();
-        const auto distanceSidecar = !bundle.rio.empty() ? bundle.rio : bundle.xrio;
-        if (!distanceSidecar.empty()) {
-            m_distanceZonePath = QFileInfo(filesystem_path_to_qstring(distanceSidecar)).absoluteFilePath();
-        }
-        if (!bundle.hdr.empty()) {
-            m_headerSourceName = QFileInfo(filesystem_path_to_qstring(bundle.hdr)).fileName();
-            m_headerText = read_text_sidecar(bundle.hdr);
-        }
-
-        m_title = QString::fromStdString(cfg.station_name.empty() ? bundle.cfg.stem().string() : cfg.station_name);
-        m_recorderId = cfg.recorder_id.empty() ? QStringLiteral("—") : QString::fromStdString(cfg.recorder_id);
-        m_revisionText = QString::number(cfg.revision_year);
-        m_dataFormatText = QString::fromLatin1(ardirec::comtrade::to_string(cfg.data_format));
-        m_nominalFrequency = cfg.nominal_frequency;
-        m_startTimeText = cfg.start_time.raw.empty() ? QStringLiteral("—") : QString::fromStdString(cfg.start_time.raw);
-        m_triggerTimeText = cfg.trigger_time.raw.empty() ? QStringLiteral("—") : QString::fromStdString(cfg.trigger_time.raw);
-        m_metadata = QStringLiteral("COMTRADE %1 · %2 · %3 analog · %4 digital · %5 Hz")
-                         .arg(cfg.revision_year)
-                         .arg(m_dataFormatText)
-                         .arg(static_cast<qulonglong>(cfg.analog_channels.size()))
-                         .arg(static_cast<qulonglong>(cfg.status_channels.size()))
-                         .arg(cfg.nominal_frequency, 0, 'f', 1);
-
-        m_channels.clear();
-        m_channelNames.clear();
-        m_channelUnits.clear();
-        m_statusNames.clear();
-        m_channelConfigs = cfg.analog_channels;
-        m_valueRepresentation = QStringLiteral("secondary");
-        m_analogCount = static_cast<int>(cfg.analog_channels.size());
-        m_digitalCount = static_cast<int>(cfg.status_channels.size());
-        for (const auto& ch : cfg.analog_channels) {
-            const auto unit = ch.units.empty() ? std::string{} : " · " + ch.units;
-            m_channels << QStringLiteral("A  %1%2")
-                              .arg(QString::fromStdString(ch.id), QString::fromStdString(unit));
-            m_channelNames << QString::fromStdString(ch.id);
-            m_channelUnits << QString::fromStdString(ch.units);
-        }
-        for (const auto& ch : cfg.status_channels) {
-            const QString name = QString::fromStdString(ch.id);
-            m_channels << QStringLiteral("D  %1").arg(name);
-            m_statusNames << name;
-        }
-        rebuildTransformerSummary();
-
-        m_analogSamples.assign(cfg.analog_channels.size(), {});
-        for (auto& values : m_analogSamples) values.reserve(frames.size());
-        m_statusSamples.assign(cfg.status_channels.size(), {});
-        for (auto& values : m_statusSamples) values.reserve(frames.size());
-        m_statusNormalState.clear();
-        m_statusNormalState.reserve(cfg.status_channels.size());
-        for (const auto& channel : cfg.status_channels) m_statusNormalState.push_back(channel.normal_state);
-        m_timeSeconds.clear();
-        m_timeSeconds.reserve(frames.size());
-
-        const double timeScale = cfg.time_multiplier * 1.0e-6;
-        for (const auto& frame : frames) {
-            m_timeSeconds.push_back(static_cast<double>(frame.raw_timestamp) * timeScale);
-            const auto analogCount = std::min(frame.analog.size(), m_analogSamples.size());
-            for (std::size_t i = 0; i < analogCount; ++i) m_analogSamples[i].push_back(frame.analog[i]);
-            const auto statusCount = std::min(frame.status.size(), m_statusSamples.size());
-            for (std::size_t i = 0; i < statusCount; ++i) {
-                m_statusSamples[i].push_back(frame.status[i] ? std::uint8_t{1} : std::uint8_t{0});
-            }
-        }
-
-        m_channelPeaks.assign(m_analogSamples.size(), 1.0);
-        for (std::size_t channel = 0; channel < m_analogSamples.size(); ++channel) {
-            double peak = 0.0;
-            for (const double value : m_analogSamples[channel]) {
-                if (std::isfinite(value)) peak = std::max(peak, std::abs(value));
-            }
-            m_channelPeaks[channel] = peak;
-        }
-
-        m_statusActive.assign(m_statusSamples.size(), false);
-        m_activeDigitalCount = 0;
-        for (std::size_t channel = 0; channel < m_statusSamples.size(); ++channel) {
-            const bool active = std::any_of(m_statusSamples[channel].begin(), m_statusSamples[channel].end(),
-                                            [](std::uint8_t value) { return value != 0; });
-            m_statusActive[channel] = active;
-            if (active) ++m_activeDigitalCount;
-        }
-        rebuildDigitalEdges();
-
-        m_triggerOffsetSeconds = dataStartSeconds();
-        const auto startStamp = parse_comtrade_timestamp(cfg.start_time.raw);
-        const auto triggerStamp = parse_comtrade_timestamp(cfg.trigger_time.raw);
-        if (startStamp && triggerStamp) {
-            const double delta = *triggerStamp - *startStamp;
-            if (delta >= -1.0e-6 && delta <= durationSeconds() + 1.0e-3) {
-                m_triggerOffsetSeconds = dataStartSeconds() + std::max(0.0, delta);
-            }
-        }
-
-        m_selectedAnalogIndex = m_analogCount > 0 ? 0 : -1;
-        m_selectedSignal = m_selectedAnalogIndex >= 0
-                               ? m_channelNames.value(0)
-                               : QStringLiteral("No analog signal");
-        rebuildSelectedSamples();
-
-        const bool hitLimit = frames.size() >= kViewerAlphaFrameLimit;
-        m_recordHealth = hitLimit
-                             ? QStringLiteral("Loaded · preview capped at %1 samples for alpha")
-                                   .arg(static_cast<qulonglong>(kViewerAlphaFrameLimit))
-                             : QStringLiteral("Loaded · %1 analog · %2 digital (%3 active)")
-                                   .arg(m_analogCount)
-                                   .arg(m_digitalCount)
-                                   .arg(m_activeDigitalCount);
-        QStringList sidecars;
-        if (!m_distanceZonePath.isEmpty()) sidecars << QFileInfo(m_distanceZonePath).suffix().toUpper();
-        if (!m_headerSourceName.isEmpty()) sidecars << QStringLiteral("HDR");
-        if (!sidecars.isEmpty()) m_recordHealth += QStringLiteral(" · sidecars %1").arg(sidecars.join(QStringLiteral(" + ")));
-
-        m_error.clear();
-        emit documentChanged();
-        emit waveformChanged();
-        emit representationChanged();
+    const auto path = qstring_to_filesystem_path(url.toLocalFile());
+    if (path.empty()) {
+        m_error = QStringLiteral("Invalid CFG path");
         emit errorChanged();
-    } catch (const std::exception& ex) {
-        m_error = QString::fromUtf8(ex.what());
-        emit errorChanged();
+        return;
     }
+
+    if (m_activeLoadCancel) m_activeLoadCancel->store(true, std::memory_order_relaxed);
+    const quint64 generation = ++m_loadGeneration;
+    auto cancel = std::make_shared<std::atomic_bool>(false);
+    m_activeLoadCancel = cancel;
+    m_loading = true;
+    m_loadingStatus = QStringLiteral("Indexing COMTRADE in background · %1")
+                          .arg(QFileInfo(url.toLocalFile()).fileName());
+    m_error.clear();
+    emit loadingChanged();
+    emit errorChanged();
+
+    auto* watcher = new QFutureWatcher<std::shared_ptr<LoadedDocumentData>>(this);
+    connect(watcher, &QFutureWatcher<std::shared_ptr<LoadedDocumentData>>::finished,
+            this, [this, watcher, generation, cancel]() {
+                const auto loaded = watcher->result();
+                watcher->deleteLater();
+                if (generation != m_loadGeneration) return;
+                if (m_activeLoadCancel == cancel) m_activeLoadCancel.reset();
+                applyLoadedDocument(loaded, generation);
+            });
+
+    watcher->setFuture(QtConcurrent::run([path, cancel]() {
+        return loadDocumentData(path, cancel);
+    }));
+}
+
+void DocumentController::applyLoadedDocument(const std::shared_ptr<LoadedDocumentData>& loaded,
+                                             quint64 generation) {
+    if (generation != m_loadGeneration) return;
+    m_loading = false;
+    m_loadingStatus.clear();
+
+    if (!loaded || loaded->cancelled) {
+        emit loadingChanged();
+        return;
+    }
+    if (!loaded->error.empty() || !loaded->dat || !loaded->time_seconds || loaded->time_seconds->empty()) {
+        m_error = QString::fromStdString(loaded ? loaded->error : std::string("COMTRADE load failed"));
+        if (m_error.isEmpty()) m_error = QStringLiteral("COMTRADE load failed");
+        emit loadingChanged();
+        emit errorChanged();
+        return;
+    }
+
+    const auto& cfg = loaded->config;
+    const auto& bundle = loaded->bundle;
+    m_datStore = loaded->dat;
+    m_timeSeconds = loaded->time_seconds;
+    m_channelPeaks = loaded->channel_peaks;
+    m_statusActive = loaded->status_active;
+    m_digitalEdgeTimes = loaded->digital_edge_times;
+
+    m_distanceZonePath.clear();
+    m_headerSourceName.clear();
+    m_headerText.clear();
+    const auto distanceSidecar = !bundle.rio.empty() ? bundle.rio : bundle.xrio;
+    if (!distanceSidecar.empty()) {
+        m_distanceZonePath = QFileInfo(filesystem_path_to_qstring(distanceSidecar)).absoluteFilePath();
+    }
+    if (!bundle.hdr.empty()) {
+        m_headerSourceName = QFileInfo(filesystem_path_to_qstring(bundle.hdr)).fileName();
+        m_headerText = decoded_text(loaded->header_text);
+    }
+
+    m_title = QString::fromStdString(cfg.station_name.empty() ? bundle.cfg.stem().string() : cfg.station_name);
+    m_recorderId = cfg.recorder_id.empty() ? QStringLiteral("—") : QString::fromStdString(cfg.recorder_id);
+    m_revisionText = QString::number(cfg.revision_year);
+    m_dataFormatText = QString::fromLatin1(ardirec::comtrade::to_string(cfg.data_format));
+    m_nominalFrequency = cfg.nominal_frequency;
+    m_startTimeText = cfg.start_time.raw.empty() ? QStringLiteral("—") : QString::fromStdString(cfg.start_time.raw);
+    m_triggerTimeText = cfg.trigger_time.raw.empty() ? QStringLiteral("—") : QString::fromStdString(cfg.trigger_time.raw);
+    m_metadata = QStringLiteral("COMTRADE %1 · %2 · %3 analog · %4 digital · %5 Hz")
+                     .arg(cfg.revision_year)
+                     .arg(m_dataFormatText)
+                     .arg(static_cast<qulonglong>(cfg.analog_channels.size()))
+                     .arg(static_cast<qulonglong>(cfg.status_channels.size()))
+                     .arg(cfg.nominal_frequency, 0, 'f', 1);
+
+    m_channels.clear();
+    m_channelNames.clear();
+    m_channelUnits.clear();
+    m_statusNames.clear();
+    m_channelConfigs = cfg.analog_channels;
+    m_valueRepresentation = QStringLiteral("secondary");
+    m_analogCount = static_cast<int>(cfg.analog_channels.size());
+    m_digitalCount = static_cast<int>(cfg.status_channels.size());
+    for (const auto& channel : cfg.analog_channels) {
+        const auto unit = channel.units.empty() ? std::string{} : " · " + channel.units;
+        m_channels << QStringLiteral("A  %1%2")
+                          .arg(QString::fromStdString(channel.id), QString::fromStdString(unit));
+        m_channelNames << QString::fromStdString(channel.id);
+        m_channelUnits << QString::fromStdString(channel.units);
+    }
+    for (const auto& channel : cfg.status_channels) {
+        const QString name = QString::fromStdString(channel.id);
+        m_channels << QStringLiteral("D  %1").arg(name);
+        m_statusNames << name;
+    }
+    rebuildTransformerSummary();
+
+    m_statusNormalState.clear();
+    m_statusNormalState.reserve(cfg.status_channels.size());
+    for (const auto& channel : cfg.status_channels) m_statusNormalState.push_back(channel.normal_state);
+
+    m_activeDigitalCount = static_cast<int>(std::count_if(m_statusActive.begin(), m_statusActive.end(),
+                                                          [](std::uint8_t value) { return value != 0; }));
+
+    m_triggerOffsetSeconds = dataStartSeconds();
+    const auto startStamp = parse_comtrade_timestamp(cfg.start_time.raw);
+    const auto triggerStamp = parse_comtrade_timestamp(cfg.trigger_time.raw);
+    if (startStamp && triggerStamp) {
+        const double delta = *triggerStamp - *startStamp;
+        if (delta >= -1.0e-6 && delta <= durationSeconds() + 1.0e-3) {
+            m_triggerOffsetSeconds = dataStartSeconds() + std::max(0.0, delta);
+        }
+    }
+
+    m_selectedAnalogIndex = m_analogCount > 0 ? 0 : -1;
+    m_selectedSignal = m_selectedAnalogIndex >= 0
+                           ? m_channelNames.value(0)
+                           : QStringLiteral("No analog signal");
+
+    const QString accessMode = m_datStore->memoryMapped()
+                                   ? QStringLiteral("mmap lazy")
+                                   : QStringLiteral("stream-indexed lazy");
+    m_recordHealth = QStringLiteral("Loaded · %1 samples · %2 · %3 analog · %4 digital (%5 active)")
+                         .arg(static_cast<qulonglong>(sampleCount()))
+                         .arg(accessMode)
+                         .arg(m_analogCount)
+                         .arg(m_digitalCount)
+                         .arg(m_activeDigitalCount);
+    QStringList sidecars;
+    if (!m_distanceZonePath.isEmpty()) sidecars << QFileInfo(m_distanceZonePath).suffix().toUpper();
+    if (!m_headerSourceName.isEmpty()) sidecars << QStringLiteral("HDR");
+    if (!sidecars.isEmpty()) {
+        m_recordHealth += QStringLiteral(" · sidecars %1").arg(sidecars.join(QStringLiteral(" + ")));
+    }
+    if (!loaded->diagnostics.empty()) {
+        m_recordHealth += QStringLiteral(" · %1 diagnostic(s)")
+                              .arg(static_cast<qulonglong>(loaded->diagnostics.size()));
+    }
+
+    m_error.clear();
+    emit loadingChanged();
+    emit documentChanged();
+    emit waveformChanged();
+    emit representationChanged();
+    emit errorChanged();
 }
 
 void DocumentController::selectChannel(int index) {
-    if (index < 0 || index >= m_analogCount || index >= static_cast<int>(m_analogSamples.size())) return;
+    if (index < 0 || index >= m_analogCount) return;
     if (m_selectedAnalogIndex == index) return;
     m_selectedAnalogIndex = index;
     m_selectedSignal = m_channelNames.value(index);
-    rebuildSelectedSamples();
     emit waveformChanged();
 }
 
@@ -309,7 +354,6 @@ void DocumentController::setValueRepresentation(const QString& representation) {
     if (normalized != QStringLiteral("primary") && normalized != QStringLiteral("secondary")) return;
     if (m_valueRepresentation == normalized) return;
     m_valueRepresentation = normalized;
-    rebuildSelectedSamples();
     emit representationChanged();
     emit waveformChanged();
 }
@@ -378,27 +422,28 @@ QString DocumentController::channelRatioText(int index) const {
 }
 
 std::size_t DocumentController::nearestSampleIndex(double absoluteTimeSeconds) const {
-    if (m_timeSeconds.empty()) return 0;
+    const auto& times = timeSeconds();
+    if (times.empty()) return 0;
     absoluteTimeSeconds = std::clamp(absoluteTimeSeconds, dataStartSeconds(), dataEndSeconds());
-    auto it = std::lower_bound(m_timeSeconds.begin(), m_timeSeconds.end(), absoluteTimeSeconds);
-    std::size_t index = static_cast<std::size_t>(std::distance(m_timeSeconds.begin(), it));
-    if (index >= m_timeSeconds.size()) index = m_timeSeconds.size() - 1;
-    if (index > 0 && index < m_timeSeconds.size()) {
-        const double before = std::abs(absoluteTimeSeconds - m_timeSeconds[index - 1]);
-        const double after = std::abs(m_timeSeconds[index] - absoluteTimeSeconds);
+    auto it = std::lower_bound(times.begin(), times.end(), absoluteTimeSeconds);
+    std::size_t index = static_cast<std::size_t>(std::distance(times.begin(), it));
+    if (index >= times.size()) index = times.size() - 1;
+    if (index > 0 && index < times.size()) {
+        const double before = std::abs(absoluteTimeSeconds - times[index - 1]);
+        const double after = std::abs(times[index] - absoluteTimeSeconds);
         if (before <= after) --index;
     }
     return index;
 }
 
 double DocumentController::sampleValue(int channelIndex, double absoluteTimeSeconds) const {
-    if (channelIndex < 0 || channelIndex >= static_cast<int>(m_analogSamples.size()) || m_timeSeconds.empty()) {
+    if (channelIndex < 0 || channelIndex >= m_analogCount || timeSeconds().empty()) {
         return std::numeric_limits<double>::quiet_NaN();
     }
-    const auto& samples = m_analogSamples[static_cast<std::size_t>(channelIndex)];
-    if (samples.empty()) return std::numeric_limits<double>::quiet_NaN();
-    const std::size_t index = std::min(nearestSampleIndex(absoluteTimeSeconds), samples.size() - 1);
-    return samples[index] * channelDisplayScale(channelIndex);
+    const std::size_t index = nearestSampleIndex(absoluteTimeSeconds);
+    const double value = recordedAnalogSampleAt(channelIndex, index);
+    return std::isfinite(value) ? value * channelDisplayScale(channelIndex)
+                                : std::numeric_limits<double>::quiet_NaN();
 }
 
 QString DocumentController::formatChannelValue(int channelIndex, double value) const {
@@ -425,15 +470,12 @@ QString DocumentController::digitalName(int index) const {
 
 bool DocumentController::digitalIsActive(int index) const {
     return index >= 0 && index < static_cast<int>(m_statusActive.size())
-           && m_statusActive[static_cast<std::size_t>(index)];
+           && m_statusActive[static_cast<std::size_t>(index)] != 0;
 }
 
 bool DocumentController::digitalStateAt(int index, double absoluteTimeSeconds) const {
-    if (index < 0 || index >= static_cast<int>(m_statusSamples.size()) || m_timeSeconds.empty()) return false;
-    const auto& samples = m_statusSamples[static_cast<std::size_t>(index)];
-    if (samples.empty()) return false;
-    const std::size_t sample = std::min(nearestSampleIndex(absoluteTimeSeconds), samples.size() - 1);
-    return samples[sample] != 0;
+    if (index < 0 || index >= m_digitalCount || timeSeconds().empty()) return false;
+    return recordedDigitalSampleAt(index, nearestSampleIndex(absoluteTimeSeconds));
 }
 
 QString DocumentController::digitalStateText(int index, double absoluteTimeSeconds) const {
@@ -466,22 +508,6 @@ double DocumentController::snapToDigitalEdge(double absoluteTimeSeconds, double 
     return distance <= maxDistanceSeconds ? nearest : absoluteTimeSeconds;
 }
 
-void DocumentController::rebuildDigitalEdges() {
-    m_digitalEdgeTimes.clear();
-    if (m_timeSeconds.size() < 2 || m_statusSamples.empty()) return;
-
-    for (const auto& samples : m_statusSamples) {
-        const std::size_t count = std::min(samples.size(), m_timeSeconds.size());
-        for (std::size_t i = 1; i < count; ++i) {
-            if (samples[i] != samples[i - 1]) m_digitalEdgeTimes.push_back(m_timeSeconds[i]);
-        }
-    }
-
-    std::sort(m_digitalEdgeTimes.begin(), m_digitalEdgeTimes.end());
-    m_digitalEdgeTimes.erase(std::unique(m_digitalEdgeTimes.begin(), m_digitalEdgeTimes.end()),
-                             m_digitalEdgeTimes.end());
-}
-
 void DocumentController::rebuildTransformerSummary() {
     QString voltageRatio;
     QString currentRatio;
@@ -502,16 +528,4 @@ void DocumentController::rebuildTransformerSummary() {
     m_transformerRatiosAvailable = !parts.isEmpty();
     m_transformerRatioSummary = parts.isEmpty() ? QStringLiteral("No CT/PT ratio metadata")
                                                 : parts.join(QStringLiteral(" · "));
-}
-
-void DocumentController::rebuildSelectedSamples() {
-    if (m_selectedAnalogIndex < 0 || m_selectedAnalogIndex >= static_cast<int>(m_analogSamples.size())) {
-        m_selectedSamples.clear();
-        return;
-    }
-    m_selectedSamples = m_analogSamples[static_cast<std::size_t>(m_selectedAnalogIndex)];
-    const double scale = channelDisplayScale(m_selectedAnalogIndex);
-    for (double& value : m_selectedSamples) {
-        if (std::isfinite(value)) value *= scale;
-    }
 }
