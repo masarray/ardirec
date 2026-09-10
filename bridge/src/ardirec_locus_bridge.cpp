@@ -77,6 +77,22 @@ double unit_scale_to_si(const ardirec_analog_channel_info& info) {
     return 1.0;
 }
 
+// Keep the distance validity guard bit-for-bit aligned with the desktop controller's
+// established channelPeak() semantics: the raw/display peak is first rounded upward to
+// a stable engineering 1/2/5 decade before the 0.1% floor is applied. This prevents the
+// validity threshold from breathing with individual samples and preserves existing Locus tests.
+double nice_peak(double peak) {
+    if (!std::isfinite(peak) || peak <= 1.0e-12) return 1.0;
+    const double exponent = std::floor(std::log10(peak));
+    const double base = std::pow(10.0, exponent);
+    const double normalized = peak / base;
+    double step = 10.0;
+    if (normalized <= 1.0) step = 1.0;
+    else if (normalized <= 2.0) step = 2.0;
+    else if (normalized <= 5.0) step = 5.0;
+    return step * base;
+}
+
 int32_t read_phase_channels(ardirec_record_handle handle, PhaseChannels& channels, ardirec_record_info* out_info = nullptr) {
     ardirec_record_info info{};
     const auto info_result = ardirec_record_get_info(handle, &info);
@@ -264,6 +280,7 @@ int32_t ardirec_record_get_distance_current_floor(
         if (metadata_result != 0) return metadata_result;
         const double scale = representation_scale * unit_scale_to_si(metadata);
 
+        double channel_peak = 0.0;
         uint64_t start = 0;
         while (start < info.frame_count) {
             const auto count = std::min<uint64_t>(kScanChunkFrames, info.frame_count - start);
@@ -273,10 +290,11 @@ int32_t ardirec_record_get_distance_current_floor(
             if (copy_result != 0) return copy_result;
             for (uint64_t index = 0; index < count; ++index) {
                 const double value = buffer[static_cast<std::size_t>(index)] * scale;
-                if (std::isfinite(value)) peak = std::max(peak, std::abs(value));
+                if (std::isfinite(value)) channel_peak = std::max(channel_peak, std::abs(value));
             }
             start += count;
         }
+        peak = std::max(peak, nice_peak(channel_peak));
     }
 
     *out_minimum_current = std::max(1.0e-6, peak > 0.0 ? peak * 1.0e-3 : 1.0e-6);
