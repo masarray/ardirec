@@ -1,6 +1,7 @@
 add_library(ardirec_core STATIC
     src/comtrade/parser.cpp
     src/comtrade/dat_reader.cpp
+    src/comtrade/indexed_dat.cpp
     src/comtrade/bundle.cpp
     src/comtrade/value_representation.cpp
     src/power/harmonics.cpp
