@@ -1,0 +1,700 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+#include "ardirec/comtrade/indexed_dat.hpp"
+
+#include <algorithm>
+#include <bit>
+#include <charconv>
+#include <cmath>
+#include <cstring>
+#include <fstream>
+#include <limits>
+#include <mutex>
+#include <span>
+#include <string_view>
+#include <system_error>
+#include <type_traits>
+
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#else
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#endif
+
+namespace ardirec::comtrade {
+namespace {
+
+constexpr std::size_t kBinaryHeaderBytes = sizeof(std::uint32_t) * 2u;
+constexpr std::size_t kCancellationInterval = 4096u;
+
+std::string_view trim_view(std::string_view value) {
+    while (!value.empty() && (value.front() == ' ' || value.front() == '\t' || value.front() == '\r')) {
+        value.remove_prefix(1);
+    }
+    while (!value.empty() && (value.back() == ' ' || value.back() == '\t' || value.back() == '\r')) {
+        value.remove_suffix(1);
+    }
+    return value;
+}
+
+std::string_view field_view(std::string_view line, std::size_t wanted) {
+    std::size_t field = 0;
+    std::size_t begin = 0;
+    for (std::size_t i = 0; i <= line.size(); ++i) {
+        if (i == line.size() || line[i] == ',') {
+            if (field == wanted) return trim_view(line.substr(begin, i - begin));
+            ++field;
+            begin = i + 1;
+        }
+    }
+    return {};
+}
+
+void split_views(std::string_view line, std::vector<std::string_view>& fields) {
+    fields.clear();
+    std::size_t begin = 0;
+    for (std::size_t i = 0; i <= line.size(); ++i) {
+        if (i == line.size() || line[i] == ',') {
+            fields.push_back(trim_view(line.substr(begin, i - begin)));
+            begin = i + 1;
+        }
+    }
+}
+
+bool parse_u32(std::string_view text, std::uint32_t& value) {
+    text = trim_view(text);
+    if (text.empty()) return false;
+    std::uint64_t wide = 0;
+    const auto result = std::from_chars(text.data(), text.data() + text.size(), wide, 10);
+    if (result.ec != std::errc{} || result.ptr != text.data() + text.size()
+        || wide > std::numeric_limits<std::uint32_t>::max()) {
+        return false;
+    }
+    value = static_cast<std::uint32_t>(wide);
+    return true;
+}
+
+bool parse_double(std::string_view text, double& value) {
+    text = trim_view(text);
+    if (text.empty()) return false;
+    const auto result = std::from_chars(text.data(), text.data() + text.size(), value,
+                                        std::chars_format::general);
+    return result.ec == std::errc{} && result.ptr == text.data() + text.size()
+           && std::isfinite(value);
+}
+
+bool parse_bool(std::string_view text, bool& value) {
+    std::uint32_t parsed = 0;
+    if (!parse_u32(text, parsed)) return false;
+    value = parsed != 0;
+    return true;
+}
+
+template <typename T>
+T byte_swap(T value) noexcept {
+    static_assert(std::is_trivially_copyable_v<T>);
+    unsigned char source[sizeof(T)]{};
+    unsigned char target[sizeof(T)]{};
+    std::memcpy(source, &value, sizeof(T));
+    for (std::size_t i = 0; i < sizeof(T); ++i) target[i] = source[sizeof(T) - 1u - i];
+    std::memcpy(&value, target, sizeof(T));
+    return value;
+}
+
+template <typename T>
+T read_le_bytes(const std::byte* bytes) noexcept {
+    T value{};
+    std::memcpy(&value, bytes, sizeof(T));
+    if constexpr (std::endian::native == std::endian::big) value = byte_swap(value);
+    return value;
+}
+
+bool missing_i16(std::int16_t value, int revision) noexcept {
+    if (revision <= 1991) return static_cast<std::uint16_t>(value) == 0xFFFFu;
+    return value == std::numeric_limits<std::int16_t>::min();
+}
+
+std::size_t sample_width(DataFormat format) noexcept {
+    switch (format) {
+    case DataFormat::Binary16: return sizeof(std::int16_t);
+    case DataFormat::Binary32: return sizeof(std::int32_t);
+    case DataFormat::Float32: return sizeof(float);
+    default: return 0;
+    }
+}
+
+std::size_t binary_frame_size(const RecordConfig& config) noexcept {
+    const std::size_t width = sample_width(config.data_format);
+    if (width == 0) return 0;
+    const std::size_t statusWords = (config.status_channels.size() + 15u) / 16u;
+    if (config.analog_channels.size()
+        > (std::numeric_limits<std::size_t>::max() - kBinaryHeaderBytes - statusWords * 2u) / width) {
+        return 0;
+    }
+    return kBinaryHeaderBytes + config.analog_channels.size() * width + statusWords * sizeof(std::uint16_t);
+}
+
+double decode_binary_analog(const RecordConfig& config,
+                            const std::byte* frame,
+                            std::size_t channel) noexcept {
+    if (!frame || channel >= config.analog_channels.size()) {
+        return std::numeric_limits<double>::quiet_NaN();
+    }
+    const std::size_t width = sample_width(config.data_format);
+    const std::byte* valueBytes = frame + kBinaryHeaderBytes + channel * width;
+    double raw = std::numeric_limits<double>::quiet_NaN();
+    bool missing = false;
+    if (config.data_format == DataFormat::Binary16) {
+        const auto value = read_le_bytes<std::int16_t>(valueBytes);
+        missing = missing_i16(value, config.revision_year);
+        raw = static_cast<double>(value);
+    } else if (config.data_format == DataFormat::Binary32) {
+        const auto value = read_le_bytes<std::int32_t>(valueBytes);
+        missing = value == std::numeric_limits<std::int32_t>::min();
+        raw = static_cast<double>(value);
+    } else if (config.data_format == DataFormat::Float32) {
+        const auto value = read_le_bytes<float>(valueBytes);
+        raw = static_cast<double>(value);
+        missing = !std::isfinite(raw) || value == std::numeric_limits<float>::lowest();
+    }
+    if (missing || !std::isfinite(raw)) return std::numeric_limits<double>::quiet_NaN();
+    const auto& definition = config.analog_channels[channel];
+    return definition.a * raw + definition.b;
+}
+
+bool decode_binary_status(const RecordConfig& config,
+                          const std::byte* frame,
+                          std::size_t channel) noexcept {
+    if (!frame || channel >= config.status_channels.size()) return false;
+    const std::size_t width = sample_width(config.data_format);
+    const std::size_t statusBase = kBinaryHeaderBytes + config.analog_channels.size() * width;
+    const std::size_t word = channel / 16u;
+    const std::size_t bit = channel % 16u;
+    const auto packed = read_le_bytes<std::uint16_t>(frame + statusBase + word * sizeof(std::uint16_t));
+    return (packed & static_cast<std::uint16_t>(1u << bit)) != 0u;
+}
+
+class ReadOnlyMapping final {
+public:
+    ReadOnlyMapping() = default;
+    ~ReadOnlyMapping() { close(); }
+    ReadOnlyMapping(const ReadOnlyMapping&) = delete;
+    ReadOnlyMapping& operator=(const ReadOnlyMapping&) = delete;
+
+    bool open(const std::filesystem::path& path, std::string& reason) noexcept {
+        close();
+#ifdef _WIN32
+        file_ = CreateFileW(path.c_str(), GENERIC_READ,
+                            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                            nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (file_ == INVALID_HANDLE_VALUE) {
+            reason = "CreateFileW failed (" + std::to_string(GetLastError()) + ")";
+            return false;
+        }
+        LARGE_INTEGER fileSize{};
+        if (!GetFileSizeEx(file_, &fileSize) || fileSize.QuadPart < 0) {
+            reason = "GetFileSizeEx failed (" + std::to_string(GetLastError()) + ")";
+            close();
+            return false;
+        }
+        size_ = static_cast<std::uint64_t>(fileSize.QuadPart);
+        if (size_ == 0) return true;
+        mapping_ = CreateFileMappingW(file_, nullptr, PAGE_READONLY, 0, 0, nullptr);
+        if (!mapping_) {
+            reason = "CreateFileMappingW failed (" + std::to_string(GetLastError()) + ")";
+            close();
+            return false;
+        }
+        data_ = static_cast<const std::byte*>(MapViewOfFile(mapping_, FILE_MAP_READ, 0, 0, 0));
+        if (!data_) {
+            reason = "MapViewOfFile failed (" + std::to_string(GetLastError()) + ")";
+            close();
+            return false;
+        }
+        return true;
+#else
+        fd_ = ::open(path.c_str(), O_RDONLY);
+        if (fd_ < 0) {
+            reason = "open() failed";
+            return false;
+        }
+        struct stat info {};
+        if (::fstat(fd_, &info) != 0 || info.st_size < 0) {
+            reason = "fstat() failed";
+            close();
+            return false;
+        }
+        size_ = static_cast<std::uint64_t>(info.st_size);
+        if (size_ == 0) return true;
+        void* mapped = ::mmap(nullptr, static_cast<std::size_t>(size_), PROT_READ, MAP_PRIVATE, fd_, 0);
+        if (mapped == MAP_FAILED) {
+            reason = "mmap() failed";
+            data_ = nullptr;
+            close();
+            return false;
+        }
+        data_ = static_cast<const std::byte*>(mapped);
+        return true;
+#endif
+    }
+
+    void close() noexcept {
+#ifdef _WIN32
+        if (data_) UnmapViewOfFile(data_);
+        data_ = nullptr;
+        if (mapping_) CloseHandle(mapping_);
+        mapping_ = nullptr;
+        if (file_ != INVALID_HANDLE_VALUE) CloseHandle(file_);
+        file_ = INVALID_HANDLE_VALUE;
+#else
+        if (data_ && size_ > 0) ::munmap(const_cast<std::byte*>(data_), static_cast<std::size_t>(size_));
+        data_ = nullptr;
+        if (fd_ >= 0) ::close(fd_);
+        fd_ = -1;
+#endif
+        size_ = 0;
+    }
+
+    [[nodiscard]] const std::byte* data() const noexcept { return data_; }
+    [[nodiscard]] std::uint64_t size() const noexcept { return size_; }
+    [[nodiscard]] bool mapped() const noexcept { return size_ == 0 || data_ != nullptr; }
+
+private:
+    const std::byte* data_{nullptr};
+    std::uint64_t size_{0};
+#ifdef _WIN32
+    HANDLE file_{INVALID_HANDLE_VALUE};
+    HANDLE mapping_{nullptr};
+#else
+    int fd_{-1};
+#endif
+};
+
+} // namespace
+
+struct IndexedDatFile::Impl {
+    RecordConfig config;
+    std::filesystem::path dat_path;
+    ReadOnlyMapping mapping;
+    std::uint64_t file_size{0};
+    std::size_t frame_size{0};
+    std::size_t frame_count{0};
+    std::vector<std::uint64_t> ascii_offsets;
+    mutable std::mutex fallback_mutex;
+    mutable std::ifstream fallback_stream;
+
+    [[nodiscard]] bool mapped() const noexcept { return mapping.mapped() && mapping.data() != nullptr; }
+
+    bool readBytes(std::uint64_t offset, void* destination, std::size_t count) const noexcept {
+        if (!destination || count == 0) return count == 0;
+        if (offset > file_size || count > file_size - offset) return false;
+        if (mapping.data()) {
+            std::memcpy(destination, mapping.data() + static_cast<std::size_t>(offset), count);
+            return true;
+        }
+        std::lock_guard lock(fallback_mutex);
+        if (!fallback_stream.is_open()) fallback_stream.open(dat_path, std::ios::binary);
+        if (!fallback_stream) return false;
+        fallback_stream.clear();
+        fallback_stream.seekg(static_cast<std::streamoff>(offset), std::ios::beg);
+        fallback_stream.read(static_cast<char*>(destination), static_cast<std::streamsize>(count));
+        return fallback_stream.good() || fallback_stream.gcount() == static_cast<std::streamsize>(count);
+    }
+
+    bool asciiLine(std::size_t frame, std::string& scratch, std::string_view& line) const noexcept {
+        if (frame >= ascii_offsets.size()) return false;
+        const std::uint64_t offset = ascii_offsets[frame];
+        if (mapping.data()) {
+            const auto* begin = reinterpret_cast<const char*>(mapping.data() + static_cast<std::size_t>(offset));
+            const auto remaining = static_cast<std::size_t>(file_size - offset);
+            const void* newline = std::memchr(begin, '\n', remaining);
+            const auto length = newline ? static_cast<std::size_t>(static_cast<const char*>(newline) - begin)
+                                        : remaining;
+            line = std::string_view(begin, length);
+            if (!line.empty() && line.back() == '\r') line.remove_suffix(1);
+            return true;
+        }
+        std::lock_guard lock(fallback_mutex);
+        if (!fallback_stream.is_open()) fallback_stream.open(dat_path, std::ios::binary);
+        if (!fallback_stream) return false;
+        fallback_stream.clear();
+        fallback_stream.seekg(static_cast<std::streamoff>(offset), std::ios::beg);
+        if (!std::getline(fallback_stream, scratch)) return false;
+        if (!scratch.empty() && scratch.back() == '\r') scratch.pop_back();
+        line = scratch;
+        return true;
+    }
+};
+
+IndexedDatFile::IndexedDatFile(std::unique_ptr<Impl> impl) : m_impl(std::move(impl)) {}
+IndexedDatFile::~IndexedDatFile() = default;
+IndexedDatFile::IndexedDatFile(IndexedDatFile&&) noexcept = default;
+IndexedDatFile& IndexedDatFile::operator=(IndexedDatFile&&) noexcept = default;
+
+IndexedDatFile::OpenResult IndexedDatFile::open(const RecordConfig& config,
+                                                const std::filesystem::path& dat_path) {
+    OpenResult result;
+    auto impl = std::make_unique<Impl>();
+    impl->config = config;
+    impl->dat_path = dat_path;
+
+    std::error_code ec;
+    const auto diskSize = std::filesystem::file_size(dat_path, ec);
+    if (ec) {
+        result.diagnostics.emplace_back("Cannot stat DAT file: " + ec.message());
+        return result;
+    }
+    impl->file_size = static_cast<std::uint64_t>(diskSize);
+
+    std::string mapReason;
+    if (!impl->mapping.open(dat_path, mapReason)) {
+        result.diagnostics.emplace_back("DAT memory mapping unavailable; using bounded streaming fallback: " + mapReason);
+        impl->fallback_stream.open(dat_path, std::ios::binary);
+        if (!impl->fallback_stream) {
+            result.diagnostics.emplace_back("Cannot open DAT streaming fallback.");
+            return result;
+        }
+    } else if (impl->mapping.data()) {
+        result.diagnostics.emplace_back("DAT access: read-only memory map.");
+    }
+
+    if (config.data_format == DataFormat::Ascii) {
+        auto acceptLine = [&](std::uint64_t offset, std::string_view line) {
+            if (!line.empty() && line.back() == '\r') line.remove_suffix(1);
+            line = trim_view(line);
+            if (line.empty()) return;
+            std::uint32_t sample = 0;
+            std::uint32_t timestamp = 0;
+            if (!parse_u32(field_view(line, 0), sample) || !parse_u32(field_view(line, 1), timestamp)) {
+                return;
+            }
+            impl->ascii_offsets.push_back(offset);
+        };
+
+        std::size_t rejectedRows = 0;
+        if (impl->mapping.data()) {
+            const char* bytes = reinterpret_cast<const char*>(impl->mapping.data());
+            std::uint64_t begin = 0;
+            for (std::uint64_t i = 0; i <= impl->file_size; ++i) {
+                if (i == impl->file_size || bytes[i] == '\n') {
+                    std::string_view line(bytes + static_cast<std::size_t>(begin),
+                                          static_cast<std::size_t>(i - begin));
+                    const std::size_t before = impl->ascii_offsets.size();
+                    acceptLine(begin, line);
+                    if (!trim_view(line).empty() && impl->ascii_offsets.size() == before) ++rejectedRows;
+                    begin = i + 1u;
+                }
+            }
+        } else {
+            std::ifstream stream(dat_path, std::ios::binary);
+            std::string line;
+            while (stream) {
+                const auto position = stream.tellg();
+                if (position < 0 || !std::getline(stream, line)) break;
+                const std::size_t before = impl->ascii_offsets.size();
+                acceptLine(static_cast<std::uint64_t>(position), line);
+                if (!trim_view(line).empty() && impl->ascii_offsets.size() == before) ++rejectedRows;
+            }
+        }
+        impl->frame_count = impl->ascii_offsets.size();
+        if (rejectedRows > 0) {
+            result.diagnostics.emplace_back("ASCII DAT: skipped " + std::to_string(rejectedRows)
+                                            + " row(s) with invalid sample/timestamp fields.");
+        }
+    } else if (config.data_format == DataFormat::Binary16
+               || config.data_format == DataFormat::Binary32
+               || config.data_format == DataFormat::Float32) {
+        impl->frame_size = binary_frame_size(config);
+        if (impl->frame_size == 0) {
+            result.diagnostics.emplace_back("Invalid binary DAT frame layout.");
+            return result;
+        }
+        impl->frame_count = static_cast<std::size_t>(impl->file_size / impl->frame_size);
+        const std::uint64_t remainder = impl->file_size % impl->frame_size;
+        if (remainder != 0) {
+            result.diagnostics.emplace_back("Binary DAT truncated tail: ignored " + std::to_string(remainder)
+                                            + " byte(s) after " + std::to_string(impl->frame_count)
+                                            + " complete frame(s).");
+        }
+    } else {
+        result.diagnostics.emplace_back("Unsupported/unknown DAT format.");
+        return result;
+    }
+
+    if (impl->frame_count == 0) {
+        result.diagnostics.emplace_back("DAT contains no valid complete frames.");
+        return result;
+    }
+
+    result.file = std::shared_ptr<IndexedDatFile>(new IndexedDatFile(std::move(impl)));
+    return result;
+}
+
+std::size_t IndexedDatFile::frameCount() const noexcept { return m_impl ? m_impl->frame_count : 0; }
+std::size_t IndexedDatFile::analogCount() const noexcept { return m_impl ? m_impl->config.analog_channels.size() : 0; }
+std::size_t IndexedDatFile::statusCount() const noexcept { return m_impl ? m_impl->config.status_channels.size() : 0; }
+bool IndexedDatFile::memoryMapped() const noexcept { return m_impl && m_impl->mapping.data() != nullptr; }
+bool IndexedDatFile::binaryFamily() const noexcept {
+    if (!m_impl) return false;
+    return m_impl->config.data_format == DataFormat::Binary16
+           || m_impl->config.data_format == DataFormat::Binary32
+           || m_impl->config.data_format == DataFormat::Float32;
+}
+DataFormat IndexedDatFile::dataFormat() const noexcept {
+    return m_impl ? m_impl->config.data_format : DataFormat::Unknown;
+}
+const std::filesystem::path& IndexedDatFile::path() const noexcept {
+    static const std::filesystem::path empty;
+    return m_impl ? m_impl->dat_path : empty;
+}
+
+std::uint32_t IndexedDatFile::sampleNumber(std::size_t frame) const noexcept {
+    if (!m_impl || frame >= m_impl->frame_count) return 0;
+    if (m_impl->binaryFamily()) {
+        if (m_impl->mapping.data()) {
+            const auto* bytes = m_impl->mapping.data() + frame * m_impl->frame_size;
+            return read_le_bytes<std::uint32_t>(bytes);
+        }
+        std::uint32_t value = 0;
+        if (!m_impl->readBytes(frame * m_impl->frame_size, &value, sizeof(value))) return 0;
+        if constexpr (std::endian::native == std::endian::big) value = byte_swap(value);
+        return value;
+    }
+    std::string scratch;
+    std::string_view line;
+    std::uint32_t value = 0;
+    return m_impl->asciiLine(frame, scratch, line) && parse_u32(field_view(line, 0), value) ? value : 0;
+}
+
+std::uint32_t IndexedDatFile::rawTimestamp(std::size_t frame) const noexcept {
+    if (!m_impl || frame >= m_impl->frame_count) return 0;
+    if (m_impl->binaryFamily()) {
+        if (m_impl->mapping.data()) {
+            const auto* bytes = m_impl->mapping.data() + frame * m_impl->frame_size + sizeof(std::uint32_t);
+            return read_le_bytes<std::uint32_t>(bytes);
+        }
+        std::uint32_t value = 0;
+        const std::uint64_t offset = static_cast<std::uint64_t>(frame) * m_impl->frame_size
+                                     + sizeof(std::uint32_t);
+        if (!m_impl->readBytes(offset, &value, sizeof(value))) return 0;
+        if constexpr (std::endian::native == std::endian::big) value = byte_swap(value);
+        return value;
+    }
+    std::string scratch;
+    std::string_view line;
+    std::uint32_t value = 0;
+    return m_impl->asciiLine(frame, scratch, line) && parse_u32(field_view(line, 1), value) ? value : 0;
+}
+
+double IndexedDatFile::analogValue(std::size_t frame, std::size_t channel) const noexcept {
+    if (!m_impl || frame >= m_impl->frame_count || channel >= m_impl->config.analog_channels.size()) {
+        return std::numeric_limits<double>::quiet_NaN();
+    }
+    if (m_impl->binaryFamily()) {
+        if (m_impl->mapping.data()) {
+            return decode_binary_analog(m_impl->config,
+                                        m_impl->mapping.data() + frame * m_impl->frame_size,
+                                        channel);
+        }
+        std::array<std::byte, sizeof(std::int32_t)> storage{};
+        const std::size_t width = sample_width(m_impl->config.data_format);
+        const std::uint64_t offset = static_cast<std::uint64_t>(frame) * m_impl->frame_size
+                                     + kBinaryHeaderBytes + channel * width;
+        if (!m_impl->readBytes(offset, storage.data(), width)) {
+            return std::numeric_limits<double>::quiet_NaN();
+        }
+        std::array<std::byte, kBinaryHeaderBytes + sizeof(std::int32_t)> fake{};
+        std::copy_n(storage.data(), width, fake.data() + kBinaryHeaderBytes);
+        RecordConfig one = m_impl->config;
+        if (channel != 0) one.analog_channels = {m_impl->config.analog_channels[channel]};
+        else one.analog_channels.resize(1);
+        return decode_binary_analog(one, fake.data(), 0);
+    }
+
+    std::string scratch;
+    std::string_view line;
+    if (!m_impl->asciiLine(frame, scratch, line)) return std::numeric_limits<double>::quiet_NaN();
+    double raw = 0.0;
+    if (!parse_double(field_view(line, 2u + channel), raw)) {
+        return std::numeric_limits<double>::quiet_NaN();
+    }
+    const auto& definition = m_impl->config.analog_channels[channel];
+    return definition.a * raw + definition.b;
+}
+
+bool IndexedDatFile::statusValue(std::size_t frame, std::size_t channel) const noexcept {
+    if (!m_impl || frame >= m_impl->frame_count || channel >= m_impl->config.status_channels.size()) return false;
+    if (m_impl->binaryFamily()) {
+        if (m_impl->mapping.data()) {
+            return decode_binary_status(m_impl->config,
+                                        m_impl->mapping.data() + frame * m_impl->frame_size,
+                                        channel);
+        }
+        const std::size_t width = sample_width(m_impl->config.data_format);
+        const std::size_t statusBase = kBinaryHeaderBytes + m_impl->config.analog_channels.size() * width;
+        const std::size_t word = channel / 16u;
+        std::uint16_t packed = 0;
+        const std::uint64_t offset = static_cast<std::uint64_t>(frame) * m_impl->frame_size
+                                     + statusBase + word * sizeof(std::uint16_t);
+        if (!m_impl->readBytes(offset, &packed, sizeof(packed))) return false;
+        if constexpr (std::endian::native == std::endian::big) packed = byte_swap(packed);
+        return (packed & static_cast<std::uint16_t>(1u << (channel % 16u))) != 0u;
+    }
+
+    std::string scratch;
+    std::string_view line;
+    bool value = false;
+    const std::size_t field = 2u + m_impl->config.analog_channels.size() + channel;
+    return m_impl->asciiLine(frame, scratch, line) && parse_bool(field_view(line, field), value) && value;
+}
+
+void IndexedDatFile::copyAnalogRange(std::size_t channel,
+                                     std::size_t first,
+                                     std::size_t end,
+                                     std::vector<double>& destination) const {
+    destination.clear();
+    if (!m_impl || channel >= m_impl->config.analog_channels.size() || first >= m_impl->frame_count) return;
+    end = std::min(end, m_impl->frame_count);
+    if (end <= first) return;
+    destination.reserve(end - first);
+
+    if (m_impl->binaryFamily() && !m_impl->mapping.data()) {
+        std::ifstream stream(m_impl->dat_path, std::ios::binary);
+        if (!stream) return;
+        std::vector<std::byte> frame(m_impl->frame_size);
+        stream.seekg(static_cast<std::streamoff>(first * m_impl->frame_size), std::ios::beg);
+        for (std::size_t index = first; index < end; ++index) {
+            stream.read(reinterpret_cast<char*>(frame.data()), static_cast<std::streamsize>(frame.size()));
+            if (stream.gcount() != static_cast<std::streamsize>(frame.size())) break;
+            destination.push_back(decode_binary_analog(m_impl->config, frame.data(), channel));
+        }
+        return;
+    }
+
+    for (std::size_t index = first; index < end; ++index) destination.push_back(analogValue(index, channel));
+}
+
+DatIndexSummary IndexedDatFile::buildIndex(double timestamp_scale_seconds,
+                                           const std::atomic_bool* cancel) const {
+    DatIndexSummary summary;
+    if (!m_impl || m_impl->frame_count == 0 || !std::isfinite(timestamp_scale_seconds)) return summary;
+
+    summary.time_seconds.reserve(m_impl->frame_count);
+    summary.analog_abs_peaks.assign(m_impl->config.analog_channels.size(), 0.0);
+    summary.status_active.assign(m_impl->config.status_channels.size(), std::uint8_t{0});
+    std::vector<std::uint8_t> previousStatus(m_impl->config.status_channels.size(), std::uint8_t{0});
+    bool havePreviousStatus = false;
+
+    std::vector<std::byte> frameBuffer;
+    std::ifstream binaryFallback;
+    if (m_impl->binaryFamily() && !m_impl->mapping.data()) {
+        binaryFallback.open(m_impl->dat_path, std::ios::binary);
+        if (!binaryFallback) return summary;
+        frameBuffer.resize(m_impl->frame_size);
+    }
+
+    std::ifstream asciiFallback;
+    std::string asciiScratch;
+    std::vector<std::string_view> fields;
+    fields.reserve(2u + m_impl->config.analog_channels.size() + m_impl->config.status_channels.size());
+    if (m_impl->config.data_format == DataFormat::Ascii && !m_impl->mapping.data()) {
+        asciiFallback.open(m_impl->dat_path, std::ios::binary);
+        if (!asciiFallback) return summary;
+    }
+
+    for (std::size_t frameIndex = 0; frameIndex < m_impl->frame_count; ++frameIndex) {
+        if (cancel && frameIndex % kCancellationInterval == 0u && cancel->load(std::memory_order_relaxed)) {
+            summary.cancelled = true;
+            return summary;
+        }
+
+        std::uint32_t timestamp = 0;
+        bool anyDigitalEdge = false;
+
+        if (m_impl->binaryFamily()) {
+            const std::byte* frame = nullptr;
+            if (m_impl->mapping.data()) {
+                frame = m_impl->mapping.data() + frameIndex * m_impl->frame_size;
+            } else {
+                binaryFallback.read(reinterpret_cast<char*>(frameBuffer.data()),
+                                    static_cast<std::streamsize>(frameBuffer.size()));
+                if (binaryFallback.gcount() != static_cast<std::streamsize>(frameBuffer.size())) break;
+                frame = frameBuffer.data();
+            }
+
+            timestamp = read_le_bytes<std::uint32_t>(frame + sizeof(std::uint32_t));
+            for (std::size_t channel = 0; channel < m_impl->config.analog_channels.size(); ++channel) {
+                const double value = decode_binary_analog(m_impl->config, frame, channel);
+                if (std::isfinite(value)) {
+                    summary.analog_abs_peaks[channel] = std::max(summary.analog_abs_peaks[channel], std::abs(value));
+                }
+            }
+            for (std::size_t channel = 0; channel < m_impl->config.status_channels.size(); ++channel) {
+                const auto state = static_cast<std::uint8_t>(decode_binary_status(m_impl->config, frame, channel) ? 1 : 0);
+                if (state != 0) summary.status_active[channel] = 1;
+                if (havePreviousStatus && state != previousStatus[channel]) anyDigitalEdge = true;
+                previousStatus[channel] = state;
+            }
+        } else {
+            std::string_view line;
+            if (m_impl->mapping.data()) {
+                const std::uint64_t offset = m_impl->ascii_offsets[frameIndex];
+                const char* begin = reinterpret_cast<const char*>(m_impl->mapping.data()
+                                                                  + static_cast<std::size_t>(offset));
+                const auto remaining = static_cast<std::size_t>(m_impl->file_size - offset);
+                const void* newline = std::memchr(begin, '\n', remaining);
+                const auto length = newline ? static_cast<std::size_t>(static_cast<const char*>(newline) - begin)
+                                            : remaining;
+                line = std::string_view(begin, length);
+                if (!line.empty() && line.back() == '\r') line.remove_suffix(1);
+            } else {
+                asciiFallback.clear();
+                asciiFallback.seekg(static_cast<std::streamoff>(m_impl->ascii_offsets[frameIndex]), std::ios::beg);
+                if (!std::getline(asciiFallback, asciiScratch)) break;
+                if (!asciiScratch.empty() && asciiScratch.back() == '\r') asciiScratch.pop_back();
+                line = asciiScratch;
+            }
+            split_views(line, fields);
+            if (fields.size() < 2 || !parse_u32(fields[1], timestamp)) continue;
+            for (std::size_t channel = 0; channel < m_impl->config.analog_channels.size(); ++channel) {
+                const std::size_t field = 2u + channel;
+                double raw = 0.0;
+                if (field >= fields.size() || !parse_double(fields[field], raw)) continue;
+                const auto& definition = m_impl->config.analog_channels[channel];
+                const double value = definition.a * raw + definition.b;
+                if (std::isfinite(value)) {
+                    summary.analog_abs_peaks[channel] = std::max(summary.analog_abs_peaks[channel], std::abs(value));
+                }
+            }
+            const std::size_t statusBase = 2u + m_impl->config.analog_channels.size();
+            for (std::size_t channel = 0; channel < m_impl->config.status_channels.size(); ++channel) {
+                bool stateBool = false;
+                const std::size_t field = statusBase + channel;
+                const bool valid = field < fields.size() && parse_bool(fields[field], stateBool);
+                const auto state = static_cast<std::uint8_t>(valid && stateBool ? 1 : 0);
+                if (state != 0) summary.status_active[channel] = 1;
+                if (havePreviousStatus && state != previousStatus[channel]) anyDigitalEdge = true;
+                previousStatus[channel] = state;
+            }
+        }
+
+        const double time = static_cast<double>(timestamp) * timestamp_scale_seconds;
+        summary.time_seconds.push_back(time);
+        if (havePreviousStatus && anyDigitalEdge) summary.digital_edge_times.push_back(time);
+        havePreviousStatus = true;
+    }
+
+    if (summary.time_seconds.size() < m_impl->frame_count) {
+        // A streaming fallback may encounter an unexpected short read even if
+        // file_size initially suggested more data. Keep only the valid prefix.
+        summary.cancelled = cancel && cancel->load(std::memory_order_relaxed);
+    }
+    return summary;
+}
+
+} // namespace ardirec::comtrade
