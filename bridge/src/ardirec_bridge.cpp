@@ -2,14 +2,17 @@
 #include "ardirec_bridge.h"
 
 #include "ardirec/comtrade/bundle.hpp"
+#include "ardirec/comtrade/channel_semantics.hpp"
 #include "ardirec/comtrade/dat_reader.hpp"
 #include "ardirec/comtrade/parser.hpp"
+#include "ardirec/comtrade/value_representation.hpp"
 #include "ardirec/power/harmonics.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <filesystem>
+#include <limits>
 #include <memory>
 #include <span>
 #include <stdexcept>
@@ -66,6 +69,34 @@ double wrap_degrees(double angle) {
     while (angle <= -180.0) angle += 360.0;
     while (angle > 180.0) angle -= 360.0;
     return angle;
+}
+
+bool representation_scale_for(const ardirec::comtrade::AnalogChannel& channel,
+                              int32_t representation,
+                              double* out_scale) {
+    if (out_scale == nullptr) return false;
+    switch (representation) {
+    case ARDIREC_VALUE_RECORDED:
+        *out_scale = 1.0;
+        return true;
+    case ARDIREC_VALUE_SECONDARY:
+        *out_scale = ardirec::comtrade::representation_scale(
+            channel, ardirec::comtrade::ValueRepresentation::Secondary);
+        return true;
+    case ARDIREC_VALUE_PRIMARY:
+        *out_scale = ardirec::comtrade::representation_scale(
+            channel, ardirec::comtrade::ValueRepresentation::Primary);
+        return true;
+    default:
+        return false;
+    }
+}
+
+int32_t recorded_representation_for(const ardirec::comtrade::AnalogChannel& channel) {
+    return ardirec::comtrade::recorded_representation(channel)
+                   == ardirec::comtrade::ValueRepresentation::Primary
+               ? ARDIREC_VALUE_PRIMARY
+               : ARDIREC_VALUE_SECONDARY;
 }
 
 std::pair<std::size_t, std::size_t> one_cycle_window(const NativeRecord& record,
@@ -137,6 +168,16 @@ extern "C" {
 
 uint32_t ardirec_bridge_abi_version(void) {
     return ARDIREC_BRIDGE_ABI_VERSION;
+}
+
+uint64_t ardirec_bridge_capabilities(void) {
+    return ARDIREC_BRIDGE_CAP_CURSOR_MEASUREMENT
+           | ARDIREC_BRIDGE_CAP_CHANNEL_SEMANTICS
+           | ARDIREC_BRIDGE_CAP_VALUE_REPRESENTATION
+           | ARDIREC_BRIDGE_CAP_STATUS_STATE
+           | ARDIREC_BRIDGE_CAP_DIGITAL_EDGE_SNAP
+           | ARDIREC_BRIDGE_CAP_PHASOR
+           | ARDIREC_BRIDGE_CAP_HARMONICS;
 }
 
 int32_t ardirec_record_open_utf8(
@@ -247,6 +288,186 @@ int32_t ardirec_record_get_status_channel(
     copy_text(out_info->id, sizeof(out_info->id), channel.id);
     copy_text(out_info->phase, sizeof(out_info->phase), channel.phase);
     copy_text(out_info->circuit, sizeof(out_info->circuit), channel.circuit);
+    return 0;
+}
+
+int32_t ardirec_record_get_analog_semantics(
+    ardirec_record_handle handle,
+    uint32_t channel_index,
+    ardirec_analog_semantics_info* out_info) {
+    const auto* record = as_record(handle);
+    if (record == nullptr || out_info == nullptr) return kInvalidArgument;
+    if (channel_index >= record->config.analog_channels.size()) return kOutOfRange;
+
+    const auto& channel = record->config.analog_channels[channel_index];
+    std::memset(out_info, 0, sizeof(*out_info));
+    out_info->role = static_cast<int32_t>(ardirec::comtrade::analog_role(channel));
+    out_info->phase_role = static_cast<int32_t>(ardirec::comtrade::phase_role(channel));
+    out_info->recorded_representation = recorded_representation_for(channel);
+    out_info->has_valid_transformer_ratio = ardirec::comtrade::has_valid_transformer_ratio(channel) ? 1 : 0;
+    out_info->scale_to_secondary = ardirec::comtrade::representation_scale(
+        channel, ardirec::comtrade::ValueRepresentation::Secondary);
+    out_info->scale_to_primary = ardirec::comtrade::representation_scale(
+        channel, ardirec::comtrade::ValueRepresentation::Primary);
+    return 0;
+}
+
+int32_t ardirec_record_get_representation_scale(
+    ardirec_record_handle handle,
+    uint32_t channel_index,
+    int32_t representation,
+    double* out_scale) {
+    const auto* record = as_record(handle);
+    if (record == nullptr || out_scale == nullptr) return kInvalidArgument;
+    if (channel_index >= record->config.analog_channels.size()) return kOutOfRange;
+    if (!representation_scale_for(record->config.analog_channels[channel_index], representation, out_scale)) {
+        return kInvalidArgument;
+    }
+    return 0;
+}
+
+int32_t ardirec_record_get_cursor_measurement(
+    ardirec_record_handle handle,
+    uint32_t channel_index,
+    uint64_t reference_frame,
+    int32_t representation,
+    ardirec_cursor_measurement_info* out_info) {
+    const auto* record = as_record(handle);
+    if (record == nullptr || out_info == nullptr) return kInvalidArgument;
+    if (channel_index >= record->config.analog_channels.size()
+        || reference_frame >= record->frames.size()) {
+        return kOutOfRange;
+    }
+
+    double scale = 1.0;
+    if (!representation_scale_for(record->config.analog_channels[channel_index], representation, &scale)) {
+        return kInvalidArgument;
+    }
+
+    std::memset(out_info, 0, sizeof(*out_info));
+    const std::size_t reference = static_cast<std::size_t>(reference_frame);
+    const auto [first, end] = one_cycle_window(*record, reference_frame);
+    out_info->reference_frame = reference_frame;
+    out_info->raw_timestamp = record->frames[reference].raw_timestamp;
+    out_info->time_seconds = frame_time_seconds(*record, reference);
+    out_info->window_start_frame = static_cast<uint64_t>(first);
+    out_info->window_end_exclusive = static_cast<uint64_t>(end);
+
+    const double instantaneous_recorded = record->frames[reference].analog[channel_index];
+    out_info->instantaneous = instantaneous_recorded * scale;
+
+    long double sum_squares = 0.0L;
+    uint32_t count = 0;
+    for (std::size_t i = first; i < end; ++i) {
+        const double value = record->frames[i].analog[channel_index];
+        if (!std::isfinite(value)) continue;
+        const long double scaled = static_cast<long double>(value) * static_cast<long double>(scale);
+        sum_squares += scaled * scaled;
+        ++count;
+    }
+    out_info->window_sample_count = count;
+    if (count == 0 || !std::isfinite(out_info->instantaneous)) return 0;
+
+    out_info->rms = std::sqrt(static_cast<double>(sum_squares / static_cast<long double>(count)));
+    out_info->valid = std::isfinite(out_info->rms) ? 1 : 0;
+    return 0;
+}
+
+int32_t ardirec_record_get_status_state(
+    ardirec_record_handle handle,
+    uint32_t channel_index,
+    uint64_t reference_frame,
+    ardirec_status_state_info* out_info) {
+    const auto* record = as_record(handle);
+    if (record == nullptr || out_info == nullptr) return kInvalidArgument;
+    if (channel_index >= record->config.status_channels.size()
+        || reference_frame >= record->frames.size()) {
+        return kOutOfRange;
+    }
+
+    const auto& channel = record->config.status_channels[channel_index];
+    const int32_t raw = record->frames[static_cast<std::size_t>(reference_frame)].status[channel_index] ? 1 : 0;
+    std::memset(out_info, 0, sizeof(*out_info));
+    out_info->raw_state = raw;
+    out_info->normal_state = channel.normal_state != 0 ? 1 : 0;
+    out_info->is_active = raw != out_info->normal_state ? 1 : 0;
+    return 0;
+}
+
+int32_t ardirec_record_find_nearest_status_edge(
+    ardirec_record_handle handle,
+    uint64_t reference_frame,
+    double max_distance_seconds,
+    ardirec_status_edge_info* out_info) {
+    const auto* record = as_record(handle);
+    if (record == nullptr || out_info == nullptr || !std::isfinite(max_distance_seconds)
+        || max_distance_seconds < 0.0) {
+        return kInvalidArgument;
+    }
+    if (reference_frame >= record->frames.size()) return kOutOfRange;
+
+    std::memset(out_info, 0, sizeof(*out_info));
+    if (record->frames.size() < 2 || record->config.status_channels.empty()) return 0;
+
+    const std::size_t reference = static_cast<std::size_t>(reference_frame);
+    const double target_time = frame_time_seconds(*record, reference);
+    std::size_t first = reference;
+    while (first > 1
+           && target_time - frame_time_seconds(*record, first - 1) <= max_distance_seconds) {
+        --first;
+    }
+    first = std::max<std::size_t>(1, first);
+
+    std::size_t end = reference + 1;
+    while (end < record->frames.size()
+           && frame_time_seconds(*record, end) - target_time <= max_distance_seconds) {
+        ++end;
+    }
+
+    double best_distance = std::numeric_limits<double>::infinity();
+    std::size_t best_frame = 0;
+    std::uint32_t best_channel = 0;
+    int32_t best_before = 0;
+    int32_t best_after = 0;
+    bool found = false;
+
+    for (std::size_t frame = first; frame < end; ++frame) {
+        const double edge_time = frame_time_seconds(*record, frame);
+        const double distance = std::abs(edge_time - target_time);
+        if (distance > max_distance_seconds) continue;
+
+        for (std::uint32_t channel = 0;
+             channel < static_cast<std::uint32_t>(record->config.status_channels.size());
+             ++channel) {
+            const int32_t before = record->frames[frame - 1].status[channel] ? 1 : 0;
+            const int32_t after = record->frames[frame].status[channel] ? 1 : 0;
+            if (before == after) continue;
+
+            const bool better = !found || distance < best_distance - 1.0e-12
+                                || (std::abs(distance - best_distance) <= 1.0e-12
+                                    && (frame < best_frame
+                                        || (frame == best_frame && channel < best_channel)));
+            if (!better) continue;
+            found = true;
+            best_distance = distance;
+            best_frame = frame;
+            best_channel = channel;
+            best_before = before;
+            best_after = after;
+        }
+    }
+
+    if (!found) return 0;
+    const int32_t normal = record->config.status_channels[best_channel].normal_state != 0 ? 1 : 0;
+    out_info->valid = 1;
+    out_info->channel_index = best_channel;
+    out_info->frame_index = static_cast<uint64_t>(best_frame);
+    out_info->raw_timestamp = record->frames[best_frame].raw_timestamp;
+    out_info->before_state = best_before;
+    out_info->after_state = best_after;
+    out_info->normal_state = normal;
+    out_info->became_active = best_after != normal ? 1 : 0;
+    out_info->distance_seconds = best_distance;
     return 0;
 }
 
