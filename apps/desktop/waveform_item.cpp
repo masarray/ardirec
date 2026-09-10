@@ -108,7 +108,15 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*) {
     std::size_t end = static_cast<std::size_t>(std::distance(times->begin(), last));
     start = std::min(start, count - 1);
     end = std::min(end, count);
+
+    // Include one real sample on each side of the visible interval. Those neighbor points are
+    // clipped to x=0 / x=width below, which preserves line continuity to the chart border when
+    // the viewport begins between recorded samples. This is presentation-only interpolation;
+    // engineering samples and analysis windows remain unchanged.
+    if (start > 0) --start;
+    if (end < count) ++end;
     if (end <= start + 1) end = std::min(count, start + 2);
+
     const std::size_t visibleCount = end - start;
     const std::size_t channel = static_cast<std::size_t>(m_channelIndex);
 
