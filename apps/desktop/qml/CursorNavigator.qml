@@ -14,7 +14,7 @@ Rectangle {
     property real cursorATime: 0.0
     property real cursorBTime: 0.0
     property real axisWidth: 170
-    property real hoverRadius: 16
+    property real hoverRadius: 20
     property real snapRadius: 12
     property color cursorAColor: "#2466b3"
     property color cursorBColor: "#c78100"
@@ -164,48 +164,67 @@ Rectangle {
             font.pixelSize: 7
         }
 
-        Item {
-            visible: root.displayedATime >= root.viewStart && root.displayedATime <= root.viewStart + root.visibleDuration
-            x: root.pixelForTime(root.displayedATime) - 8
-            y: ruler.height - 18
-            width: 16
-            height: 18
-            z: 3
-            Rectangle { anchors.horizontalCenter: parent.horizontalCenter; anchors.bottom: parent.bottom; width: 2; height: 8; color: root.cursorAColor }
+        component CursorThumb: Item {
+            property color thumbColor
+            property string cursorLabel
+            property real cursorX: 0
+            x: cursorX - width * 0.5
+            y: 2
+            width: 24
+            height: ruler.height - 4
+            z: 4
+
             Rectangle {
                 anchors.horizontalCenter: parent.horizontalCenter
                 anchors.top: parent.top
-                anchors.topMargin: 1
-                width: 12
-                height: 12
+                anchors.topMargin: 4
+                anchors.bottom: parent.bottom
+                width: 2
+                color: parent.thumbColor
+                opacity: 0.9
+            }
+            Rectangle {
+                anchors.centerIn: parent
+                width: 17
+                height: 17
+                radius: 2
                 rotation: 45
-                color: root.cursorAColor
-                border.width: 1.5
+                color: parent.thumbColor
+                border.width: 2
                 border.color: "#ffffff"
             }
-            Label { anchors.horizontalCenter: parent.horizontalCenter; y: 2; text: "1"; color: "#ffffff"; font.pixelSize: 7; font.weight: Font.DemiBold }
+            Rectangle {
+                anchors.centerIn: parent
+                width: 19
+                height: 19
+                radius: 3
+                rotation: 45
+                color: "transparent"
+                border.width: 1
+                border.color: "#6d7378"
+                opacity: 0.45
+            }
+            Label {
+                anchors.centerIn: parent
+                text: parent.cursorLabel
+                color: "#ffffff"
+                font.pixelSize: 8
+                font.weight: Font.Bold
+            }
         }
 
-        Item {
+        CursorThumb {
+            visible: root.displayedATime >= root.viewStart && root.displayedATime <= root.viewStart + root.visibleDuration
+            cursorX: root.pixelForTime(root.displayedATime)
+            thumbColor: root.cursorAColor
+            cursorLabel: "1"
+        }
+
+        CursorThumb {
             visible: root.displayedBTime >= root.viewStart && root.displayedBTime <= root.viewStart + root.visibleDuration
-            x: root.pixelForTime(root.displayedBTime) - 8
-            y: ruler.height - 18
-            width: 16
-            height: 18
-            z: 3
-            Rectangle { anchors.horizontalCenter: parent.horizontalCenter; anchors.bottom: parent.bottom; width: 2; height: 8; color: root.cursorBColor }
-            Rectangle {
-                anchors.horizontalCenter: parent.horizontalCenter
-                anchors.top: parent.top
-                anchors.topMargin: 1
-                width: 12
-                height: 12
-                rotation: 45
-                color: root.cursorBColor
-                border.width: 1.5
-                border.color: "#ffffff"
-            }
-            Label { anchors.horizontalCenter: parent.horizontalCenter; y: 2; text: "2"; color: "#ffffff"; font.pixelSize: 7; font.weight: Font.DemiBold }
+            cursorX: root.pixelForTime(root.displayedBTime)
+            thumbColor: root.cursorBColor
+            cursorLabel: "2"
         }
 
         MouseArea {
