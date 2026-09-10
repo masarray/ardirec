@@ -36,6 +36,9 @@ Rectangle {
     signal cursorARequested(real timeSeconds)
     signal cursorBRequested(real timeSeconds)
 
+    onCursorATimeChanged: if (!previewAActive) previewATime = cursorATime
+    onCursorBTimeChanged: if (!previewBActive) previewBTime = cursorBTime
+
     function clamp(value, lo, hi) { return Math.max(lo, Math.min(hi, value)) }
     function relativeMs(timeSeconds) {
         return document ? (timeSeconds - document.triggerOffsetSeconds) * 1000.0 : 0
@@ -76,6 +79,7 @@ Rectangle {
         if (!analysisCommitTimer.running) analysisCommitTimer.start()
     }
     function flushPending() {
+        if (analysisCommitTimer.running) analysisCommitTimer.stop()
         if (pendingAValid) {
             const value = pendingATime
             pendingAValid = false
@@ -160,7 +164,6 @@ Rectangle {
             font.pixelSize: 7
         }
 
-        // C1: larger 16 px hit-visible handle with a stem and readable number.
         Item {
             visible: root.displayedATime >= root.viewStart && root.displayedATime <= root.viewStart + root.visibleDuration
             x: root.pixelForTime(root.displayedATime) - 8
@@ -168,13 +171,7 @@ Rectangle {
             width: 16
             height: 18
             z: 3
-            Rectangle {
-                anchors.horizontalCenter: parent.horizontalCenter
-                anchors.bottom: parent.bottom
-                width: 2
-                height: 8
-                color: root.cursorAColor
-            }
+            Rectangle { anchors.horizontalCenter: parent.horizontalCenter; anchors.bottom: parent.bottom; width: 2; height: 8; color: root.cursorAColor }
             Rectangle {
                 anchors.horizontalCenter: parent.horizontalCenter
                 anchors.top: parent.top
@@ -186,17 +183,9 @@ Rectangle {
                 border.width: 1.5
                 border.color: "#ffffff"
             }
-            Label {
-                anchors.horizontalCenter: parent.horizontalCenter
-                y: 2
-                text: "1"
-                color: "#ffffff"
-                font.pixelSize: 7
-                font.weight: Font.DemiBold
-            }
+            Label { anchors.horizontalCenter: parent.horizontalCenter; y: 2; text: "1"; color: "#ffffff"; font.pixelSize: 7; font.weight: Font.DemiBold }
         }
 
-        // C2: same geometry, separate color; right-click still places/moves it directly.
         Item {
             visible: root.displayedBTime >= root.viewStart && root.displayedBTime <= root.viewStart + root.visibleDuration
             x: root.pixelForTime(root.displayedBTime) - 8
@@ -204,13 +193,7 @@ Rectangle {
             width: 16
             height: 18
             z: 3
-            Rectangle {
-                anchors.horizontalCenter: parent.horizontalCenter
-                anchors.bottom: parent.bottom
-                width: 2
-                height: 8
-                color: root.cursorBColor
-            }
+            Rectangle { anchors.horizontalCenter: parent.horizontalCenter; anchors.bottom: parent.bottom; width: 2; height: 8; color: root.cursorBColor }
             Rectangle {
                 anchors.horizontalCenter: parent.horizontalCenter
                 anchors.top: parent.top
@@ -222,14 +205,7 @@ Rectangle {
                 border.width: 1.5
                 border.color: "#ffffff"
             }
-            Label {
-                anchors.horizontalCenter: parent.horizontalCenter
-                y: 2
-                text: "2"
-                color: "#ffffff"
-                font.pixelSize: 7
-                font.weight: Font.DemiBold
-            }
+            Label { anchors.horizontalCenter: parent.horizontalCenter; y: 2; text: "2"; color: "#ffffff"; font.pixelSize: 7; font.weight: Font.DemiBold }
         }
 
         MouseArea {
@@ -265,19 +241,28 @@ Rectangle {
                 movingA = false
                 movingB = false
                 if (mouse.button === Qt.RightButton) {
-                    movingB = true
+                    root.previewBTime = root.cursorBTime
                     root.previewBActive = true
+                    movingB = true
                     updateActiveCursor(mouse.x)
                     return
                 }
                 const da = Math.abs(mouse.x - root.pixelForTime(root.displayedATime))
                 const db = Math.abs(mouse.x - root.pixelForTime(root.displayedBTime))
                 if (hoverA || hoverB) {
-                    if (da <= db) { movingA = true; root.previewAActive = true }
-                    else { movingB = true; root.previewBActive = true }
+                    if (da <= db) {
+                        root.previewATime = root.cursorATime
+                        root.previewAActive = true
+                        movingA = true
+                    } else {
+                        root.previewBTime = root.cursorBTime
+                        root.previewBActive = true
+                        movingB = true
+                    }
                 } else {
-                    movingA = true
+                    root.previewATime = root.cursorATime
                     root.previewAActive = true
+                    movingA = true
                     updateActiveCursor(mouse.x)
                 }
             }
