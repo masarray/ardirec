@@ -10,6 +10,7 @@
 #include <fstream>
 #include <limits>
 #include <mutex>
+#include <optional>
 #include <string_view>
 #include <system_error>
 #include <type_traits>
@@ -510,8 +511,10 @@ double IndexedDatFile::analogValue(std::size_t frame, std::size_t channel) const
     return definition.a * raw + definition.b;
 }
 
-bool IndexedDatFile::statusValue(std::size_t frame, std::size_t channel) const noexcept {
-    if (!m_impl || frame >= m_impl->frame_count || channel >= m_impl->config.status_channels.size()) return false;
+std::optional<bool> IndexedDatFile::statusState(std::size_t frame, std::size_t channel) const noexcept {
+    if (!m_impl || frame >= m_impl->frame_count || channel >= m_impl->config.status_channels.size()) {
+        return std::nullopt;
+    }
     if (m_impl->binaryFamily()) {
         if (m_impl->mapping.data()) {
             return decode_binary_status(m_impl->config,
@@ -524,16 +527,24 @@ bool IndexedDatFile::statusValue(std::size_t frame, std::size_t channel) const n
         const std::uint64_t offset = static_cast<std::uint64_t>(frame) * m_impl->frame_size
                                      + statusBase + word * sizeof(std::uint16_t);
         std::array<std::byte, sizeof(std::uint16_t)> bytes{};
-        if (!m_impl->readBytes(offset, bytes.data(), bytes.size())) return false;
+        if (!m_impl->readBytes(offset, bytes.data(), bytes.size())) return std::nullopt;
         const auto packed = read_le_bytes<std::uint16_t>(bytes.data());
         return (packed & static_cast<std::uint16_t>(1u << (channel % 16u))) != 0u;
     }
 
     std::string scratch;
     std::string_view line;
+    if (!m_impl->asciiLine(frame, scratch, line)) return std::nullopt;
     bool value = false;
     const std::size_t field = 2u + m_impl->config.analog_channels.size() + channel;
-    return m_impl->asciiLine(frame, scratch, line) && parse_bool(field_view(line, field), value) && value;
+    if (!parse_bool(field_view(line, field), value)) return std::nullopt;
+    return value;
+}
+
+bool IndexedDatFile::statusValue(std::size_t frame, std::size_t channel) const noexcept {
+    if (!m_impl || channel >= m_impl->config.status_channels.size()) return false;
+    const auto state = statusState(frame, channel);
+    return state.value_or(m_impl->config.status_channels[channel].normal_state != 0);
 }
 
 void IndexedDatFile::copyAnalogRange(std::size_t channel,
@@ -565,19 +576,29 @@ void IndexedDatFile::copyAnalogRange(std::size_t channel,
 DatIndexSummary IndexedDatFile::buildIndex(double timestamp_scale_seconds,
                                            const std::atomic_bool* cancel) const {
     DatIndexSummary summary;
-    if (!m_impl || m_impl->frame_count == 0 || !std::isfinite(timestamp_scale_seconds)) return summary;
+    if (!m_impl || m_impl->frame_count == 0 || !std::isfinite(timestamp_scale_seconds)
+        || timestamp_scale_seconds <= 0.0) {
+        summary.diagnostics.emplace_back("DAT index could not be built because the timestamp scale is invalid.");
+        return summary;
+    }
 
     summary.time_seconds.reserve(m_impl->frame_count);
     summary.analog_abs_peaks.assign(m_impl->config.analog_channels.size(), 0.0);
     summary.status_active.assign(m_impl->config.status_channels.size(), std::uint8_t{0});
     std::vector<std::uint8_t> previousStatus(m_impl->config.status_channels.size(), std::uint8_t{0});
-    bool havePreviousStatus = false;
+    std::vector<std::uint8_t> havePreviousStatus(m_impl->config.status_channels.size(), std::uint8_t{0});
+    std::size_t invalidAnalogFields = 0;
+    std::size_t invalidStatusFields = 0;
+    std::size_t missingBinaryAnalogValues = 0;
 
     std::vector<std::byte> frameBuffer;
     std::ifstream binaryFallback;
     if (m_impl->binaryFamily() && !m_impl->mapping.data()) {
         binaryFallback.open(m_impl->dat_path, std::ios::binary);
-        if (!binaryFallback) return summary;
+        if (!binaryFallback) {
+            summary.diagnostics.emplace_back("DAT streaming fallback could not be opened while building the index.");
+            return summary;
+        }
         frameBuffer.resize(m_impl->frame_size);
     }
 
@@ -587,7 +608,10 @@ DatIndexSummary IndexedDatFile::buildIndex(double timestamp_scale_seconds,
     fields.reserve(2u + m_impl->config.analog_channels.size() + m_impl->config.status_channels.size());
     if (m_impl->config.data_format == DataFormat::Ascii && !m_impl->mapping.data()) {
         asciiFallback.open(m_impl->dat_path, std::ios::binary);
-        if (!asciiFallback) return summary;
+        if (!asciiFallback) {
+            summary.diagnostics.emplace_back("ASCII DAT streaming fallback could not be opened while building the index.");
+            return summary;
+        }
     }
 
     for (std::size_t frameIndex = 0; frameIndex < m_impl->frame_count; ++frameIndex) {
@@ -606,7 +630,10 @@ DatIndexSummary IndexedDatFile::buildIndex(double timestamp_scale_seconds,
             } else {
                 binaryFallback.read(reinterpret_cast<char*>(frameBuffer.data()),
                                     static_cast<std::streamsize>(frameBuffer.size()));
-                if (binaryFallback.gcount() != static_cast<std::streamsize>(frameBuffer.size())) break;
+                if (binaryFallback.gcount() != static_cast<std::streamsize>(frameBuffer.size())) {
+                    summary.diagnostics.emplace_back("DAT streaming fallback ended before the indexed complete-frame count.");
+                    break;
+                }
                 frame = frameBuffer.data();
             }
 
@@ -615,13 +642,16 @@ DatIndexSummary IndexedDatFile::buildIndex(double timestamp_scale_seconds,
                 const double value = decode_binary_analog(m_impl->config, frame, channel);
                 if (std::isfinite(value)) {
                     summary.analog_abs_peaks[channel] = std::max(summary.analog_abs_peaks[channel], std::abs(value));
+                } else {
+                    ++missingBinaryAnalogValues;
                 }
             }
             for (std::size_t channel = 0; channel < m_impl->config.status_channels.size(); ++channel) {
                 const auto state = static_cast<std::uint8_t>(decode_binary_status(m_impl->config, frame, channel) ? 1 : 0);
                 if (state != 0) summary.status_active[channel] = 1;
-                if (havePreviousStatus && state != previousStatus[channel]) anyDigitalEdge = true;
+                if (havePreviousStatus[channel] != 0 && state != previousStatus[channel]) anyDigitalEdge = true;
                 previousStatus[channel] = state;
+                havePreviousStatus[channel] = 1;
             }
         } else {
             std::string_view line;
@@ -636,41 +666,71 @@ DatIndexSummary IndexedDatFile::buildIndex(double timestamp_scale_seconds,
             } else {
                 asciiFallback.clear();
                 asciiFallback.seekg(static_cast<std::streamoff>(m_impl->ascii_offsets[frameIndex]), std::ios::beg);
-                if (!std::getline(asciiFallback, asciiScratch)) break;
+                if (!std::getline(asciiFallback, asciiScratch)) {
+                    summary.diagnostics.emplace_back("ASCII DAT changed or became unreadable while building the index.");
+                    break;
+                }
                 if (!asciiScratch.empty() && asciiScratch.back() == '\r') asciiScratch.pop_back();
                 line = asciiScratch;
             }
 
             split_views(line, fields);
-            if (fields.size() < 2 || !parse_u32(fields[1], timestamp)) continue;
+            if (fields.size() < 2 || !parse_u32(fields[1], timestamp)) {
+                // This should be unreachable because open() indexed only rows
+                // with valid sample/timestamp fields. Treat mutation as damage.
+                summary.diagnostics.emplace_back("ASCII DAT row lost a valid timestamp after indexing; valid prefix retained.");
+                break;
+            }
             for (std::size_t channel = 0; channel < m_impl->config.analog_channels.size(); ++channel) {
                 const std::size_t field = 2u + channel;
                 double raw = 0.0;
-                if (field >= fields.size() || !parse_double(fields[field], raw)) continue;
+                if (field >= fields.size() || !parse_double(fields[field], raw)) {
+                    ++invalidAnalogFields;
+                    continue;
+                }
                 const auto& definition = m_impl->config.analog_channels[channel];
                 const double value = definition.a * raw + definition.b;
                 if (std::isfinite(value)) {
                     summary.analog_abs_peaks[channel] = std::max(summary.analog_abs_peaks[channel], std::abs(value));
+                } else {
+                    ++invalidAnalogFields;
                 }
             }
             const std::size_t statusBase = 2u + m_impl->config.analog_channels.size();
             for (std::size_t channel = 0; channel < m_impl->config.status_channels.size(); ++channel) {
                 bool stateBool = false;
                 const std::size_t field = statusBase + channel;
-                const bool valid = field < fields.size() && parse_bool(fields[field], stateBool);
-                const auto state = static_cast<std::uint8_t>(valid && stateBool ? 1 : 0);
+                if (field >= fields.size() || !parse_bool(fields[field], stateBool)) {
+                    // Unknown is deliberately not coerced to 0: doing so could
+                    // synthesize a transition that never existed in the record.
+                    ++invalidStatusFields;
+                    continue;
+                }
+                const auto state = static_cast<std::uint8_t>(stateBool ? 1 : 0);
                 if (state != 0) summary.status_active[channel] = 1;
-                if (havePreviousStatus && state != previousStatus[channel]) anyDigitalEdge = true;
+                if (havePreviousStatus[channel] != 0 && state != previousStatus[channel]) anyDigitalEdge = true;
                 previousStatus[channel] = state;
+                havePreviousStatus[channel] = 1;
             }
         }
 
         const double time = static_cast<double>(timestamp) * timestamp_scale_seconds;
         summary.time_seconds.push_back(time);
-        if (havePreviousStatus && anyDigitalEdge) summary.digital_edge_times.push_back(time);
-        havePreviousStatus = true;
+        if (anyDigitalEdge) summary.digital_edge_times.push_back(time);
     }
 
+    if (invalidAnalogFields > 0) {
+        summary.diagnostics.emplace_back("ASCII DAT: " + std::to_string(invalidAnalogFields)
+                                         + " invalid/missing analog field(s) mapped to NaN.");
+    }
+    if (invalidStatusFields > 0) {
+        summary.diagnostics.emplace_back("ASCII DAT: " + std::to_string(invalidStatusFields)
+                                         + " invalid/missing digital field(s) treated as unknown; no synthetic edges created.");
+    }
+    if (missingBinaryAnalogValues > 0) {
+        summary.diagnostics.emplace_back("Binary DAT: " + std::to_string(missingBinaryAnalogValues)
+                                         + " missing/non-finite analog value(s) retained as NaN.");
+    }
     if (cancel && cancel->load(std::memory_order_relaxed)) summary.cancelled = true;
     return summary;
 }
