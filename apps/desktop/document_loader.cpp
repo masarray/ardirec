@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <array>
 #include <fstream>
+#include <iterator>
 #include <sstream>
 
 namespace {
@@ -18,6 +19,11 @@ std::string join_diagnostics(const std::vector<std::string>& diagnostics) {
         out << diagnostics[i];
     }
     return out.str();
+}
+
+void append_diagnostics(std::vector<std::string>& destination,
+                        const std::vector<std::string>& source) {
+    destination.insert(destination.end(), source.begin(), source.end());
 }
 
 std::string read_text_file_bounded(const std::filesystem::path& path,
@@ -61,14 +67,21 @@ loadDocumentData(const std::filesystem::path& cfgPath,
             return result;
         }
 
-        result->config = ardirec::comtrade::ConfigParser{}.parse_file(result->bundle.cfg);
+        auto parsed = ardirec::comtrade::ConfigParser{}.try_parse_file(result->bundle.cfg);
+        if (!parsed) {
+            result->error = parsed.error.empty() ? "CFG could not be parsed" : std::move(parsed.error);
+            return result;
+        }
+        result->config = std::move(*parsed.config);
+        append_diagnostics(result->diagnostics, result->config.diagnostics);
+
         if (cancel && cancel->load(std::memory_order_relaxed)) {
             result->cancelled = true;
             return result;
         }
 
         auto opened = ardirec::comtrade::IndexedDatFile::open(result->config, result->bundle.dat);
-        result->diagnostics = std::move(opened.diagnostics);
+        append_diagnostics(result->diagnostics, opened.diagnostics);
         result->dat = std::move(opened.file);
         if (!result->dat) {
             result->error = result->diagnostics.empty()
@@ -79,6 +92,7 @@ loadDocumentData(const std::filesystem::path& cfgPath,
 
         const double timeScaleSeconds = result->config.time_multiplier * 1.0e-6;
         auto index = result->dat->buildIndex(timeScaleSeconds, cancel.get());
+        append_diagnostics(result->diagnostics, index.diagnostics);
         if (index.cancelled || (cancel && cancel->load(std::memory_order_relaxed))) {
             result->cancelled = true;
             return result;
@@ -104,7 +118,7 @@ loadDocumentData(const std::filesystem::path& cfgPath,
 
         if (!result->bundle.hdr.empty()) result->header_text = read_text_file_bounded(result->bundle.hdr);
     } catch (const std::exception& ex) {
-        result->error = ex.what();
+        result->error = std::string("Unexpected background load failure: ") + ex.what();
     } catch (...) {
         result->error = "Unknown error while loading COMTRADE record";
     }
