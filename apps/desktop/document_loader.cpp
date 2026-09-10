@@ -195,6 +195,9 @@ loadDocumentData(const std::filesystem::path& cfgPath,
                 "DAT time index covers a valid prefix rather than the full physical frame count.");
         }
 
+        // Publish the immutable visual cache before this DAT source can reach
+        // the UI/render thread. Engineering calculations still read raw data.
+        result->dat->publishAnalogLod(index.analog_lod);
         result->time_seconds = std::make_shared<const std::vector<double>>(std::move(index.time_seconds));
         result->analog_lod = std::move(index.analog_lod);
         result->channel_peaks = std::move(index.analog_abs_peaks);
