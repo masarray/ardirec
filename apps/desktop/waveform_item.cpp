@@ -7,7 +7,6 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
-#include <vector>
 
 WaveformItem::WaveformItem(QQuickItem* parent) : QQuickItem(parent) {
     setFlag(ItemHasContents, true);
@@ -61,10 +60,12 @@ void WaveformItem::reloadData() {
     if (!m_document) {
         m_data.reset();
         m_times.reset();
+        m_lod.reset();
         m_displayScale = 1.0;
     } else {
         m_data = m_document->dataStoreSnapshot();
         m_times = m_document->timeIndexSnapshot();
+        m_lod = m_document->analogLodSnapshot();
         m_displayScale = m_document->channelDisplayScale(m_channelIndex);
     }
     update();
@@ -79,6 +80,7 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*) {
     auto* node = static_cast<QSGGeometryNode*>(oldNode);
     const auto data = m_data;
     const auto times = m_times;
+    const auto lod = m_lod;
     const std::size_t count = data && times ? std::min(data->frameCount(), times->size()) : 0;
     if (count < 2 || m_channelIndex < 0
         || static_cast<std::size_t>(m_channelIndex) >= (data ? data->analogCount() : 0)
@@ -110,26 +112,83 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*) {
     const std::size_t visibleCount = end - start;
     const std::size_t channel = static_cast<std::size_t>(m_channelIndex);
 
-    double peak = 0.0;
-    for (std::size_t i = start; i < end; ++i) {
-        const double value = data->analogValue(i, channel) * m_displayScale;
-        if (std::isfinite(value)) peak = std::max(peak, std::abs(value));
-    }
-    if (!std::isfinite(peak) || peak < 1.0e-12) peak = 1.0;
-    peak *= 1.08;
-
     const std::size_t pixelWidth = std::clamp<std::size_t>(static_cast<std::size_t>(width()), 64, 4096);
-    const bool envelopeMode = visibleCount > pixelWidth * 8;
+    const bool envelopeMode = visibleCount > pixelWidth * 8u;
+    const std::size_t samplesPerPixel = std::max<std::size_t>(1u, visibleCount / pixelWidth);
+    const bool lodCompatible = envelopeMode && lod && lod->block_size > 0
+                               && channel < lod->channel_count
+                               && lod->block_size <= samplesPerPixel * 2u;
+
+    double peak = 0.0;
     std::size_t pointCount = 0;
     std::size_t stride = 1;
+
     if (envelopeMode) {
-        pointCount = pixelWidth * 2;
+        pointCount = pixelWidth * 2u;
+        m_bucketLows.assign(pixelWidth, std::numeric_limits<double>::infinity());
+        m_bucketHighs.assign(pixelWidth, -std::numeric_limits<double>::infinity());
+
+        const auto accumulate = [&](std::size_t representativeIndex, double rawLow, double rawHigh) {
+            if (representativeIndex >= count || !std::isfinite(rawLow) || !std::isfinite(rawHigh)) return;
+            double low = rawLow * m_displayScale;
+            double high = rawHigh * m_displayScale;
+            if (low > high) std::swap(low, high);
+            if (!std::isfinite(low) || !std::isfinite(high)) return;
+            const double fraction = std::clamp(((*times)[representativeIndex] - startTime) / visibleDuration, 0.0, 1.0);
+            const std::size_t bucket = std::min(pixelWidth - 1u,
+                                                static_cast<std::size_t>(fraction * static_cast<double>(pixelWidth - 1u)));
+            m_bucketLows[bucket] = std::min(m_bucketLows[bucket], low);
+            m_bucketHighs[bucket] = std::max(m_bucketHighs[bucket], high);
+            peak = std::max(peak, std::max(std::abs(low), std::abs(high)));
+        };
+
+        const auto accumulateRaw = [&](std::size_t firstIndex, std::size_t lastIndex) {
+            for (std::size_t i = firstIndex; i < lastIndex; ++i) {
+                const double value = data->analogValue(i, channel);
+                if (std::isfinite(value)) accumulate(i, value, value);
+            }
+        };
+
+        if (lodCompatible) {
+            const std::size_t blockSize = lod->block_size;
+            const std::size_t firstFullBlock = (start + blockSize - 1u) / blockSize;
+            const std::size_t lastFullBlockExclusive = end / blockSize;
+
+            if (firstFullBlock < lastFullBlockExclusive) {
+                const std::size_t prefixEnd = std::min(end, firstFullBlock * blockSize);
+                accumulateRaw(start, prefixEnd);
+
+                for (std::size_t block = firstFullBlock; block < lastFullBlockExclusive; ++block) {
+                    double low = 0.0;
+                    double high = 0.0;
+                    if (!lod->blockExtrema(channel, block, low, high)) continue;
+                    const std::size_t blockStart = block * blockSize;
+                    const std::size_t representative = std::min(count - 1u,
+                                                                 blockStart + (blockSize - 1u) / 2u);
+                    accumulate(representative, low, high);
+                }
+
+                const std::size_t suffixStart = std::max(start, lastFullBlockExclusive * blockSize);
+                accumulateRaw(suffixStart, end);
+            } else {
+                accumulateRaw(start, end);
+            }
+        } else {
+            accumulateRaw(start, end);
+        }
     } else {
-        const std::size_t targetPoints = std::max<std::size_t>(64, pixelWidth * 2);
-        stride = std::max<std::size_t>(1, (visibleCount + targetPoints - 1) / targetPoints);
-        pointCount = (visibleCount + stride - 1) / stride;
-        pointCount = std::max<std::size_t>(2, pointCount);
+        const std::size_t targetPoints = std::max<std::size_t>(64u, pixelWidth * 2u);
+        stride = std::max<std::size_t>(1u, (visibleCount + targetPoints - 1u) / targetPoints);
+        pointCount = (visibleCount + stride - 1u) / stride;
+        pointCount = std::max<std::size_t>(2u, pointCount);
+        for (std::size_t i = start; i < end; ++i) {
+            const double value = data->analogValue(i, channel) * m_displayScale;
+            if (std::isfinite(value)) peak = std::max(peak, std::abs(value));
+        }
     }
+
+    if (!std::isfinite(peak) || peak < 1.0e-12) peak = 1.0;
+    peak *= 1.08;
 
     if (!node) {
         node = new QSGGeometryNode;
@@ -170,37 +229,26 @@ QSGNode* WaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*) {
             vertices[out++].set(xForTime((*times)[i]), std::isfinite(value) ? yFor(value) : h * 0.5F);
         }
         while (out < pointCount) {
-            const std::size_t i = end - 1;
+            const std::size_t i = end - 1u;
             const double value = data->analogValue(i, channel) * m_displayScale;
             vertices[out++].set(xForTime((*times)[i]), std::isfinite(value) ? yFor(value) : h * 0.5F);
         }
     } else {
-        std::vector<double> lows(pixelWidth, std::numeric_limits<double>::infinity());
-        std::vector<double> highs(pixelWidth, -std::numeric_limits<double>::infinity());
-        for (std::size_t i = start; i < end; ++i) {
-            const double value = data->analogValue(i, channel) * m_displayScale;
-            if (!std::isfinite(value)) continue;
-            const double fraction = std::clamp(((*times)[i] - startTime) / visibleDuration, 0.0, 1.0);
-            const std::size_t bucket = std::min(pixelWidth - 1,
-                                                static_cast<std::size_t>(fraction * static_cast<double>(pixelWidth - 1)));
-            lows[bucket] = std::min(lows[bucket], value);
-            highs[bucket] = std::max(highs[bucket], value);
-        }
         double previous = 0.0;
         for (std::size_t bucket = 0; bucket < pixelWidth; ++bucket) {
-            double lo = lows[bucket];
-            double hi = highs[bucket];
-            if (!std::isfinite(lo) || !std::isfinite(hi)) {
-                lo = previous;
-                hi = previous;
+            double low = m_bucketLows[bucket];
+            double high = m_bucketHighs[bucket];
+            if (!std::isfinite(low) || !std::isfinite(high)) {
+                low = previous;
+                high = previous;
             } else {
-                previous = (lo + hi) * 0.5;
+                previous = (low + high) * 0.5;
             }
-            const float x = pixelWidth > 1
-                                ? w * static_cast<float>(bucket) / static_cast<float>(pixelWidth - 1)
+            const float x = pixelWidth > 1u
+                                ? w * static_cast<float>(bucket) / static_cast<float>(pixelWidth - 1u)
                                 : 0.0F;
-            vertices[bucket * 2].set(x, yFor(lo));
-            vertices[bucket * 2 + 1].set(x, yFor(hi));
+            vertices[bucket * 2u].set(x, yFor(low));
+            vertices[bucket * 2u + 1u].set(x, yFor(high));
         }
     }
 
