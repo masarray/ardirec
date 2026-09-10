@@ -14,10 +14,24 @@ Rectangle {
     property real cursorATime: 0.0
     property real cursorBTime: 0.0
     property real axisWidth: 170
-    property real hoverRadius: 8
+    property real hoverRadius: 16
     property real snapRadius: 12
     property color cursorAColor: "#2466b3"
     property color cursorBColor: "#c78100"
+
+    // The thumb follows the pointer locally at full input rate. Heavy analysis receives a
+    // coalesced cursor update at most once per display frame, then the exact final value on release.
+    property real previewATime: cursorATime
+    property real previewBTime: cursorBTime
+    property bool previewAActive: false
+    property bool previewBActive: false
+    property real pendingATime: 0.0
+    property real pendingBTime: 0.0
+    property bool pendingAValid: false
+    property bool pendingBValid: false
+
+    readonly property real displayedATime: previewAActive ? previewATime : cursorATime
+    readonly property real displayedBTime: previewBActive ? previewBTime : cursorBTime
 
     signal cursorARequested(real timeSeconds)
     signal cursorBRequested(real timeSeconds)
@@ -46,6 +60,39 @@ Rectangle {
         if (document.digitalCount <= 0 || visibleDuration <= 0) return clamped
         const threshold = visibleDuration * snapRadius / Math.max(1, ruler.width)
         return document.snapToDigitalEdge(clamped, threshold)
+    }
+    function queueA(timeSeconds) {
+        previewATime = timeSeconds
+        previewAActive = true
+        pendingATime = timeSeconds
+        pendingAValid = true
+        if (!analysisCommitTimer.running) analysisCommitTimer.start()
+    }
+    function queueB(timeSeconds) {
+        previewBTime = timeSeconds
+        previewBActive = true
+        pendingBTime = timeSeconds
+        pendingBValid = true
+        if (!analysisCommitTimer.running) analysisCommitTimer.start()
+    }
+    function flushPending() {
+        if (pendingAValid) {
+            const value = pendingATime
+            pendingAValid = false
+            cursorARequested(value)
+        }
+        if (pendingBValid) {
+            const value = pendingBTime
+            pendingBValid = false
+            cursorBRequested(value)
+        }
+    }
+
+    Timer {
+        id: analysisCommitTimer
+        interval: 16
+        repeat: false
+        onTriggered: root.flushPending()
     }
 
     Rectangle {
@@ -113,23 +160,76 @@ Rectangle {
             font.pixelSize: 7
         }
 
-        Rectangle {
-            visible: root.cursorATime >= root.viewStart && root.cursorATime <= root.viewStart + root.visibleDuration
-            x: root.pixelForTime(root.cursorATime) - 3
-            anchors.bottom: parent.bottom
-            width: 7
-            height: 7
-            color: root.cursorAColor
-            rotation: 45
+        // C1: larger 16 px hit-visible handle with a stem and readable number.
+        Item {
+            visible: root.displayedATime >= root.viewStart && root.displayedATime <= root.viewStart + root.visibleDuration
+            x: root.pixelForTime(root.displayedATime) - 8
+            y: ruler.height - 18
+            width: 16
+            height: 18
+            z: 3
+            Rectangle {
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.bottom: parent.bottom
+                width: 2
+                height: 8
+                color: root.cursorAColor
+            }
+            Rectangle {
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.top: parent.top
+                anchors.topMargin: 1
+                width: 12
+                height: 12
+                rotation: 45
+                color: root.cursorAColor
+                border.width: 1.5
+                border.color: "#ffffff"
+            }
+            Label {
+                anchors.horizontalCenter: parent.horizontalCenter
+                y: 2
+                text: "1"
+                color: "#ffffff"
+                font.pixelSize: 7
+                font.weight: Font.DemiBold
+            }
         }
-        Rectangle {
-            visible: root.cursorBTime >= root.viewStart && root.cursorBTime <= root.viewStart + root.visibleDuration
-            x: root.pixelForTime(root.cursorBTime) - 3
-            anchors.bottom: parent.bottom
-            width: 7
-            height: 7
-            color: root.cursorBColor
-            rotation: 45
+
+        // C2: same geometry, separate color; right-click still places/moves it directly.
+        Item {
+            visible: root.displayedBTime >= root.viewStart && root.displayedBTime <= root.viewStart + root.visibleDuration
+            x: root.pixelForTime(root.displayedBTime) - 8
+            y: ruler.height - 18
+            width: 16
+            height: 18
+            z: 3
+            Rectangle {
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.bottom: parent.bottom
+                width: 2
+                height: 8
+                color: root.cursorBColor
+            }
+            Rectangle {
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.top: parent.top
+                anchors.topMargin: 1
+                width: 12
+                height: 12
+                rotation: 45
+                color: root.cursorBColor
+                border.width: 1.5
+                border.color: "#ffffff"
+            }
+            Label {
+                anchors.horizontalCenter: parent.horizontalCenter
+                y: 2
+                text: "2"
+                color: "#ffffff"
+                font.pixelSize: 7
+                font.weight: Font.DemiBold
+            }
         }
 
         MouseArea {
@@ -146,12 +246,18 @@ Rectangle {
             cursorShape: movingA || movingB || hoverA || hoverB ? Qt.SizeHorCursor : Qt.ArrowCursor
 
             function updateHover(mouseX) {
-                const ax = root.pixelForTime(root.cursorATime)
-                const bx = root.pixelForTime(root.cursorBTime)
-                hoverA = root.cursorATime >= root.viewStart && root.cursorATime <= root.viewStart + root.visibleDuration
+                const ax = root.pixelForTime(root.displayedATime)
+                const bx = root.pixelForTime(root.displayedBTime)
+                hoverA = root.displayedATime >= root.viewStart && root.displayedATime <= root.viewStart + root.visibleDuration
                          && Math.abs(mouseX - ax) <= root.hoverRadius
-                hoverB = root.cursorBTime >= root.viewStart && root.cursorBTime <= root.viewStart + root.visibleDuration
+                hoverB = root.displayedBTime >= root.viewStart && root.displayedBTime <= root.viewStart + root.visibleDuration
                          && Math.abs(mouseX - bx) <= root.hoverRadius
+            }
+
+            function updateActiveCursor(mouseX) {
+                const snapped = root.snapTime(root.timeForPixel(mouseX))
+                if (movingA) root.queueA(snapped)
+                else if (movingB) root.queueB(snapped)
             }
 
             onPressed: mouse => {
@@ -160,32 +266,47 @@ Rectangle {
                 movingB = false
                 if (mouse.button === Qt.RightButton) {
                     movingB = true
-                    root.cursorBRequested(root.snapTime(root.timeForPixel(mouse.x)))
+                    root.previewBActive = true
+                    updateActiveCursor(mouse.x)
                     return
                 }
-                const da = Math.abs(mouse.x - root.pixelForTime(root.cursorATime))
-                const db = Math.abs(mouse.x - root.pixelForTime(root.cursorBTime))
+                const da = Math.abs(mouse.x - root.pixelForTime(root.displayedATime))
+                const db = Math.abs(mouse.x - root.pixelForTime(root.displayedBTime))
                 if (hoverA || hoverB) {
-                    if (da <= db) movingA = true
-                    else movingB = true
+                    if (da <= db) { movingA = true; root.previewAActive = true }
+                    else { movingB = true; root.previewBActive = true }
                 } else {
                     movingA = true
-                    root.cursorARequested(root.snapTime(root.timeForPixel(mouse.x)))
+                    root.previewAActive = true
+                    updateActiveCursor(mouse.x)
                 }
             }
+
             onPositionChanged: mouse => {
                 updateHover(mouse.x)
                 if (!(mouse.buttons & (Qt.LeftButton | Qt.RightButton))) return
-                const snapped = root.snapTime(root.timeForPixel(mouse.x))
-                if (movingA) root.cursorARequested(snapped)
-                else if (movingB) root.cursorBRequested(snapped)
+                updateActiveCursor(mouse.x)
             }
+
             onReleased: mouse => {
+                if (movingA || movingB) updateActiveCursor(mouse.x)
+                root.flushPending()
                 movingA = false
                 movingB = false
+                root.previewAActive = false
+                root.previewBActive = false
                 updateHover(mouse.x)
             }
-            onCanceled: { movingA = false; movingB = false; hoverA = false; hoverB = false }
+
+            onCanceled: {
+                root.flushPending()
+                movingA = false
+                movingB = false
+                root.previewAActive = false
+                root.previewBActive = false
+                hoverA = false
+                hoverB = false
+            }
             onExited: { if (!movingA && !movingB) { hoverA = false; hoverB = false } }
         }
     }
