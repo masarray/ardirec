@@ -11,7 +11,10 @@ permissions:
 
 jobs:
   windows-portable:
-    runs-on: windows-latest
+    # Keep the compiler aligned with the Qt package below. Using windows-latest
+    # currently selects VS 2026 while Qt is the MSVC 2022 build, which can leave
+    # the portable folder without the VC runtime DLLs needed on a clean PC.
+    runs-on: windows-2022
     timeout-minutes: 30
     steps:
       - name: Checkout
@@ -27,7 +30,7 @@ jobs:
       - name: Configure
         shell: pwsh
         run: >-
-          cmake -S . -B build -A x64
+          cmake -S . -B build -G "Visual Studio 17 2022" -A x64
           -DARDIREC_BUILD_DESKTOP=ON
           -DARDIREC_BUILD_TESTS=ON
 
@@ -39,13 +42,46 @@ jobs:
         shell: pwsh
         run: ctest --test-dir build -C Release --output-on-failure
 
-      - name: Stage Qt application
+      - name: Stage Qt application and VC runtime
         shell: pwsh
         run: |
+          $ErrorActionPreference = 'Stop'
           $folder = 'ardirec-v0.2.0-alpha.14-windows-x64'
           New-Item -ItemType Directory -Force -Path $folder | Out-Null
           Copy-Item build/apps/desktop/Release/ardirec.exe "$folder/ardirec.exe"
           windeployqt --release --compiler-runtime --no-translations --qmldir apps/desktop/qml "$folder/ardirec.exe"
+
+          # windeployqt may not copy the MSVC runtime on hosted runners. Make the
+          # portable ZIP genuinely self-contained by copying the x64 VC runtime
+          # from the VS 2022 redist directory explicitly.
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          if (-not (Test-Path $vswhere)) { throw "vswhere.exe not found" }
+          $vsPath = (& $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath).Trim()
+          if (-not $vsPath) { throw "Visual Studio C++ installation not found" }
+
+          $redistRoot = Join-Path $vsPath 'VC\Redist\MSVC'
+          $crtDir = Get-ChildItem $redistRoot -Directory -Recurse |
+            Where-Object { $_.FullName -match '\\x64\\Microsoft\.VC14\d\.CRT$' } |
+            Sort-Object FullName -Descending |
+            Select-Object -First 1
+          if (-not $crtDir) { throw "x64 Microsoft VC runtime directory not found under $redistRoot" }
+
+          Copy-Item (Join-Path $crtDir.FullName '*.dll') $folder -Force
+
+          $requiredRuntime = @(
+            'MSVCP140.dll',
+            'MSVCP140_1.dll',
+            'MSVCP140_2.dll',
+            'VCRUNTIME140.dll',
+            'VCRUNTIME140_1.dll'
+          )
+          foreach ($dll in $requiredRuntime) {
+            if (-not (Test-Path (Join-Path $folder $dll))) {
+              throw "Portable runtime validation failed: missing $dll"
+            }
+          }
+          Write-Host "VC runtime staged from: $($crtDir.FullName)"
+          Get-ChildItem $folder -Filter '*140*.dll' | Select-Object Name, Length
 
       - name: Build portable ZIP
         shell: pwsh
