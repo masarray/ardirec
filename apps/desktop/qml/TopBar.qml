@@ -23,42 +23,6 @@ Rectangle {
     signal zoomInRequested()
     signal zoomOutRequested()
 
-    function openMenu(menu, button) {
-        menu.x = Math.max(0, button.x)
-        menu.y = root.height
-        menu.open()
-    }
-
-    Menu {
-        id: fileMenu
-        width: 180
-        MenuItem { text: "Open COMTRADE…    Ctrl+O"; onTriggered: root.openRequested() }
-        MenuSeparator { }
-        MenuItem { text: "Exit"; onTriggered: Qt.quit() }
-    }
-
-    Menu {
-        id: viewMenu
-        width: 190
-        MenuItem { text: "Fit complete record    Ctrl+0"; enabled: root.hasRecord; onTriggered: root.fitRequested() }
-        MenuItem { text: "Focus trigger"; enabled: root.hasRecord; onTriggered: root.triggerRequested() }
-        MenuSeparator { }
-        MenuItem { text: "Zoom in"; enabled: root.hasRecord; onTriggered: root.zoomInRequested() }
-        MenuItem { text: "Zoom out"; enabled: root.hasRecord; onTriggered: root.zoomOutRequested() }
-    }
-
-    Menu {
-        id: signalsMenu
-        width: 190
-        MenuItem { text: "Select visible signals…"; enabled: root.hasRecord; onTriggered: root.signalsRequested() }
-    }
-
-    Menu {
-        id: helpMenu
-        width: 150
-        MenuItem { text: "About ArdIREC"; onTriggered: aboutPopup.open() }
-    }
-
     Popup {
         id: aboutPopup
         width: 390
@@ -209,40 +173,39 @@ Rectangle {
 
     RowLayout {
         anchors.fill: parent
-        anchors.leftMargin: 5
+        anchors.leftMargin: 3
         anchors.rightMargin: 8
-        spacing: 1
+        spacing: 2
 
-        ToolButton {
-            id: fileButton
-            text: "File"
-            font.pixelSize: 9
-            Layout.preferredWidth: 42
-            onClicked: root.openMenu(fileMenu, fileButton)
-        }
-        ToolButton {
-            id: viewButton
-            text: "View"
-            font.pixelSize: 9
-            Layout.preferredWidth: 44
-            onClicked: root.openMenu(viewMenu, viewButton)
-        }
-        ToolButton {
-            id: signalsButton
-            text: "Signals"
-            font.pixelSize: 9
-            Layout.preferredWidth: 55
-            onClicked: root.openMenu(signalsMenu, signalsButton)
-        }
-        ToolButton {
-            id: helpButton
-            text: "Help"
-            font.pixelSize: 9
-            Layout.preferredWidth: 43
-            onClicked: root.openMenu(helpMenu, helpButton)
+        MenuBar {
+            id: menuBar
+            Layout.fillHeight: true
+
+            Menu {
+                title: "&File"
+                MenuItem { text: "Open COMTRADE…"; onTriggered: root.openRequested() }
+                MenuSeparator { }
+                MenuItem { text: "Exit"; onTriggered: Qt.quit() }
+            }
+            Menu {
+                title: "&View"
+                MenuItem { text: "Fit complete record"; enabled: root.hasRecord; onTriggered: root.fitRequested() }
+                MenuItem { text: "Focus trigger"; enabled: root.hasRecord; onTriggered: root.triggerRequested() }
+                MenuSeparator { }
+                MenuItem { text: "Zoom in"; enabled: root.hasRecord; onTriggered: root.zoomInRequested() }
+                MenuItem { text: "Zoom out"; enabled: root.hasRecord; onTriggered: root.zoomOutRequested() }
+            }
+            Menu {
+                title: "&Signals"
+                MenuItem { text: "Select visible signals…"; enabled: root.hasRecord; onTriggered: root.signalsRequested() }
+            }
+            Menu {
+                title: "&Help"
+                MenuItem { text: "About ArdIREC"; onTriggered: aboutPopup.open() }
+            }
         }
 
-        Rectangle { width: 1; height: 22; color: "#c5c9cc"; Layout.leftMargin: 4; Layout.rightMargin: 4 }
+        Rectangle { width: 1; height: 22; color: "#c5c9cc"; Layout.leftMargin: 2; Layout.rightMargin: 4 }
 
         ToolButton {
             text: "Fit"
