@@ -28,6 +28,17 @@ ardirec_set_warnings(ardirec_document_loader_tests)
 ardirec_enable_sanitizers(ardirec_document_loader_tests)
 add_test(NAME ardirec_document_loader_tests COMMAND ardirec_document_loader_tests)
 
+add_executable(ardirec_loader_file_safety_tests
+    test_loader_file_safety.cpp
+    ../apps/desktop/document_loader.cpp
+    ../apps/desktop/document_loader.hpp
+)
+target_include_directories(ardirec_loader_file_safety_tests PRIVATE ../apps/desktop)
+target_link_libraries(ardirec_loader_file_safety_tests PRIVATE ardirec::core)
+ardirec_set_warnings(ardirec_loader_file_safety_tests)
+ardirec_enable_sanitizers(ardirec_loader_file_safety_tests)
+add_test(NAME ardirec_loader_file_safety_tests COMMAND ardirec_loader_file_safety_tests)
+
 add_executable(ardirec_power_tests test_power.cpp)
 target_link_libraries(ardirec_power_tests PRIVATE ardirec::core)
 ardirec_set_warnings(ardirec_power_tests)
