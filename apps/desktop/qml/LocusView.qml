@@ -796,11 +796,11 @@ Rectangle {
 
                         readonly property string loopId: modelData
                         readonly property bool earthFamily: index < 3
-                        readonly property var transform: earthFamily ? root.earthPanelTransform : root.phasePanelTransform
+                        readonly property var panelTransform: earthFamily ? root.earthPanelTransform : root.phasePanelTransform
                         readonly property var pointA: root.cursorAValues[loopId] || ({valid:false})
                         readonly property var pointB: root.cursorBValues[loopId] || ({valid:false})
                         readonly property bool selected: root.selectedLoop === loopId
-                        visible: root.loopVisible(loopId) && transform && transform.valid
+                        visible: root.loopVisible(loopId) && panelTransform && panelTransform.valid
 
                         component CursorCross: Item {
                             property var point
@@ -820,8 +820,8 @@ Rectangle {
                             Rectangle { anchors.centerIn: parent; width: parent.stroke; height: parent.height; radius: width / 2; color: parent.crossColor }
                         }
 
-                        CursorCross { point: parent.pointA; plotTransform: parent.transform; crossColor: "#d88900"; strong: parent.selected }
-                        CursorCross { point: parent.pointB; plotTransform: parent.transform; crossColor: "#009bc4"; strong: parent.selected }
+                        CursorCross { point: parent.pointA; plotTransform: parent.panelTransform; crossColor: "#d88900"; strong: parent.selected }
+                        CursorCross { point: parent.pointB; plotTransform: parent.panelTransform; crossColor: "#009bc4"; strong: parent.selected }
                     }
                 }
             }
