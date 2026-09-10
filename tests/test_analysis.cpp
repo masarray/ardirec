@@ -26,6 +26,13 @@ void require_near(double actual, double expected, double tolerance, const char* 
     }
 }
 
+double wrapped_angle_delta(double a, double b) {
+    double delta = a - b;
+    while (delta <= -180.0) delta += 360.0;
+    while (delta > 180.0) delta -= 360.0;
+    return delta;
+}
+
 void wait_for_document(DocumentController& document, int timeoutMs = 10000) {
     QElapsedTimer timer;
     timer.start();
@@ -55,6 +62,18 @@ int main(int argc, char* argv[]) {
         for (const char* loop : {"L1-E", "L2-E", "L3-E", "L1-L2", "L2-L3", "L3-L1"}) {
             require(analysis.distanceLoopAvailable(QString::fromLatin1(loop)), "all six protection loops are available");
         }
+
+        // A steady 50 Hz waveform must keep the same fixed-reference phasor angle when the
+        // analysis cursor advances. A cursor-relative reference would rotate by about 36 degrees
+        // over this 2 ms move and recreate the UI "spinning wheel" regression.
+        const QVariantMap phasorAt20ms = analysis.phasorAt(0, 0.020);
+        const QVariantMap phasorAt22ms = analysis.phasorAt(0, 0.022);
+        require(phasorAt20ms.value(QStringLiteral("valid")).toBool(), "20 ms voltage phasor is valid");
+        require(phasorAt22ms.value(QStringLiteral("valid")).toBool(), "22 ms voltage phasor is valid");
+        const double angle20 = phasorAt20ms.value(QStringLiteral("angle")).toDouble();
+        const double angle22 = phasorAt22ms.value(QStringLiteral("angle")).toDouble();
+        require(std::abs(wrapped_angle_delta(angle22, angle20)) < 0.1,
+                "phasor angle uses a fixed record reference instead of cursor-relative rotation");
 
         require_near(analysis.distanceCurrentFloor(), 0.001, 1.0e-12,
                      "distance current floor is 0.1 percent of the displayed record peak");
