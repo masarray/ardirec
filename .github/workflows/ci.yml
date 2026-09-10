@@ -23,6 +23,17 @@ jobs:
       - name: Test
         run: ctest --test-dir build -C Release --output-on-failure
 
+  large-record-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure benchmark
+        run: cmake -S . -B build-bench -DCMAKE_BUILD_TYPE=Release -DARDIREC_BUILD_DESKTOP=OFF -DARDIREC_BUILD_BRIDGE=OFF -DARDIREC_BUILD_TESTS=OFF -DARDIREC_BUILD_BENCHMARKS=ON
+      - name: Build benchmark
+        run: cmake --build build-bench --target ardirec-large-record-benchmark --parallel 2
+      - name: Exercise 10M-sample / ~210 MiB record
+        run: ./build-bench/benchmarks/ardirec-large-record-benchmark --samples 10000000 --analog 6 --digital 8 --sample-rate 10000
+
   desktop-linux:
     runs-on: ubuntu-latest
     steps:
