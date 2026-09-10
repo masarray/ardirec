@@ -220,8 +220,22 @@ int main(int argc, char** argv) {
     const auto indexEnd = Clock::now();
     if (summary.cancelled || summary.time_seconds.size() != options.samples
         || summary.analog_abs_peaks.size() != options.analog
-        || summary.status_active.size() != options.digital) {
-        std::cerr << "index validation failed\n";
+        || summary.status_active.size() != options.digital
+        || !summary.analog_lod) {
+        std::cerr << "index/LOD validation failed\n";
+        if (!options.keepFixture) std::filesystem::remove_all(directory, ec);
+        return 1;
+    }
+    if (summary.analog_lod->channel_count != options.analog
+        || summary.analog_lod->minima.size() != summary.analog_lod->maxima.size()
+        || summary.analog_lod->minima.size() > 2'000'000u) {
+        std::cerr << "LOD memory contract failed\n";
+        if (!options.keepFixture) std::filesystem::remove_all(directory, ec);
+        return 1;
+    }
+    opened.file->publishAnalogLod(summary.analog_lod);
+    if (opened.file->analogLodSnapshot() != summary.analog_lod) {
+        std::cerr << "LOD publication failed\n";
         if (!options.keepFixture) std::filesystem::remove_all(directory, ec);
         return 1;
     }
@@ -235,6 +249,15 @@ int main(int argc, char** argv) {
     }
     const auto randomEnd = Clock::now();
 
+    const auto lodScanStart = Clock::now();
+    long double lodChecksum = 0.0L;
+    for (std::size_t block = 0; block < summary.analog_lod->block_count; ++block) {
+        double low = 0.0;
+        double high = 0.0;
+        if (summary.analog_lod->blockExtrema(0u, block, low, high)) lodChecksum += low + high;
+    }
+    const auto lodScanEnd = Clock::now();
+
     const auto fileBytes = std::filesystem::file_size(datPath, ec);
     if (ec) {
         std::cerr << "cannot stat benchmark DAT: " << ec.message() << '\n';
@@ -242,18 +265,24 @@ int main(int argc, char** argv) {
         return 1;
     }
 
+    const std::uint64_t lodBytes =
+        static_cast<std::uint64_t>(summary.analog_lod->minima.capacity()) * sizeof(float)
+        + static_cast<std::uint64_t>(summary.analog_lod->maxima.capacity()) * sizeof(float);
     const std::uint64_t compactIndexBytes =
         static_cast<std::uint64_t>(summary.time_seconds.capacity()) * sizeof(double)
         + static_cast<std::uint64_t>(summary.analog_abs_peaks.capacity()) * sizeof(double)
         + static_cast<std::uint64_t>(summary.status_active.capacity()) * sizeof(std::uint8_t)
-        + static_cast<std::uint64_t>(summary.digital_edge_times.capacity()) * sizeof(double);
+        + static_cast<std::uint64_t>(summary.digital_edge_times.capacity()) * sizeof(double)
+        + lodBytes;
 
     const double generationSeconds = seconds_between(generationStart, generationEnd);
     const double openSeconds = seconds_between(parseStart, parseEnd);
     const double indexSeconds = seconds_between(indexStart, indexEnd);
     const double randomSeconds = seconds_between(randomStart, randomEnd);
+    const double lodScanSeconds = seconds_between(lodScanStart, lodScanEnd);
     const double mib = static_cast<double>(fileBytes) / (1024.0 * 1024.0);
     const double compactMib = static_cast<double>(compactIndexBytes) / (1024.0 * 1024.0);
+    const double lodMib = static_cast<double>(lodBytes) / (1024.0 * 1024.0);
     const double throughput = indexSeconds > 0.0
                                   ? static_cast<double>(options.samples) / indexSeconds / 1'000'000.0
                                   : 0.0;
@@ -270,11 +299,17 @@ int main(int argc, char** argv) {
               << " open_s=" << openSeconds
               << " index_s=" << indexSeconds
               << " index_mframes_s=" << throughput
-              << " random_4k_s=" << randomSeconds << '\n'
+              << " random_4k_s=" << randomSeconds
+              << " lod_scan_s=" << lodScanSeconds << '\n'
               << "compact_index_mib=" << compactMib
-              << " digital_edges=" << summary.digital_edge_times.size()
+              << " lod_mib=" << lodMib
+              << " lod_block_frames=" << summary.analog_lod->block_size
+              << " lod_blocks=" << summary.analog_lod->block_count
+              << " lod_cells=" << summary.analog_lod->minima.size() << '\n'
+              << "digital_edges=" << summary.digital_edge_times.size()
               << " diagnostics=" << (opened.diagnostics.size() + summary.diagnostics.size())
-              << " checksum=" << static_cast<double>(checksum) << '\n';
+              << " checksum=" << static_cast<double>(checksum)
+              << " lod_checksum=" << static_cast<double>(lodChecksum) << '\n';
 
     if (options.keepFixture) {
         std::cout << "fixture=" << directory.string() << '\n';
