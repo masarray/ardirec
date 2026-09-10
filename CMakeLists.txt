@@ -28,7 +28,7 @@ if(ARDIREC_BUILD_BRIDGE)
 endif()
 
 if(ARDIREC_BUILD_DESKTOP)
-    find_package(Qt6 6.8 QUIET COMPONENTS Quick Qml QuickControls2)
+    find_package(Qt6 6.8 QUIET COMPONENTS Quick Qml QuickControls2 Concurrent)
     if(Qt6_FOUND)
         add_subdirectory(apps/desktop)
     else()
