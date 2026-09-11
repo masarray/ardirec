@@ -113,6 +113,23 @@ int main(int argc, char* argv[]) {
             }
         }
 
+        const QVariantMap lociBatch = analysis.distanceLoci(document.dataStartSeconds(),
+                                                            document.durationSeconds(),
+                                                            4000,
+                                                            0.0,
+                                                            0.0);
+        require(lociBatch.size() == 6, "batched locus API returns all six loop trajectories");
+        for (const char* loopName : {"L1-E", "L2-E", "L3-E", "L1-L2", "L2-L3", "L3-L1"}) {
+            const QVariantList loopPoints = lociBatch.value(QString::fromLatin1(loopName)).toList();
+            require(loopPoints.size() == 48, "batched locus retains every fixture timestamp below point budget");
+            require_near(loopPoints.front().toMap().value(QStringLiteral("time")).toDouble(),
+                         document.dataStartSeconds(), 1.0e-12,
+                         "batched locus retains first timestamp");
+            require_near(loopPoints.back().toMap().value(QStringLiteral("time")).toDouble(),
+                         document.dataEndSeconds(), 1.0e-12,
+                         "batched locus retains final timestamp");
+        }
+
         const QVariantList locus = analysis.distanceLocus(QStringLiteral("L1-E"),
                                                            document.dataStartSeconds(),
                                                            document.durationSeconds(),
@@ -120,6 +137,20 @@ int main(int argc, char* argv[]) {
                                                            0.0,
                                                            0.0);
         require(locus.size() == 48, "sample-aligned locus keeps every COMTRADE timestamp when below maximumPoints");
+        const QVariantList batchedL1E = lociBatch.value(QStringLiteral("L1-E")).toList();
+        require(batchedL1E.size() == locus.size(), "batched and compatibility L1-E loci use the same samples");
+        for (int i = 0; i < locus.size(); ++i) {
+            const QVariantMap a = batchedL1E.at(i).toMap();
+            const QVariantMap b = locus.at(i).toMap();
+            require(a.value(QStringLiteral("valid")).toBool() == b.value(QStringLiteral("valid")).toBool(),
+                    "batched and single locus validity agree");
+            if (b.value(QStringLiteral("valid")).toBool()) {
+                require_near(a.value(QStringLiteral("r")).toDouble(), b.value(QStringLiteral("r")).toDouble(), 1.0e-12,
+                             "batched and single locus R agree");
+                require_near(a.value(QStringLiteral("x")).toDouble(), b.value(QStringLiteral("x")).toDouble(), 1.0e-12,
+                             "batched and single locus X agree");
+            }
+        }
 
         const QVariantMap stable = locus.at(22).toMap();
         require(stable.value(QStringLiteral("valid")).toBool(), "energized locus point is valid");
