@@ -220,10 +220,15 @@ ApplicationWindow {
 
         TopBar {
             Layout.fillWidth: true
+            document: documentController
             recordTitle: documentController.title
             recordMetadata: documentController.metadata
             currentViewLabel: window.viewLabel()
             hasRecord: window.hasRecord
+            cursorATime: window.cursorATime
+            cursorBTime: window.cursorBTime
+            triggerOffsetSeconds: documentController.triggerOffsetSeconds
+            nominalFrequency: documentController.nominalFrequency
             onOpenRequested: openDialog.open()
             onSignalsRequested: signalDrawer.open()
             onFitRequested: window.fitRecord()
@@ -245,20 +250,6 @@ ApplicationWindow {
             onTimeDisplayModeRequested: mode => window.timeDisplayMode = mode
             onValueRepresentationRequested: representation => documentController.setValueRepresentation(representation)
             onActiveAnalysisCursorRequested: cursorNumber => window.activeAnalysisCursor = cursorNumber
-        }
-
-        MeasurementPanel {
-            Layout.fillWidth: true
-            visible: window.viewMode !== "harmonics" && window.viewMode !== "table"
-            Layout.preferredHeight: visible ? 128 : 0
-            document: documentController
-            analysis: analysisController
-            visibleChannels: window.visibleChannels
-            measurementChannel: window.measurementChannel
-            cursorATime: window.cursorATime
-            cursorBTime: window.cursorBTime
-            valueRepresentation: documentController.valueRepresentation
-            onMeasurementChannelRequested: channelIndex => window.measurementChannel = channelIndex
         }
 
         CursorNavigator {
@@ -340,8 +331,6 @@ ApplicationWindow {
                 anchors.fill: parent
                 visible: window.hasRecord && window.viewMode === "phasor"
                 document: documentController
-                // Suspend hidden analysis views so representation toggles update only the view the
-                // operator can see. This prevents background DFT/locus work from blocking the UI.
                 analysis: window.viewMode === "phasor" ? analysisController : null
                 cursorATime: window.cursorATime
                 cursorBTime: window.cursorBTime
