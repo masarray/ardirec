@@ -32,7 +32,6 @@ qt_add_qml_module(ardirec
         qml/SignalSidebar.qml
         qml/TopBar.qml
         qml/ViewModeBar.qml
-        qml/MeasurementPanel.qml
         qml/CursorNavigator.qml
         qml/HarmonicCursorNavigator.qml
         qml/TimeRuler.qml
@@ -48,6 +47,14 @@ qt_add_qml_module(ardirec
         qml/HarmonicDiagram.qml
         qml/HarmonicsView.qml
         qml/ValueTableView.qml
+    RESOURCES
+        qml/icons/folder-open.svg
+        qml/icons/sliders-horizontal.svg
+        qml/icons/maximize-2.svg
+        qml/icons/crosshair.svg
+        qml/icons/zoom-in.svg
+        qml/icons/zoom-out.svg
+        qml/icons/triangle-alert.svg
 )
 
 target_link_libraries(ardirec PRIVATE
