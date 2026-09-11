@@ -34,9 +34,6 @@ QtObject {
 
     function distanceLocus(loopId, startSeconds, durationSeconds, maximumPoints, kLMagnitude, kLAngle) {
         if (!source || !document) return []
-        // A desktop plot cannot show four thousand independent samples across a ~1–2k pixel
-        // viewport. 2048 retains more than one engineering sample per horizontal pixel while
-        // bounding QVariant/QML work. Numerical calculations remain on original samples.
         const pointBudget = Math.max(16, Math.min(2048, maximumPoints))
         const representation = document.valueRepresentation || "secondary"
         const key = representation + "|" + startSeconds.toPrecision(16) + "|" + durationSeconds.toPrecision(16)
@@ -52,10 +49,4 @@ QtObject {
 
     onSourceChanged: invalidate()
     onDocumentChanged: invalidate()
-
-    Connections {
-        target: root.document
-        function onDocumentChanged() { root.invalidate() }
-        function onRepresentationChanged() { root.invalidate() }
-    }
 }
