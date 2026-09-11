@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "rms_waveform_item.hpp"
+#include "rms_cycle_window.hpp"
 
 #include <QSGFlatColorMaterial>
 #include <QSGGeometryNode>
@@ -156,7 +157,6 @@ QSGNode* RmsWaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*
     const float w = static_cast<float>(width());
     const float h = static_cast<float>(height());
     const double scalePeak = std::max(1.0e-12, m_scalePeak);
-    const double period = 1.0 / std::max(1.0, m_nominalFrequency);
     const std::size_t channel = static_cast<std::size_t>(m_channelIndex);
 
     const auto xForTime = [&](double value) {
@@ -168,22 +168,29 @@ QSGNode* RmsWaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*
         return static_cast<float>(static_cast<double>(h) * (0.90 - normalized * 0.80));
     };
     const auto rmsAt = [&](std::size_t index) {
-        const double windowEnd = (*times)[index];
-        const double windowStart = windowEnd - period;
-        const auto firstIt = std::lower_bound(times->begin(),
-                                              times->begin() + static_cast<std::ptrdiff_t>(index + 1),
-                                              windowStart);
-        const std::size_t firstIndex = static_cast<std::size_t>(std::distance(times->begin(), firstIt));
+        const auto window = ardirec::desktop::rms_cycle_window_for_sample(*times, index, m_nominalFrequency);
+        if (!window.valid()) return 0.0;
+
         long double sumSquares = 0.0L;
         std::size_t finiteCount = 0;
-        for (std::size_t sample = firstIndex; sample <= index; ++sample) {
+        for (std::size_t sample = window.first; sample < window.end; ++sample) {
             const double value = data->analogValue(sample, channel);
             if (!std::isfinite(value)) continue;
             sumSquares += static_cast<long double>(value) * static_cast<long double>(value);
             ++finiteCount;
         }
         if (finiteCount == 0) return 0.0;
-        return std::sqrt(static_cast<double>(sumSquares / static_cast<long double>(finiteCount)))
+
+        // Missing history before the first record sample is a real zero-fill slot for the
+        // finite-record RMS startup. Invalid samples *inside* the record are still skipped,
+        // preserving the existing damaged-data policy instead of inventing zeros for them.
+        const std::size_t presentCount = window.presentSamples();
+        const std::size_t invalidPresent = presentCount > finiteCount ? presentCount - finiteCount : 0;
+        const std::size_t denominator = window.normalizationSamples > invalidPresent
+                                            ? window.normalizationSamples - invalidPresent
+                                            : finiteCount;
+        if (denominator == 0) return 0.0;
+        return std::sqrt(static_cast<double>(sumSquares / static_cast<long double>(denominator)))
                * std::abs(m_displayScale);
     };
 
