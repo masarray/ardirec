@@ -15,17 +15,33 @@ Rectangle {
     property var currentChannels: []
     property var residualChannels: []
 
+    readonly property var residualVoltageChannels: filterRole(residualChannels, "Voltage")
+    readonly property var residualCurrentChannels: filterRole(residualChannels, "Current")
+    readonly property var residualOtherChannels: filterRole(residualChannels, "Other")
     readonly property real voltageScale: sharedScale(voltageChannels)
     readonly property real currentScale: sharedScale(currentChannels)
-    readonly property real residualScale: sharedScale(residualChannels)
+    readonly property real residualVoltageScale: sharedScale(residualVoltageChannels)
+    readonly property real residualCurrentScale: sharedScale(residualCurrentChannels)
+    readonly property real residualOtherScale: sharedScale(residualOtherChannels)
     readonly property var groupModel: [
         { title: "VOLTAGE", subtitle: "phase / neutral voltage vectors", channels: voltageChannels, scale: voltageScale },
         { title: "CURRENT", subtitle: "phase / neutral current vectors", channels: currentChannels, scale: currentScale },
-        { title: "RESIDUAL / ZERO-SEQUENCE", subtitle: "recorded IN / UN / I0 / 3I0-style signals", channels: residualChannels, scale: residualScale }
+        { title: "RESIDUAL VOLTAGE", subtitle: "recorded U0 / 3U0 / residual-voltage signals", channels: residualVoltageChannels, scale: residualVoltageScale },
+        { title: "RESIDUAL CURRENT", subtitle: "recorded I0 / 3I0 / residual-current signals", channels: residualCurrentChannels, scale: residualCurrentScale },
+        { title: "AUXILIARY VECTORS", subtitle: "custom signals assigned to the residual/vector group", channels: residualOtherChannels, scale: residualOtherScale }
     ]
 
     function relativeMs(timeSeconds) {
         return root.document ? (timeSeconds - root.document.triggerOffsetSeconds) * 1000.0 : 0.0
+    }
+
+    function filterRole(channels, role) {
+        let result = []
+        if (!root.document || !channels) return result
+        for (let index of channels) {
+            if (root.document.analogRole(index) === role) result.push(index)
+        }
+        return result
     }
 
     function sharedScale(channels) {
@@ -39,7 +55,6 @@ Rectangle {
             if (b && b.valid && Number.isFinite(b.magnitude)) maximum = Math.max(maximum, b.magnitude)
         }
         if (!(maximum > 0.0)) return 0.0
-        // Small headroom keeps arrowheads/labels readable while preserving direct C1/C2 magnitude comparison.
         return maximum * 1.06
     }
 
@@ -70,7 +85,7 @@ Rectangle {
                         font.weight: Font.DemiBold
                     }
                     Label {
-                        text: "Full-cycle DFT · RMS magnitude · same radial scale within each measurement group"
+                        text: "Full-cycle DFT · RMS magnitude · C1/C2 share the same radial scale within each engineering quantity"
                         color: "#778087"
                         font.pixelSize: 8
                     }
