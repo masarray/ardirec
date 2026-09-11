@@ -32,6 +32,66 @@ Rectangle {
     signal zoomInRequested()
     signal zoomOutRequested()
 
+    component ToolbarIconButton: ToolButton {
+        id: control
+        property url iconSource
+        property string tipText
+        property string badgeText: ""
+        Layout.preferredWidth: 32
+        Layout.preferredHeight: 30
+        implicitWidth: 32
+        implicitHeight: 30
+        padding: 0
+        hoverEnabled: true
+
+        contentItem: Item {
+            implicitWidth: 30
+            implicitHeight: 28
+            Image {
+                anchors.centerIn: parent
+                width: 17
+                height: 17
+                source: control.iconSource
+                sourceSize.width: 20
+                sourceSize.height: 20
+                fillMode: Image.PreserveAspectFit
+                opacity: control.enabled ? 1.0 : 0.38
+            }
+            Rectangle {
+                visible: control.badgeText.length > 0
+                anchors.right: parent.right
+                anchors.top: parent.top
+                anchors.rightMargin: 1
+                anchors.topMargin: 1
+                width: Math.max(14, badgeLabel.implicitWidth + 6)
+                height: 14
+                radius: 7
+                color: "#a86f00"
+                border.color: "#ffffff"
+                Label {
+                    id: badgeLabel
+                    anchors.centerIn: parent
+                    text: control.badgeText
+                    color: "#ffffff"
+                    font.pixelSize: 7
+                    font.weight: Font.Bold
+                }
+            }
+        }
+
+        background: Rectangle {
+            radius: 3
+            color: !control.enabled ? "transparent"
+                  : control.down ? "#d9e3ef"
+                  : control.hovered ? "#e5ebf1" : "transparent"
+            border.color: control.hovered && control.enabled ? "#b9c4ce" : "transparent"
+        }
+
+        ToolTip.visible: hovered
+        ToolTip.delay: 350
+        ToolTip.text: tipText
+    }
+
     Popup {
         id: propertiesPopup
         width: 520
@@ -232,17 +292,47 @@ Rectangle {
 
         Rectangle { width: 1; height: 22; color: "#c5c9cc"; Layout.leftMargin: 2; Layout.rightMargin: 4 }
 
-        ToolButton { text: "Fit"; font.pixelSize: 9; enabled: root.hasRecord; Layout.preferredWidth: 36; onClicked: root.fitRequested(); ToolTip.visible: hovered; ToolTip.text: "Fit complete record (Ctrl+0)" }
-        ToolButton { text: "Trigger"; font.pixelSize: 9; enabled: root.hasRecord; Layout.preferredWidth: 54; onClicked: root.triggerRequested(); ToolTip.visible: hovered; ToolTip.text: "Focus common time view around COMTRADE trigger" }
-        ToolButton { text: "−"; font.pixelSize: 11; enabled: root.hasRecord; Layout.preferredWidth: 30; onClicked: root.zoomOutRequested(); ToolTip.visible: hovered; ToolTip.text: "Zoom out" }
-        ToolButton { text: "+"; font.pixelSize: 11; enabled: root.hasRecord; Layout.preferredWidth: 30; onClicked: root.zoomInRequested(); ToolTip.visible: hovered; ToolTip.text: "Zoom in" }
-        ToolButton {
+        ToolbarIconButton {
+            iconSource: "icons/folder-open.svg"
+            tipText: "Open COMTRADE… (Ctrl+O)"
+            onClicked: root.openRequested()
+        }
+        ToolbarIconButton {
+            iconSource: "icons/sliders-horizontal.svg"
+            tipText: "Signal Configuration…"
+            enabled: root.hasRecord
+            onClicked: root.signalsRequested()
+        }
+        ToolbarIconButton {
+            iconSource: "icons/maximize-2.svg"
+            tipText: "Fit complete record (Ctrl+0)"
+            enabled: root.hasRecord
+            onClicked: root.fitRequested()
+        }
+        ToolbarIconButton {
+            iconSource: "icons/crosshair.svg"
+            tipText: "Focus common time view around COMTRADE trigger"
+            enabled: root.hasRecord
+            onClicked: root.triggerRequested()
+        }
+        ToolbarIconButton {
+            iconSource: "icons/zoom-out.svg"
+            tipText: "Zoom out"
+            enabled: root.hasRecord
+            onClicked: root.zoomOutRequested()
+        }
+        ToolbarIconButton {
+            iconSource: "icons/zoom-in.svg"
+            tipText: "Zoom in"
+            enabled: root.hasRecord
+            onClicked: root.zoomInRequested()
+        }
+        ToolbarIconButton {
             visible: root.hasRecord && root.diagnosticCount > 0
-            text: "Diag " + root.diagnosticCount
-            font.pixelSize: 8
+            iconSource: "icons/triangle-alert.svg"
+            badgeText: String(root.diagnosticCount)
+            tipText: "Show recoverable COMTRADE diagnostics"
             onClicked: diagnosticsPopup.open()
-            ToolTip.visible: hovered
-            ToolTip.text: "Show recoverable COMTRADE diagnostics"
         }
 
         Rectangle { width: 1; height: 22; color: "#c5c9cc"; Layout.leftMargin: 4; Layout.rightMargin: 5 }
@@ -253,7 +343,7 @@ Rectangle {
             font.pixelSize: 9
             font.weight: Font.DemiBold
             elide: Text.ElideRight
-            Layout.maximumWidth: 330
+            Layout.maximumWidth: 310
         }
 
         Item { Layout.fillWidth: true }
