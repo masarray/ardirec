@@ -58,7 +58,7 @@ int main() {
 
         ardirec_analog_semantics_info semantics{};
         require(ardirec_record_get_analog_semantics(handle, 0, &semantics) == 0, "analog semantics");
-        require(semantics.role == ARDIREC_ANALOG_VOLTAGE, "voltage role");
+        require(semantics.role == ARDIREC_ANALOG_CURRENT, "current role");
         require(semantics.phase_role == ARDIREC_PHASE_L1, "L1 phase role");
 
         std::vector<double> analog(info.frame_count);
@@ -107,7 +107,6 @@ int main() {
         require(std::abs(bins.front().percent_of_fundamental - 100.0) < 1.0e-6, "fundamental percent");
         require(std::abs(bins.front().angle_degrees - 90.0) < 1.0e-4, "sine-reference harmonic angle");
 
-        // Distance cursor hot path: all six loops are returned from one shared phasor snapshot.
         double minimum_current = 0.0;
         require(ardirec_record_get_distance_current_floor(handle, ARDIREC_VALUE_SECONDARY, &minimum_current) == 0,
                 "distance current floor");
@@ -125,8 +124,6 @@ int main() {
         require_near(loops[ARDIREC_DISTANCE_L1_E].r, 100.0, 0.2, "L1-E resistance");
         require(std::abs(loops[ARDIREC_DISTANCE_L1_E].x) < 0.2, "L1-E reactance");
 
-        // Static trajectory is source-frame aligned and bounded. Invalid post-open samples remain
-        // present as gaps instead of being removed and visually connected across.
         uint32_t locus_count = 0;
         require(ardirec_record_get_distance_locus(
                     handle, ARDIREC_DISTANCE_L1_E, 0, 48, 4000, ARDIREC_VALUE_SECONDARY,
