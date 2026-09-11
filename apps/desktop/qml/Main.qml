@@ -127,8 +127,6 @@ ApplicationWindow {
             if (channel < 0 || channel >= documentController.digitalCount) continue
             if (digitalDisplayMode === "all" || documentController.digitalIsActive(channel)) result.push(channel)
         }
-        // Active is a convenience filter, not a destructive assignment. If none of the selected
-        // binary channels changes in this record, retain the selected static channels.
         if (digitalDisplayMode === "active" && result.length === 0 && configured.length > 0)
             result = configured.slice()
         displayedDigitalChannels = result
@@ -147,6 +145,7 @@ ApplicationWindow {
         measurementChannel = visibleChannels.length ? visibleChannels[0] : -1
         rebuildAnalogGroups()
         rebuildDigitalGroup()
+        locusAnalysisProxy.invalidate()
         focusTrigger()
         timeSignals.resetScroll()
     }
@@ -265,6 +264,12 @@ ApplicationWindow {
                                                                         residualGroup, harmonicsGroup, tableGroup)
             onCloseRequested: signalDrawer.close()
         }
+    }
+
+    LocusAnalysisProxy {
+        id: locusAnalysisProxy
+        source: analysisController
+        document: documentController
     }
 
     ColumnLayout {
@@ -394,7 +399,7 @@ ApplicationWindow {
                 anchors.fill: parent
                 visible: window.hasRecord && window.viewMode === "locus"
                 document: documentController
-                analysis: window.viewMode === "locus" ? analysisController : null
+                analysis: window.viewMode === "locus" ? locusAnalysisProxy : null
                 viewStart: window.viewStart
                 visibleDuration: window.visibleDuration
                 cursorATime: window.cursorATime
@@ -433,7 +438,6 @@ ApplicationWindow {
             Layout.preferredHeight: 26
             color: "#ededed"
             border.color: "#bcbcbc"
-
             RowLayout {
                 anchors.fill: parent
                 anchors.leftMargin: 8
