@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "analysis_controller.hpp"
+#include "rms_cycle_window.hpp"
 
 #include <QRegularExpression>
 
@@ -139,19 +140,30 @@ double AnalysisController::rmsValue(int channelIndex, double absoluteTimeSeconds
     if (!m_document || channelIndex < 0 || channelIndex >= m_document->analogCount()) {
         return std::numeric_limits<double>::quiet_NaN();
     }
-    const auto [first, end] = oneCycleWindow(absoluteTimeSeconds);
-    if (first >= end) return std::numeric_limits<double>::quiet_NaN();
+
+    const auto& times = m_document->timeSeconds();
+    const double frequency = m_document->nominalFrequency() > 1.0 ? m_document->nominalFrequency() : 50.0;
+    const auto window = ardirec::desktop::rms_cycle_window_at(times, absoluteTimeSeconds, frequency);
+    if (!window.valid()) return std::numeric_limits<double>::quiet_NaN();
 
     long double sumSquares = 0.0L;
-    std::size_t count = 0;
-    for (std::size_t i = first; i < end; ++i) {
+    std::size_t finiteCount = 0;
+    for (std::size_t i = window.first; i < window.end; ++i) {
         const double value = m_document->recordedAnalogSampleAt(channelIndex, i);
         if (!std::isfinite(value)) continue;
         sumSquares += static_cast<long double>(value) * static_cast<long double>(value);
-        ++count;
+        ++finiteCount;
     }
-    if (count == 0) return std::numeric_limits<double>::quiet_NaN();
-    const double recordedRms = std::sqrt(static_cast<double>(sumSquares / static_cast<long double>(count)));
+    if (finiteCount == 0) return std::numeric_limits<double>::quiet_NaN();
+
+    const std::size_t presentCount = window.presentSamples();
+    const std::size_t invalidPresent = presentCount > finiteCount ? presentCount - finiteCount : 0;
+    const std::size_t denominator = window.normalizationSamples > invalidPresent
+                                        ? window.normalizationSamples - invalidPresent
+                                        : finiteCount;
+    if (denominator == 0) return std::numeric_limits<double>::quiet_NaN();
+
+    const double recordedRms = std::sqrt(static_cast<double>(sumSquares / static_cast<long double>(denominator)));
     return recordedRms * std::abs(m_document->channelDisplayScale(channelIndex));
 }
 
