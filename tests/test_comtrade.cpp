@@ -138,6 +138,47 @@ int main() {
                 "invalid time multiplier uses unity fallback");
         require(!robustParsed.config->diagnostics.empty(), "salvaged CFG records diagnostics");
 
+        // P1D.4: the parser boundary must emit UTF-8 even for legacy Western-European
+        // COMTRADE metadata while preserving already-valid UTF-8 byte-for-byte.
+        const auto cp1252CfgPath = std::filesystem::temp_directory_path() / "ardirec_cp1252_metadata.cfg";
+        {
+            std::ofstream legacy(cp1252CfgPath, std::ios::binary | std::ios::trunc);
+            require(static_cast<bool>(legacy), "create legacy CP1252 CFG");
+            legacy << "LEGACY,RECORDER,1999\n"
+                   << "1,0A,1D\n"
+                   << "1,d";
+            legacy.put(static_cast<char>(0xE9));
+            legacy << "clenchement,,PROTECTION,0\n"
+                   << "50\n"
+                   << "1\n"
+                   << "1000,2\n"
+                   << "01/01/2026,00:00:00.000000\n"
+                   << "01/01/2026,00:00:00.001000\n"
+                   << "ASCII\n"
+                   << "1\n";
+        }
+        const auto cp1252Cfg = ardirec::comtrade::ConfigParser{}.parse_file(cp1252CfgPath);
+        require(cp1252Cfg.status_channels.size() == 1, "legacy CP1252 status count");
+        require(cp1252Cfg.status_channels[0].id == "d\xC3\xA9" "clenchement",
+                "legacy CP1252 metadata normalized to UTF-8");
+
+        const auto utf8CfgPath = std::filesystem::temp_directory_path() / "ardirec_utf8_metadata.cfg";
+        write_text(utf8CfgPath,
+                   "UTF8,RECORDER,1999\n"
+                   "1,0A,1D\n"
+                   "1,d\xC3\xA9" "clenchement,,PROTECTION,0\n"
+                   "50\n"
+                   "1\n"
+                   "1000,2\n"
+                   "01/01/2026,00:00:00.000000\n"
+                   "01/01/2026,00:00:00.001000\n"
+                   "ASCII\n"
+                   "1\n");
+        const auto utf8Cfg = ardirec::comtrade::ConfigParser{}.parse_file(utf8CfgPath);
+        require(utf8Cfg.status_channels.size() == 1, "UTF-8 status count");
+        require(utf8Cfg.status_channels[0].id == "d\xC3\xA9" "clenchement",
+                "valid UTF-8 metadata remains unchanged");
+
         // Structurally truncated CFG is rejected as a result, not by an uncaught parser exception.
         const auto brokenCfgPath = std::filesystem::temp_directory_path() / "ardirec_structurally_broken.cfg";
         write_text(brokenCfgPath, "BROKEN,RECORDER,1999\n1,1A,0D\n");
@@ -168,6 +209,8 @@ int main() {
         std::filesystem::remove(robustCfgPath, removeError);
         std::filesystem::remove(brokenCfgPath, removeError);
         std::filesystem::remove(robustDatPath, removeError);
+        std::filesystem::remove(cp1252CfgPath, removeError);
+        std::filesystem::remove(utf8CfgPath, removeError);
 
         AnalogChannel secondary_recorded;
         secondary_recorded.primary = 500000.0;
