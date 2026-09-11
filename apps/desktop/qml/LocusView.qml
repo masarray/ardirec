@@ -20,6 +20,7 @@ Rectangle {
     property string analysisMode: "distance"
     property real locusZoom: 1.0
     readonly property int locusZoomPercent: Math.round(locusZoom * 100.0)
+    readonly property int analysisRevision: analysis && analysis.revision !== undefined ? analysis.revision : 0
 
     property var earthPanelTransform: ({valid:false})
     property var phasePanelTransform: ({valid:false})
@@ -49,13 +50,16 @@ Rectangle {
     readonly property var cursorBValue: cursorBValues[selectedLoop] || ({valid:false})
 
     // LocusAnalysisProxy batches all six trajectories on the first call and serves the remaining
-    // loop requests from one cached result. LocusView itself remains compatible with AnalysisController.
+    // loop requests from one cached result. The explicit revision dependency makes record changes
+    // deterministic even when the Locus tab is already active while a new COMTRADE file is opened.
     readonly property var earthSeries: {
         const representationDependency = valueRepresentation
+        const cacheRevisionDependency = analysisRevision
         return distanceMode ? buildDistanceSeries(earthLoops) : []
     }
     readonly property var phaseSeries: {
         const representationDependency = valueRepresentation
+        const cacheRevisionDependency = analysisRevision
         return distanceMode ? buildDistanceSeries(phaseLoops) : []
     }
     readonly property var earthZones: {
@@ -289,7 +293,7 @@ Rectangle {
     onPhaseZoneVisibilityChanged: requestStaticRepaint()
     onLocusZoomChanged: requestStaticRepaint()
     onAnalysisModeChanged: { ensureAvailableLoop(); requestStaticRepaint() }
-    onAnalysisChanged: { ensureAvailableLoop(); requestStaticRepaint() }
+    onAnalysisChanged: { ensureAvailableLoop(); Qt.callLater(requestStaticRepaint) }
     onVisibleChanged: if (visible) Qt.callLater(requestStaticRepaint)
     onWidthChanged: requestStaticRepaint()
     onHeightChanged: requestStaticRepaint()
@@ -297,7 +301,7 @@ Rectangle {
 
     Connections {
         target: root.document
-        function onDocumentChanged() { root.fitLocus(); root.ensureAvailableLoop(); root.resetVisibility() }
+        function onDocumentChanged() { root.fitLocus(); root.ensureAvailableLoop(); root.resetVisibility(); Qt.callLater(root.requestStaticRepaint) }
         function onRepresentationChanged() { root.requestStaticRepaint() }
     }
     Connections {
@@ -319,7 +323,7 @@ Rectangle {
 
         Rectangle {
             Layout.fillWidth: true
-            Layout.preferredHeight: 42
+            Layout.preferredHeight: 50
             color: "#e7eaed"
             border.color: "#bec5ca"
             RowLayout {
@@ -327,27 +331,56 @@ Rectangle {
                 anchors.leftMargin: 10
                 anchors.rightMargin: 10
                 spacing: 7
-                Label { text: "DISTANCE / R-X"; color: "#29333a"; font.pixelSize: 12; font.weight: Font.DemiBold; font.letterSpacing: 0.5 }
-                Rectangle { width:1; height:24; color:"#c0c6ca"; Layout.leftMargin:3; Layout.rightMargin:2 }
-                ToolButton { text:"Protection"; checkable:true; checked:root.distanceMode; font.pixelSize:10; onClicked:root.analysisMode="distance" }
-                ToolButton { text:"Raw V/I"; checkable:true; checked:!root.distanceMode; font.pixelSize:10; onClicked:root.analysisMode="raw" }
-                Label { visible:root.distanceMode; text:"Inspect " + root.selectedLoop; color:root.selectedLoopColor; font.pixelSize:10; font.weight:Font.DemiBold; Layout.leftMargin:4 }
-                Button { visible:root.distanceMode; text:root.zoneController && root.zoneController.hasZones ? "Zones ✓" : "Load RIO/XRIO"; font.pixelSize:10; onClicked:zoneDialog.open() }
-                Button { visible:root.distanceMode && root.zoneController && root.zoneController.hasZones; text:"Clear"; font.pixelSize:10; onClicked:root.zoneController.clearZones() }
-                Button { visible:root.distanceMode; text:"Show all"; font.pixelSize:10; onClicked:root.resetVisibility() }
-                Rectangle { visible:root.distanceMode; width:1; height:24; color:"#c0c6ca"; Layout.leftMargin:2; Layout.rightMargin:2 }
-                ToolButton { visible:root.distanceMode; text:"−"; font.pixelSize:13; Layout.preferredWidth:30; onClicked:root.zoomLocusOut(); ToolTip.visible:hovered; ToolTip.text:"Zoom out R-X plane" }
-                ToolButton { visible:root.distanceMode; text:"Fit"; font.pixelSize:10; Layout.preferredWidth:42; onClicked:root.fitLocus() }
-                ToolButton { visible:root.distanceMode; text:"+"; font.pixelSize:13; Layout.preferredWidth:30; onClicked:root.zoomLocusIn(); ToolTip.visible:hovered; ToolTip.text:"Zoom in R-X plane" }
-                Label { visible:root.distanceMode; text:root.locusZoomPercent + "%"; color:"#53616b"; font.pixelSize:9; font.weight:Font.DemiBold; Layout.preferredWidth:38; horizontalAlignment:Text.AlignRight }
+                Label { text: "DISTANCE / R-X"; color: "#29333a"; font.pixelSize: 13; font.weight: Font.DemiBold; font.letterSpacing: 0.5 }
+                Rectangle { width:1; height:28; color:"#c0c6ca"; Layout.leftMargin:3; Layout.rightMargin:2 }
+                ToolButton {
+                    text:"Protection"; icon.source:"icons/shield-check.svg"; icon.width:18; icon.height:18; display:AbstractButton.TextBesideIcon
+                    checkable:true; checked:root.distanceMode; font.pixelSize:11; Layout.preferredHeight:36; onClicked:root.analysisMode="distance"
+                }
+                ToolButton {
+                    text:"Raw V/I"; icon.source:"icons/activity.svg"; icon.width:18; icon.height:18; display:AbstractButton.TextBesideIcon
+                    checkable:true; checked:!root.distanceMode; font.pixelSize:11; Layout.preferredHeight:36; onClicked:root.analysisMode="raw"
+                }
+                Label { visible:root.distanceMode; text:"Inspect " + root.selectedLoop; color:root.selectedLoopColor; font.pixelSize:11; font.weight:Font.DemiBold; Layout.leftMargin:4 }
+                Button {
+                    visible:root.distanceMode
+                    text:root.zoneController && root.zoneController.hasZones ? "Zones" : "Load zones"
+                    icon.source:"icons/layers-3.svg"; icon.width:18; icon.height:18; display:AbstractButton.TextBesideIcon
+                    font.pixelSize:11; Layout.preferredHeight:36; onClicked:zoneDialog.open()
+                    ToolTip.visible:hovered; ToolTip.text:"Load RIO/XRIO distance relay zones"
+                }
+                Button {
+                    visible:root.distanceMode && root.zoneController && root.zoneController.hasZones
+                    text:"Clear"; icon.source:"icons/trash-2.svg"; icon.width:18; icon.height:18; display:AbstractButton.TextBesideIcon
+                    font.pixelSize:11; Layout.preferredHeight:36; onClicked:root.zoneController.clearZones()
+                }
+                Button {
+                    visible:root.distanceMode
+                    text:"Show all"; icon.source:"icons/eye.svg"; icon.width:18; icon.height:18; display:AbstractButton.TextBesideIcon
+                    font.pixelSize:11; Layout.preferredHeight:36; onClicked:root.resetVisibility()
+                }
+                Rectangle { visible:root.distanceMode; width:1; height:28; color:"#c0c6ca"; Layout.leftMargin:2; Layout.rightMargin:2 }
+                ToolButton {
+                    visible:root.distanceMode; icon.source:"icons/minus.svg"; icon.width:19; icon.height:19; display:AbstractButton.IconOnly
+                    Layout.preferredWidth:38; Layout.preferredHeight:36; onClicked:root.zoomLocusOut(); ToolTip.visible:hovered; ToolTip.text:"Zoom out R-X plane"
+                }
+                ToolButton {
+                    visible:root.distanceMode; text:"Fit"; icon.source:"icons/maximize-2.svg"; icon.width:17; icon.height:17; display:AbstractButton.TextBesideIcon
+                    font.pixelSize:11; Layout.preferredWidth:62; Layout.preferredHeight:36; onClicked:root.fitLocus(); ToolTip.visible:hovered; ToolTip.text:"Fit R-X plane"
+                }
+                ToolButton {
+                    visible:root.distanceMode; icon.source:"icons/plus.svg"; icon.width:19; icon.height:19; display:AbstractButton.IconOnly
+                    Layout.preferredWidth:38; Layout.preferredHeight:36; onClicked:root.zoomLocusIn(); ToolTip.visible:hovered; ToolTip.text:"Zoom in R-X plane"
+                }
+                Label { visible:root.distanceMode; text:root.locusZoomPercent + "%"; color:"#53616b"; font.pixelSize:10; font.weight:Font.DemiBold; Layout.preferredWidth:42; horizontalAlignment:Text.AlignRight }
                 Item { Layout.fillWidth:true }
-                Label { text:(root.valueRepresentation === "primary" ? "PRIMARY" : "SECONDARY") + " Ω"; color:"#4d5c66"; font.pixelSize:10; font.weight:Font.DemiBold }
+                Label { text:(root.valueRepresentation === "primary" ? "PRIMARY" : "SECONDARY") + " Ω"; color:"#4d5c66"; font.pixelSize:11; font.weight:Font.DemiBold }
             }
         }
 
         Rectangle {
             Layout.fillWidth: true
-            Layout.preferredHeight: root.distanceMode ? 40 : 32
+            Layout.preferredHeight: root.distanceMode ? 44 : 34
             color: root.distanceMode ? "#f8f9fa" : "#fff8e8"
             border.color: root.distanceMode ? "#d0d5d9" : "#e1c98d"
             RowLayout {
@@ -355,28 +388,28 @@ Rectangle {
                 anchors.leftMargin: 10
                 anchors.rightMargin: 10
                 spacing: 7
-                Label { visible:root.distanceMode; text:"kL"; color:"#56626b"; font.pixelSize:10; font.weight:Font.DemiBold }
+                Label { visible:root.distanceMode; text:"kL"; color:"#56626b"; font.pixelSize:11; font.weight:Font.DemiBold }
                 TextField {
                     visible: root.distanceMode
-                    Layout.preferredWidth: 64
-                    Layout.preferredHeight: 28
+                    Layout.preferredWidth: 70
+                    Layout.preferredHeight: 30
                     text: root.kLMagnitude.toFixed(4)
                     horizontalAlignment: TextInput.AlignRight
-                    font.pixelSize: 10
+                    font.pixelSize: 11
                     validator: DoubleValidator {
                         bottom: 0.0
                         notation: DoubleValidator.StandardNotation
                     }
                     onEditingFinished: if (root.zoneController) root.zoneController.groundingFactorMagnitude = Number(text)
                 }
-                Label { visible:root.distanceMode; text:"∠"; color:"#56626b"; font.pixelSize:10 }
+                Label { visible:root.distanceMode; text:"∠"; color:"#56626b"; font.pixelSize:11 }
                 TextField {
                     visible: root.distanceMode
-                    Layout.preferredWidth: 58
-                    Layout.preferredHeight: 28
+                    Layout.preferredWidth: 64
+                    Layout.preferredHeight: 30
                     text: root.kLAngle.toFixed(2)
                     horizontalAlignment: TextInput.AlignRight
-                    font.pixelSize: 10
+                    font.pixelSize: 11
                     validator: DoubleValidator {
                         bottom: -360
                         top: 360
@@ -384,31 +417,31 @@ Rectangle {
                     }
                     onEditingFinished: if (root.zoneController) root.zoneController.groundingFactorAngle = Number(text)
                 }
-                Label { visible:root.distanceMode; text:"° · " + (root.zoneController ? root.zoneController.groundingFactorSource : "manual"); color:"#657078"; font.pixelSize:9 }
-                Label { visible:root.distanceMode && (!root.zoneController || !root.zoneController.groundingFactorValid || Math.abs(root.kLMagnitude)<1e-12); text:"UNCOMPENSATED EARTH LOOPS"; color:"#9a5c00"; font.pixelSize:9; font.weight:Font.DemiBold }
-                Rectangle { visible:root.distanceMode; width:1; height:22; color:"#d0d5d9"; Layout.leftMargin:3; Layout.rightMargin:3 }
-                Label { visible:root.distanceMode; text:"C1"; color:"#244f9e"; font.pixelSize:10; font.weight:Font.Bold }
+                Label { visible:root.distanceMode; text:"° · " + (root.zoneController ? root.zoneController.groundingFactorSource : "manual"); color:"#657078"; font.pixelSize:10 }
+                Label { visible:root.distanceMode && (!root.zoneController || !root.zoneController.groundingFactorValid || Math.abs(root.kLMagnitude)<1e-12); text:"UNCOMPENSATED EARTH LOOPS"; color:"#9a5c00"; font.pixelSize:10; font.weight:Font.DemiBold }
+                Rectangle { visible:root.distanceMode; width:1; height:24; color:"#d0d5d9"; Layout.leftMargin:3; Layout.rightMargin:3 }
+                Label { visible:root.distanceMode; text:"C1"; color:"#244f9e"; font.pixelSize:11; font.weight:Font.Bold }
                 Label {
                     visible: root.distanceMode
                     text: (root.document
                            ? ((root.cursorATime - root.document.triggerOffsetSeconds) * 1000).toFixed(2) + " ms · "
                            : "") + root.compactImpedance(root.cursorAValue)
                     color: "#354049"
-                    font.pixelSize: 10
+                    font.pixelSize: 11
                 }
-                Rectangle { visible:root.distanceMode; width:1; height:22; color:"#d0d5d9" }
-                Label { visible:root.distanceMode; text:"C2"; color:"#b77900"; font.pixelSize:10; font.weight:Font.Bold }
+                Rectangle { visible:root.distanceMode; width:1; height:24; color:"#d0d5d9" }
+                Label { visible:root.distanceMode; text:"C2"; color:"#b77900"; font.pixelSize:11; font.weight:Font.Bold }
                 Label {
                     visible: root.distanceMode
                     text: (root.document
                            ? ((root.cursorBTime - root.document.triggerOffsetSeconds) * 1000).toFixed(2) + " ms · "
                            : "") + root.compactImpedance(root.cursorBValue)
                     color: "#354049"
-                    font.pixelSize: 10
+                    font.pixelSize: 11
                 }
                 Item { Layout.fillWidth:true }
-                Label { visible:root.distanceMode; text:root.analysis ? "I floor " + (root.analysis.distanceCurrentFloor()*1000).toFixed(2) + " mA" : ""; color:"#6f7980"; font.pixelSize:9 }
-                Label { visible:!root.distanceMode; text:"RAW PHASE V/I · diagnostic only"; color:"#785b1a"; font.pixelSize:10; font.weight:Font.DemiBold }
+                Label { visible:root.distanceMode; text:root.analysis ? "I floor " + (root.analysis.distanceCurrentFloor()*1000).toFixed(2) + " mA" : ""; color:"#6f7980"; font.pixelSize:10 }
+                Label { visible:!root.distanceMode; text:"RAW PHASE V/I · diagnostic only"; color:"#785b1a"; font.pixelSize:11; font.weight:Font.DemiBold }
             }
         }
 

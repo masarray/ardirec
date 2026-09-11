@@ -11,10 +11,12 @@ Item {
     property var document
     property string cachedKey: ""
     property var cachedLoci: ({})
+    property int revision: 0
 
     function invalidate() {
         cachedKey = ""
         cachedLoci = ({})
+        revision += 1
     }
 
     function distanceLoopAvailable(loopId) {
@@ -39,11 +41,15 @@ Item {
     function distanceLocus(loopId, startSeconds, durationSeconds, maximumPoints, kLMagnitude, kLAngle) {
         if (!source || !document) return []
 
-        // Keep the presentation budget bounded while the numerical engine still works on the
-        // original COMTRADE samples. All six loop trajectories are populated by one C++ batch call.
+        // Reading revision here is intentional: bindings calling distanceLocus() subscribe to it.
+        // When a new COMTRADE record arrives while Locus is already active, invalidate() bumps the
+        // revision and forces those bindings to ask for fresh trajectories instead of keeping an
+        // empty/stale list from the previous document state.
+        const revisionDependency = revision
         const pointBudget = Math.max(16, Math.min(2048, maximumPoints))
         const representation = document.valueRepresentation || "secondary"
-        const key = representation + "|" + startSeconds.toPrecision(16) + "|" + durationSeconds.toPrecision(16)
+        const key = revisionDependency + "|" + representation + "|"
+                  + startSeconds.toPrecision(16) + "|" + durationSeconds.toPrecision(16)
                   + "|" + pointBudget + "|" + Number(kLMagnitude).toPrecision(12)
                   + "|" + Number(kLAngle).toPrecision(12)
         if (key !== cachedKey) {
