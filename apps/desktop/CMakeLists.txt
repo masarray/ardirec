@@ -17,6 +17,7 @@ qt_add_executable(ardirec WIN32 MACOSX_BUNDLE
     distance_zone_controller.hpp
     waveform_item.cpp
     waveform_item.hpp
+    rms_cycle_window.hpp
     rms_waveform_item.cpp
     rms_waveform_item.hpp
     digital_item.cpp
