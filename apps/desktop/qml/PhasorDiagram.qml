@@ -16,6 +16,7 @@ Rectangle {
     property real scaleMagnitude: 0.0
     property color cursorAccent: "#244f9e"
     property string valueRepresentation: document ? document.valueRepresentation : "secondary"
+    readonly property bool analysisActive: analysis !== null && analysis !== undefined
 
     function wrapDegrees(value) {
         let angle = value
@@ -87,24 +88,25 @@ Rectangle {
     }
 
     function requestRepaint() {
-        if (root.visible) phasorCanvas.requestPaint()
+        if (!root.analysisActive) return
+        phasorCanvas.requestPaint()
     }
 
     onCursorTimeChanged: requestRepaint()
     onRoleChanged: requestRepaint()
     onChannelsChanged: requestRepaint()
-    onAnalysisChanged: requestRepaint()
+    onAnalysisChanged: if (root.analysisActive) Qt.callLater(requestRepaint)
     onDocumentChanged: requestRepaint()
     onScaleMagnitudeChanged: requestRepaint()
     onValueRepresentationChanged: requestRepaint()
-    onVisibleChanged: if (visible) Qt.callLater(requestRepaint)
+    onVisibleChanged: if (visible && root.analysisActive) Qt.callLater(requestRepaint)
     onWidthChanged: requestRepaint()
     onHeightChanged: requestRepaint()
-    Component.onCompleted: Qt.callLater(requestRepaint)
+    Component.onCompleted: if (root.analysisActive) Qt.callLater(requestRepaint)
 
     Connections {
         target: root.document
-        function onDocumentChanged() { root.requestRepaint() }
+        function onDocumentChanged() { if (root.analysisActive) Qt.callLater(root.requestRepaint) }
         function onRepresentationChanged() { root.requestRepaint() }
     }
 
@@ -145,15 +147,18 @@ Rectangle {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: header.bottom
-        anchors.bottom: legend.top
+        anchors.bottom: legendScroll.top
         anchors.margins: 8
         antialiasing: true
         renderStrategy: Canvas.Cooperative
 
+        onWidthChanged: root.requestRepaint()
+        onHeightChanged: root.requestRepaint()
+
         onPaint: {
             const ctx = getContext("2d")
             ctx.clearRect(0, 0, width, height)
-            if (!root.visible || width < 80 || height < 80) return
+            if (!root.analysisActive || width < 80 || height < 80) return
 
             const labelMargin = 32
             const diameter = Math.max(40, Math.min(width, height) - labelMargin * 2)
@@ -164,8 +169,6 @@ Rectangle {
             ctx.save()
             ctx.lineCap = "round"
 
-            // Always draw the engineering reference plane. A temporarily unavailable DFT must
-            // never look like a broken/empty tab.
             ctx.lineWidth = 0.8
             ctx.strokeStyle = "#d5dbe0"
             ctx.setLineDash([3, 4])
