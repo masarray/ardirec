@@ -75,6 +75,18 @@ int main(int argc, char* argv[]) {
         require(std::abs(wrapped_angle_delta(angle22, angle20)) < 0.1,
                 "phasor angle uses a fixed record reference instead of cursor-relative rotation");
 
+        // SIGRA-style finite-record RMS uses a full one-cycle denominator from the first sample.
+        // Missing history to the left of the record is zero-filled; once the cycle is complete,
+        // the window is (t-T,t] and therefore remains exactly 20 samples at 1 kHz / 50 Hz.
+        require_near(analysis.rmsValue(0, 0.000), 15.8113883, 1.0e-5,
+                     "RMS startup keeps the full-cycle denominator instead of averaging one sample");
+        require_near(analysis.rmsValue(0, 0.019), 50.0, 2.0e-4,
+                     "first complete 50 Hz cycle reaches the expected RMS");
+        require_near(analysis.rmsValue(0, 0.020), 50.0, 2.0e-4,
+                     "sliding one-cycle RMS excludes the old endpoint and avoids N+1 ripple");
+        require_near(analysis.rmsValue(0, 0.022), 50.0, 2.0e-4,
+                     "steady one-cycle RMS remains flat as the cursor advances");
+
         require_near(analysis.distanceCurrentFloor(), 0.001, 1.0e-12,
                      "distance current floor is 0.1 percent of the displayed record peak");
 
