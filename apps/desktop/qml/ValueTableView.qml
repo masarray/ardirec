@@ -13,7 +13,7 @@ Rectangle {
     property var visibleChannels: []
     property real cursorTime: 0.0
     property string valueRepresentation: document ? document.valueRepresentation : "secondary"
-    property string scopeMode: "electrical"
+    property string scopeMode: "visible"
     property string sortMode: "record"
     property string columnMode: "analysis"
     property bool abnormalOnly: false
@@ -21,39 +21,31 @@ Rectangle {
 
     signal signalActivated(int channelIndex)
 
-    readonly property int signalWidth: 150
-    readonly property int phaseWidth: 44
-    readonly property int h1Width: 96
-    readonly property int angleWidth: 68
-    readonly property int extremumWidth: 102
-    readonly property int instantWidth: 94
-    readonly property int rmsWidth: 92
-    readonly property int crestWidth: 64
-    readonly property int dcAbsWidth: 90
-    readonly property int percentWidth: 68
+    readonly property int signalWidth: 174
+    readonly property int phaseWidth: 60
+    readonly property int h1Width: 118
+    readonly property int angleWidth: 82
+    readonly property int extremumWidth: 120
+    readonly property int instantWidth: 112
+    readonly property int rmsWidth: 112
+    readonly property int crestWidth: 78
+    readonly property int dcAbsWidth: 108
+    readonly property int percentWidth: 82
     readonly property bool detailed: columnMode === "detailed"
     readonly property int tableWidth: signalWidth + phaseWidth + h1Width + angleWidth + extremumWidth
-                                      + percentWidth * 5 + 18
+                                      + percentWidth * 5 + 24
                                       + (detailed ? instantWidth + rmsWidth + crestWidth + dcAbsWidth : 0)
 
-    // Scope filtering preserves COMTRADE CFG analog-channel order. "Record" sorting therefore
-    // means exactly what it says, instead of silently regrouping voltage before current.
     readonly property var scopedChannels: {
         if (!document) return []
-        if (scopeMode === "visible") {
-            let visible = visibleChannels.slice()
-            visible.sort((a, b) => a - b)
-            return visible
-        }
+        if (scopeMode === "visible") return visibleChannels ? visibleChannels.slice() : []
         let result = []
         for (let i = 0; i < document.analogCount; ++i) {
             const role = document.analogRole(i)
             if (scopeMode === "all"
                     || (scopeMode === "electrical" && (role === "Voltage" || role === "Current"))
                     || (scopeMode === "voltage" && role === "Voltage")
-                    || (scopeMode === "current" && role === "Current")) {
-                result.push(i)
-            }
+                    || (scopeMode === "current" && role === "Current")) result.push(i)
         }
         return result
     }
@@ -64,43 +56,52 @@ Rectangle {
 
     readonly property var summaryData: snapshot
         ? snapshot.summaryAt(scopedChannels, cursorTime)
-        : ({count: 0, abnormalCount: 0, maxThdChannel: -1, maxThd: 0,
-            maxDcChannel: -1, maxDcPercent: 0, maxCrestChannel: -1, maxCrestFactor: 0,
-            maxVoltageRmsChannel: -1, maxVoltageRms: 0,
-            maxCurrentRmsChannel: -1, maxCurrentRms: 0,
-            maxHarmonicOrder: 0, sampleRate: 0})
+        : ({count:0, abnormalCount:0, maxThdChannel:-1, maxThd:0,
+            maxDcChannel:-1, maxDcPercent:0, maxCrestChannel:-1, maxCrestFactor:0,
+            maxVoltageRmsChannel:-1, maxVoltageRms:0,
+            maxCurrentRmsChannel:-1, maxCurrentRms:0,
+            maxHarmonicOrder:0, sampleRate:0})
 
     function formatValue(channelIndex, value) {
         return document && Number.isFinite(value) ? document.formatChannelValue(channelIndex, value) : "—"
     }
     function percentDecimals(value) {
         if (root.detailed) return 2
-        // Avoid a raw 4.95% being rendered as 5.0% while the abnormal threshold correctly
-        // remains false. Around the 5% investigation threshold, show enough precision to
-        // keep the displayed value and the filter/marker decision semantically consistent.
         return Math.abs(value - 5.0) < 0.1 ? 2 : 1
     }
-    function formatPercentNumber(value) {
-        if (!Number.isFinite(value)) return "—"
-        return value.toFixed(root.percentDecimals(value))
-    }
+    function formatPercentNumber(value) { return Number.isFinite(value) ? value.toFixed(root.percentDecimals(value)) : "—" }
     function formatPercent(value) {
         const number = root.formatPercentNumber(value)
         return number === "—" ? number : number + "%"
     }
-    function relativeMs() {
-        return document ? (cursorTime - document.triggerOffsetSeconds) * 1000.0 : 0
-    }
+    function relativeMs() { return document ? (cursorTime - document.triggerOffsetSeconds) * 1000.0 : 0 }
     function scopeLabel() {
-        if (scopeMode === "voltage") return "VOLTAGE"
-        if (scopeMode === "current") return "CURRENT"
-        if (scopeMode === "visible") return "VISIBLE"
-        if (scopeMode === "all") return "ALL ANALOG"
-        return "ELECTRICAL"
+        if (scopeMode === "voltage") return "Voltage"
+        if (scopeMode === "current") return "Current"
+        if (scopeMode === "visible") return "Configured"
+        if (scopeMode === "all") return "All analog"
+        return "Electrical"
     }
     function channelSummary(channelIndex, value, suffix) {
         if (channelIndex < 0 || !document) return "—"
         return document.channelName(channelIndex) + "  " + value + suffix
+    }
+
+    component HeaderCell: Label {
+        height: 36
+        verticalAlignment: Text.AlignVCenter
+        color: "#344049"
+        font.pixelSize: 10
+        font.weight: Font.DemiBold
+        elide: Text.ElideRight
+    }
+
+    component DataCell: Label {
+        height: 36
+        verticalAlignment: Text.AlignVCenter
+        color: "#273139"
+        font.pixelSize: 10
+        elide: Text.ElideRight
     }
 
     ColumnLayout {
@@ -109,146 +110,98 @@ Rectangle {
 
         Rectangle {
             Layout.fillWidth: true
-            Layout.preferredHeight: 32
+            Layout.preferredHeight: 52
             color: "#e7eaed"
-            border.color: "#c3c8cd"
-
+            border.color: "#bec5ca"
             RowLayout {
                 anchors.fill: parent
-                anchors.leftMargin: 7
-                anchors.rightMargin: 7
-                spacing: 4
+                anchors.leftMargin: 10
+                anchors.rightMargin: 10
+                spacing: 8
 
-                Label {
-                    text: "TABLE"
-                    color: "#343c43"
-                    font.pixelSize: 8
-                    font.weight: Font.DemiBold
-                    font.letterSpacing: 0.8
-                }
-                Label {
-                    text: root.scopeLabel() + " · " + root.displayedChannels.length
-                          + (root.abnormalOnly ? " abnormal" : " signals")
-                    color: "#6d757b"
-                    font.pixelSize: 8
-                }
-
-                Rectangle { width: 1; height: 17; color: "#c0c5c9"; Layout.leftMargin: 3; Layout.rightMargin: 2 }
-                ToolButton {
-                    text: "Analysis"
-                    checkable: true
-                    checked: root.columnMode === "analysis"
-                    font.pixelSize: 8
-                    onClicked: root.columnMode = "analysis"
-                    ToolTip.visible: hovered
-                    ToolTip.text: "Fast-reading protection quantities with one-decimal percentages"
-                }
-                ToolButton {
-                    text: "Detailed"
-                    checkable: true
-                    checked: root.columnMode === "detailed"
-                    font.pixelSize: 8
-                    onClicked: root.columnMode = "detailed"
-                    ToolTip.visible: hovered
-                    ToolTip.text: "Adds nearest sample, true cycle RMS, crest factor and signed DC; percentages use two decimals"
-                }
-
-                Rectangle { width: 1; height: 17; color: "#c0c5c9"; Layout.leftMargin: 2; Layout.rightMargin: 2 }
-                Label { text: "Scope"; color: "#687078"; font.pixelSize: 7; font.weight: Font.DemiBold }
-                ComboBox {
-                    Layout.preferredWidth: 88
-                    font.pixelSize: 8
-                    model: ["Electrical", "Voltage", "Current", "Visible", "All"]
-                    onActivated: {
-                        const keys = ["electrical", "voltage", "current", "visible", "all"]
-                        root.scopeMode = keys[currentIndex]
+                ColumnLayout {
+                    spacing: 0
+                    Label { text: "ENGINEERING TABLE"; color: "#29333a"; font.pixelSize: 12; font.weight: Font.DemiBold; font.letterSpacing: 0.5 }
+                    Label {
+                        text: root.scopeLabel() + " · " + root.displayedChannels.length
+                              + (root.abnormalOnly ? " abnormal signals" : " signals")
+                        color: "#657078"; font.pixelSize: 9
                     }
                 }
 
-                Label { text: "Sort"; color: "#687078"; font.pixelSize: 7; font.weight: Font.DemiBold; Layout.leftMargin: 3 }
+                Rectangle { width: 1; height: 30; color: "#c0c6ca"; Layout.leftMargin: 3; Layout.rightMargin: 2 }
+                ToolButton { text: "Analysis"; checkable: true; checked: root.columnMode === "analysis"; font.pixelSize: 10; onClicked: root.columnMode = "analysis" }
+                ToolButton { text: "Detailed"; checkable: true; checked: root.columnMode === "detailed"; font.pixelSize: 10; onClicked: root.columnMode = "detailed" }
+
+                Label { text: "Scope"; color: "#56626b"; font.pixelSize: 9; font.weight: Font.DemiBold; Layout.leftMargin: 4 }
                 ComboBox {
-                    Layout.preferredWidth: 82
-                    font.pixelSize: 8
+                    Layout.preferredWidth: 112; Layout.preferredHeight: 30; font.pixelSize: 10
+                    model: ["Configured", "Electrical", "Voltage", "Current", "All analog"]
+                    currentIndex: ["visible", "electrical", "voltage", "current", "all"].indexOf(root.scopeMode)
+                    onActivated: root.scopeMode = ["visible", "electrical", "voltage", "current", "all"][currentIndex]
+                }
+
+                Label { text: "Sort"; color: "#56626b"; font.pixelSize: 9; font.weight: Font.DemiBold; Layout.leftMargin: 4 }
+                ComboBox {
+                    Layout.preferredWidth: 104; Layout.preferredHeight: 30; font.pixelSize: 10
                     model: ["Record", "Signal", "RMS ↓", "THD ↓", "DC ↓", "Crest ↓"]
-                    onActivated: {
-                        const keys = ["record", "signal", "rms", "thd", "dc", "crest"]
-                        root.sortMode = keys[currentIndex]
-                    }
-                    ToolTip.visible: hovered
-                    ToolTip.text: root.sortMode === "record" ? "Exact analog channel order from the COMTRADE CFG" : "Investigation sort; the cursor and record remain unchanged"
+                    currentIndex: ["record", "signal", "rms", "thd", "dc", "crest"].indexOf(root.sortMode)
+                    onActivated: root.sortMode = ["record", "signal", "rms", "thd", "dc", "crest"][currentIndex]
                 }
 
                 ToolButton {
-                    text: "Abnormal only"
-                    checkable: true
-                    checked: root.abnormalOnly
-                    font.pixelSize: 8
+                    text: "Abnormal only"; checkable: true; checked: root.abnormalOnly; font.pixelSize: 10
                     onClicked: root.abnormalOnly = !root.abnormalOnly
                     ToolTip.visible: hovered
-                    ToolTip.text: "Investigation heuristic only: THD ≥ 5%, |DC|/H1 ≥ 5%, or crest factor ≥ 2.0. Not a relay-operate verdict."
+                    ToolTip.text: "Investigation heuristic: THD ≥ 5%, |DC|/H1 ≥ 5%, or crest factor ≥ 2.0"
                 }
 
                 Item { Layout.fillWidth: true }
                 Label {
                     text: (root.valueRepresentation === "primary" ? "PRIMARY" : "SECONDARY")
-                          + " · " + root.relativeMs().toFixed(3) + " ms · trailing 1-cycle"
-                    color: "#4e5961"
-                    font.pixelSize: 8
-                    font.weight: Font.DemiBold
+                          + " · C1 " + root.relativeMs().toFixed(3) + " ms"
+                    color: "#4d5c66"; font.pixelSize: 10; font.weight: Font.DemiBold
                 }
             }
         }
 
         Rectangle {
             Layout.fillWidth: true
-            Layout.preferredHeight: 26
+            Layout.preferredHeight: 38
             color: "#f8f9fa"
-            border.color: "#d0d4d7"
-
+            border.color: "#d0d5d9"
             RowLayout {
                 anchors.fill: parent
-                anchors.leftMargin: 8
-                anchors.rightMargin: 8
-                spacing: 8
-
+                anchors.leftMargin: 10
+                anchors.rightMargin: 10
+                spacing: 10
                 Label {
-                    text: "H2–H" + root.summaryData.maxHarmonicOrder
+                    text: "THD H2–H" + root.summaryData.maxHarmonicOrder
                           + " · " + (root.summaryData.sampleRate / 1000.0).toFixed(2) + " kHz"
-                    color: "#5d666d"
-                    font.pixelSize: 8
-                    font.weight: Font.DemiBold
-                    ToolTip.visible: limitMouse.containsMouse
-                    ToolTip.text: "Nyquist-safe harmonic range included in THD. Orders above H" + root.summaryData.maxHarmonicOrder + " are not calculated."
-                    MouseArea { id: limitMouse; anchors.fill: parent; hoverEnabled: true; acceptedButtons: Qt.NoButton }
+                    color: "#4f5b64"; font.pixelSize: 10; font.weight: Font.DemiBold
                 }
-                Rectangle { width: 1; height: 13; color: "#d0d4d7" }
+                Rectangle { width: 1; height: 18; color: "#d0d5d9" }
                 Label {
-                    text: "Worst THD  " + root.channelSummary(root.summaryData.maxThdChannel,
-                                                              root.formatPercentNumber(root.summaryData.maxThd), "%")
-                    color: root.summaryData.maxThd >= 5.0 ? "#8a5b00" : "#566069"
-                    font.pixelSize: 8
+                    text: "Worst THD  " + root.channelSummary(root.summaryData.maxThdChannel, root.formatPercentNumber(root.summaryData.maxThd), "%")
+                    color: root.summaryData.maxThd >= 5.0 ? "#8a5b00" : "#566069"; font.pixelSize: 10; font.weight: root.summaryData.maxThd >= 5.0 ? Font.DemiBold : Font.Normal
                 }
-                Rectangle { width: 1; height: 13; color: "#d0d4d7" }
+                Rectangle { width: 1; height: 18; color: "#d0d5d9" }
                 Label {
-                    text: "Highest DC/H1  " + root.channelSummary(root.summaryData.maxDcChannel,
-                                                                 root.formatPercentNumber(root.summaryData.maxDcPercent), "%")
-                    color: root.summaryData.maxDcPercent >= 5.0 ? "#8a5b00" : "#566069"
-                    font.pixelSize: 8
+                    text: "Highest DC/H1  " + root.channelSummary(root.summaryData.maxDcChannel, root.formatPercentNumber(root.summaryData.maxDcPercent), "%")
+                    color: root.summaryData.maxDcPercent >= 5.0 ? "#8a5b00" : "#566069"; font.pixelSize: 10; font.weight: root.summaryData.maxDcPercent >= 5.0 ? Font.DemiBold : Font.Normal
                 }
                 Item { Layout.fillWidth: true }
                 Label {
-                    visible: root.width > 1120 && root.summaryData.maxVoltageRmsChannel >= 0
-                    text: "Max V RMS  " + root.document.channelName(root.summaryData.maxVoltageRmsChannel) + "  "
+                    visible: root.width > 1160 && root.summaryData.maxVoltageRmsChannel >= 0
+                    text: "Max V  " + root.document.channelName(root.summaryData.maxVoltageRmsChannel) + "  "
                           + root.formatValue(root.summaryData.maxVoltageRmsChannel, root.summaryData.maxVoltageRms)
-                    color: "#657078"
-                    font.pixelSize: 7
+                    color: "#657078"; font.pixelSize: 9
                 }
                 Label {
-                    visible: root.width > 1320 && root.summaryData.maxCurrentRmsChannel >= 0
-                    text: "Max I RMS  " + root.document.channelName(root.summaryData.maxCurrentRmsChannel) + "  "
+                    visible: root.width > 1380 && root.summaryData.maxCurrentRmsChannel >= 0
+                    text: "Max I  " + root.document.channelName(root.summaryData.maxCurrentRmsChannel) + "  "
                           + root.formatValue(root.summaryData.maxCurrentRmsChannel, root.summaryData.maxCurrentRms)
-                    color: "#657078"
-                    font.pixelSize: 7
+                    color: "#657078"; font.pixelSize: 9
                 }
             }
         }
@@ -262,7 +215,7 @@ Rectangle {
             contentHeight: height
             boundsBehavior: Flickable.StopAtBounds
             flickableDirection: Flickable.HorizontalFlick
-            ScrollBar.horizontal: ScrollBar { policy: ScrollBar.AsNeeded }
+            ScrollBar.horizontal: ScrollBar { policy: ScrollBar.AsNeeded; height: 12 }
 
             Item {
                 width: horizontalPan.contentWidth
@@ -270,52 +223,44 @@ Rectangle {
 
                 Rectangle {
                     id: header
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.top: parent.top
-                    height: 28
-                    color: "#dde2e6"
-                    border.color: "#bcc4ca"
-
+                    anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top
+                    height: 38
+                    color: "#dce2e6"
+                    border.color: "#b9c2c8"
                     Row {
-                        anchors.fill: parent
-                        anchors.leftMargin: 7
-                        spacing: 0
-
-                        Label { width: root.signalWidth; height: parent.height; verticalAlignment: Text.AlignVCenter; text: "Signal"; color: "#424b52"; font.pixelSize: 8; font.weight: Font.DemiBold }
-                        Label { width: root.phaseWidth; height: parent.height; verticalAlignment: Text.AlignVCenter; text: "Phase"; color: "#424b52"; font.pixelSize: 8; font.weight: Font.DemiBold }
-                        Label { width: root.h1Width; height: parent.height; verticalAlignment: Text.AlignVCenter; text: "H1 RMS"; color: "#424b52"; font.pixelSize: 8; font.weight: Font.DemiBold }
-                        Label { width: root.angleWidth; height: parent.height; verticalAlignment: Text.AlignVCenter; text: "Phase ∠"; color: "#424b52"; font.pixelSize: 8; font.weight: Font.DemiBold }
-                        Label { width: root.extremumWidth; height: parent.height; verticalAlignment: Text.AlignVCenter; text: "Last extremum"; color: "#424b52"; font.pixelSize: 8; font.weight: Font.DemiBold }
-                        Label { visible: root.detailed; width: visible ? root.instantWidth : 0; height: parent.height; verticalAlignment: Text.AlignVCenter; text: "Instant"; color: "#424b52"; font.pixelSize: 8; font.weight: Font.DemiBold }
-                        Label { visible: root.detailed; width: visible ? root.rmsWidth : 0; height: parent.height; verticalAlignment: Text.AlignVCenter; text: "True RMS"; color: "#424b52"; font.pixelSize: 8; font.weight: Font.DemiBold }
-                        Label { visible: root.detailed; width: visible ? root.crestWidth : 0; height: parent.height; verticalAlignment: Text.AlignVCenter; text: "Crest"; color: "#424b52"; font.pixelSize: 8; font.weight: Font.DemiBold }
-                        Label { visible: root.detailed; width: visible ? root.dcAbsWidth : 0; height: parent.height; verticalAlignment: Text.AlignVCenter; text: "DC signed"; color: "#424b52"; font.pixelSize: 8; font.weight: Font.DemiBold }
-                        Label { width: root.percentWidth; height: parent.height; verticalAlignment: Text.AlignVCenter; text: "DC/H1"; color: "#424b52"; font.pixelSize: 8; font.weight: Font.DemiBold }
-                        Label { width: root.percentWidth; height: parent.height; verticalAlignment: Text.AlignVCenter; text: "THD H2–H" + root.summaryData.maxHarmonicOrder; color: "#424b52"; font.pixelSize: 8; font.weight: Font.DemiBold }
-                        Label { width: root.percentWidth; height: parent.height; verticalAlignment: Text.AlignVCenter; text: "H2/H1"; color: "#424b52"; font.pixelSize: 8; font.weight: Font.DemiBold }
-                        Label { width: root.percentWidth; height: parent.height; verticalAlignment: Text.AlignVCenter; text: "H3/H1"; color: "#424b52"; font.pixelSize: 8; font.weight: Font.DemiBold }
-                        Label { width: root.percentWidth; height: parent.height; verticalAlignment: Text.AlignVCenter; text: "H5/H1"; color: "#424b52"; font.pixelSize: 8; font.weight: Font.DemiBold }
+                        anchors.fill: parent; anchors.leftMargin: 8; spacing: 0
+                        HeaderCell { width: root.signalWidth; text: "Signal" }
+                        HeaderCell { width: root.phaseWidth; text: "Phase" }
+                        HeaderCell { width: root.h1Width; text: "H1 RMS" }
+                        HeaderCell { width: root.angleWidth; text: "Phase ∠" }
+                        HeaderCell { width: root.extremumWidth; text: "Last extremum" }
+                        HeaderCell { visible: root.detailed; width: visible ? root.instantWidth : 0; text: "Instant" }
+                        HeaderCell { visible: root.detailed; width: visible ? root.rmsWidth : 0; text: "True RMS" }
+                        HeaderCell { visible: root.detailed; width: visible ? root.crestWidth : 0; text: "Crest" }
+                        HeaderCell { visible: root.detailed; width: visible ? root.dcAbsWidth : 0; text: "DC signed" }
+                        HeaderCell { width: root.percentWidth; text: "DC/H1" }
+                        HeaderCell { width: root.percentWidth; text: "THD" }
+                        HeaderCell { width: root.percentWidth; text: "H2/H1" }
+                        HeaderCell { width: root.percentWidth; text: "H3/H1" }
+                        HeaderCell { width: root.percentWidth; text: "H5/H1" }
                     }
                 }
 
                 ListView {
                     id: tableRows
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.top: header.bottom
-                    anchors.bottom: parent.bottom
+                    anchors.left: parent.left; anchors.right: parent.right; anchors.top: header.bottom; anchors.bottom: parent.bottom
                     clip: true
                     model: root.displayedChannels
                     reuseItems: true
+                    cacheBuffer: height * 0.7
                     boundsBehavior: Flickable.StopAtBounds
-                    ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded; width: 9 }
+                    ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded; width: 12 }
 
                     delegate: Rectangle {
                         required property int index
                         required property int modelData
                         width: tableRows.width
-                        height: 27
+                        height: 38
                         readonly property var rowSnapshot: {
                             const representationDependency = root.valueRepresentation
                             return root.snapshot ? root.snapshot.snapshotAt(modelData, root.cursorTime) : ({valid:false})
@@ -323,74 +268,50 @@ Rectangle {
                         readonly property color phaseColor: root.analysis ? root.analysis.phaseColor(modelData) : "#6f7780"
                         readonly property bool selected: root.selectedChannel === modelData
                         readonly property bool abnormal: rowSnapshot.valid && rowSnapshot.abnormal
-                        color: selected ? "#e9f1f8"
-                                        : rowMouse.containsMouse ? "#f2f5f7"
-                                        : (index % 2 ? "#fafbfc" : "#ffffff")
-                        border.color: selected ? "#a7bfd5" : "#e3e6e8"
+                        color: selected ? "#e5f0f8" : rowMouse.containsMouse ? "#f0f5f8" : (index % 2 ? "#fafbfc" : "#ffffff")
+                        border.color: selected ? "#9ebcd2" : "#dfe4e7"
 
-                        Rectangle { width: 3; height: parent.height; color: parent.phaseColor }
-                        Rectangle {
-                            visible: parent.abnormal
-                            x: 3
-                            width: 2
-                            height: parent.height
-                            color: "#d6a13d"
-                            opacity: 0.75
-                        }
+                        Rectangle { width: 4; height: parent.height; color: parent.phaseColor }
+                        Rectangle { visible: parent.abnormal; x: 4; width: 3; height: parent.height; color: "#d6a13d"; opacity: 0.75 }
 
                         Row {
-                            anchors.fill: parent
-                            anchors.leftMargin: 7
-                            spacing: 0
-
-                            Label {
-                                width: root.signalWidth; height: parent.height; verticalAlignment: Text.AlignVCenter
-                                text: root.document ? root.document.channelName(modelData) : "—"
-                                color: "#2f363b"; font.pixelSize: 8; font.weight: Font.DemiBold; elide: Text.ElideRight
-                            }
-                            Label { width: root.phaseWidth; height: parent.height; verticalAlignment: Text.AlignVCenter; text: rowSnapshot.phase || "—"; color: phaseColor; font.pixelSize: 8; font.weight: Font.DemiBold }
-                            Label { width: root.h1Width; height: parent.height; verticalAlignment: Text.AlignVCenter; text: rowSnapshot.valid ? root.formatValue(modelData, rowSnapshot.fundamental) : "—"; color: "#343b40"; font.pixelSize: 8 }
-                            Label { width: root.angleWidth; height: parent.height; verticalAlignment: Text.AlignVCenter; text: rowSnapshot.valid ? rowSnapshot.angle.toFixed(1) + "°" : "—"; color: "#343b40"; font.pixelSize: 8 }
-                            Label { width: root.extremumWidth; height: parent.height; verticalAlignment: Text.AlignVCenter; text: rowSnapshot.valid ? root.formatValue(modelData, rowSnapshot.extremum) : "—"; color: "#343b40"; font.pixelSize: 8 }
-                            Label { visible: root.detailed; width: visible ? root.instantWidth : 0; height: parent.height; verticalAlignment: Text.AlignVCenter; text: rowSnapshot.valid ? root.formatValue(modelData, rowSnapshot.instant) : "—"; color: "#343b40"; font.pixelSize: 8 }
-                            Label { visible: root.detailed; width: visible ? root.rmsWidth : 0; height: parent.height; verticalAlignment: Text.AlignVCenter; text: rowSnapshot.valid ? root.formatValue(modelData, rowSnapshot.rms) : "—"; color: "#343b40"; font.pixelSize: 8 }
-                            Label { visible: root.detailed; width: visible ? root.crestWidth : 0; height: parent.height; verticalAlignment: Text.AlignVCenter; text: rowSnapshot.valid ? rowSnapshot.crestFactor.toFixed(2) : "—"; color: rowSnapshot.valid && rowSnapshot.crestFactor >= 2.0 ? "#8a5b00" : "#343b40"; font.pixelSize: 8 }
-                            Label { visible: root.detailed; width: visible ? root.dcAbsWidth : 0; height: parent.height; verticalAlignment: Text.AlignVCenter; text: rowSnapshot.valid ? root.formatValue(modelData, rowSnapshot.dc) : "—"; color: "#596168"; font.pixelSize: 8 }
+                            anchors.fill: parent; anchors.leftMargin: 9; spacing: 0
+                            DataCell { width: root.signalWidth; text: root.document ? root.document.channelName(modelData) : "—"; font.weight: Font.DemiBold }
+                            DataCell { width: root.phaseWidth; text: rowSnapshot.phase || "—"; color: phaseColor; font.weight: Font.DemiBold }
+                            DataCell { width: root.h1Width; text: rowSnapshot.valid ? root.formatValue(modelData, rowSnapshot.fundamental) : "—" }
+                            DataCell { width: root.angleWidth; text: rowSnapshot.valid ? rowSnapshot.angle.toFixed(1) + "°" : "—" }
+                            DataCell { width: root.extremumWidth; text: rowSnapshot.valid ? root.formatValue(modelData, rowSnapshot.extremum) : "—" }
+                            DataCell { visible: root.detailed; width: visible ? root.instantWidth : 0; text: rowSnapshot.valid ? root.formatValue(modelData, rowSnapshot.instant) : "—" }
+                            DataCell { visible: root.detailed; width: visible ? root.rmsWidth : 0; text: rowSnapshot.valid ? root.formatValue(modelData, rowSnapshot.rms) : "—" }
+                            DataCell { visible: root.detailed; width: visible ? root.crestWidth : 0; text: rowSnapshot.valid ? rowSnapshot.crestFactor.toFixed(2) : "—"; color: rowSnapshot.valid && rowSnapshot.crestFactor >= 2.0 ? "#8a5b00" : "#273139" }
+                            DataCell { visible: root.detailed; width: visible ? root.dcAbsWidth : 0; text: rowSnapshot.valid ? root.formatValue(modelData, rowSnapshot.dc) : "—"; color: "#536069" }
 
                             Rectangle {
                                 width: root.percentWidth; height: parent.height; color: "transparent"
-                                Rectangle { visible: rowSnapshot.valid && rowSnapshot.dcPercent >= 5.0; width: 2; height: parent.height - 8; anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; color: "#d6a13d"; opacity: 0.75 }
-                                Label { anchors.fill: parent; anchors.leftMargin: 5; verticalAlignment: Text.AlignVCenter; text: rowSnapshot.valid ? root.formatPercent(rowSnapshot.dcPercent) : "—"; color: rowSnapshot.valid && rowSnapshot.dcPercent >= 5.0 ? "#805600" : "#343b40"; font.pixelSize: 8; font.weight: rowSnapshot.valid && rowSnapshot.dcPercent >= 5.0 ? Font.DemiBold : Font.Normal }
+                                Rectangle { visible: rowSnapshot.valid && rowSnapshot.dcPercent >= 5.0; width: 3; height: parent.height - 10; anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; color: "#d6a13d" }
+                                DataCell { anchors.fill: parent; anchors.leftMargin: 7; text: rowSnapshot.valid ? root.formatPercent(rowSnapshot.dcPercent) : "—"; color: rowSnapshot.valid && rowSnapshot.dcPercent >= 5.0 ? "#805600" : "#273139"; font.weight: rowSnapshot.valid && rowSnapshot.dcPercent >= 5.0 ? Font.DemiBold : Font.Normal }
                             }
                             Rectangle {
                                 width: root.percentWidth; height: parent.height; color: "transparent"
-                                Rectangle { visible: rowSnapshot.valid && rowSnapshot.thd >= 5.0; width: 2; height: parent.height - 8; anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; color: "#d6a13d"; opacity: 0.75 }
-                                Label { anchors.fill: parent; anchors.leftMargin: 5; verticalAlignment: Text.AlignVCenter; text: rowSnapshot.valid ? root.formatPercent(rowSnapshot.thd) : "—"; color: rowSnapshot.valid && rowSnapshot.thd >= 5.0 ? "#805600" : "#343b40"; font.pixelSize: 8; font.weight: rowSnapshot.valid && rowSnapshot.thd >= 5.0 ? Font.DemiBold : Font.Normal }
+                                Rectangle { visible: rowSnapshot.valid && rowSnapshot.thd >= 5.0; width: 3; height: parent.height - 10; anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; color: "#d6a13d" }
+                                DataCell { anchors.fill: parent; anchors.leftMargin: 7; text: rowSnapshot.valid ? root.formatPercent(rowSnapshot.thd) : "—"; color: rowSnapshot.valid && rowSnapshot.thd >= 5.0 ? "#805600" : "#273139"; font.weight: rowSnapshot.valid && rowSnapshot.thd >= 5.0 ? Font.DemiBold : Font.Normal }
                             }
-                            Label { width: root.percentWidth; height: parent.height; verticalAlignment: Text.AlignVCenter; text: rowSnapshot.valid ? root.formatPercent(rowSnapshot.h2) : "—"; color: "#343b40"; font.pixelSize: 8 }
-                            Label { width: root.percentWidth; height: parent.height; verticalAlignment: Text.AlignVCenter; text: rowSnapshot.valid ? root.formatPercent(rowSnapshot.h3) : "—"; color: "#343b40"; font.pixelSize: 8 }
-                            Label { width: root.percentWidth; height: parent.height; verticalAlignment: Text.AlignVCenter; text: rowSnapshot.valid ? root.formatPercent(rowSnapshot.h5) : "—"; color: "#343b40"; font.pixelSize: 8 }
+                            DataCell { width: root.percentWidth; text: rowSnapshot.valid ? root.formatPercent(rowSnapshot.h2) : "—" }
+                            DataCell { width: root.percentWidth; text: rowSnapshot.valid ? root.formatPercent(rowSnapshot.h3) : "—" }
+                            DataCell { width: root.percentWidth; text: rowSnapshot.valid ? root.formatPercent(rowSnapshot.h5) : "—" }
                         }
 
                         ToolTip.visible: rowMouse.containsMouse
+                        ToolTip.delay: 300
                         ToolTip.text: rowSnapshot.valid
-                            ? (root.document.channelName(modelData) + " · " + rowSnapshot.role + " · "
-                               + (root.valueRepresentation === "primary" ? "PRIMARY" : "SECONDARY")
-                               + "\nCursor " + root.relativeMs().toFixed(3) + " ms"
-                               + " · H1 " + root.formatValue(modelData, rowSnapshot.fundamental)
-                               + " · ∠ " + rowSnapshot.angle.toFixed(2) + "°"
-                               + "\nDC/H1 " + rowSnapshot.dcPercent.toFixed(3) + "%"
-                               + " · THD H2–H" + rowSnapshot.maxHarmonicOrder + " " + rowSnapshot.thd.toFixed(3) + "%"
-                               + " · H2 " + rowSnapshot.h2.toFixed(3) + "%"
-                               + " · H3 " + rowSnapshot.h3.toFixed(3) + "%"
-                               + " · H5 " + rowSnapshot.h5.toFixed(3) + "%")
+                            ? (root.document.channelName(modelData) + " · " + rowSnapshot.role
+                               + "\nC1 " + root.relativeMs().toFixed(3) + " ms · H1 " + root.formatValue(modelData, rowSnapshot.fundamental)
+                               + " · ∠" + rowSnapshot.angle.toFixed(2) + "°"
+                               + "\nDC/H1 " + rowSnapshot.dcPercent.toFixed(3) + "% · THD " + rowSnapshot.thd.toFixed(3) + "%")
                             : "No valid trailing-cycle snapshot"
 
                         MouseArea {
-                            id: rowMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            acceptedButtons: Qt.LeftButton
+                            id: rowMouse; anchors.fill: parent; hoverEnabled: true; acceptedButtons: Qt.LeftButton
                             onClicked: {
                                 if (root.document) root.document.selectChannel(modelData)
                                 root.signalActivated(modelData)
@@ -399,6 +320,14 @@ Rectangle {
                     }
                 }
             }
+        }
+
+        Label {
+            visible: root.displayedChannels.length === 0
+            Layout.fillWidth: true; Layout.fillHeight: true
+            horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
+            text: "No signals are assigned to Table. Open Signals → Signal Configuration…"
+            color: "#657078"; font.pixelSize: 12
         }
     }
 }
