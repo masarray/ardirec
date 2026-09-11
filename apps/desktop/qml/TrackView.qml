@@ -32,11 +32,7 @@ Rectangle {
         if (!root.document || root.channelIndex < 0 || root.valueRepresentation !== "primary") return 1.0
         const unit = root.document.channelUnit(root.channelIndex).trim().toUpperCase()
         const peak = Math.abs(root.rawPeak)
-        if (unit === "V") {
-            if (peak >= 1000000.0) return 0.000001
-            if (peak >= 1000.0) return 0.001
-        }
-        if (unit === "A") {
+        if (unit === "V" || unit === "A") {
             if (peak >= 1000000.0) return 0.000001
             if (peak >= 1000.0) return 0.001
         }
@@ -50,14 +46,23 @@ Rectangle {
         return unit
     }
     readonly property real displayPeak: (displayMode === "rms" ? rawPeak / Math.sqrt(2.0) : rawPeak) * engineeringScale
-    readonly property real cursorAInstant: root.document && root.channelIndex >= 0
-                                                   ? root.document.sampleValue(root.channelIndex, root.cursorATime) : NaN
-    readonly property real cursorBInstant: root.document && root.channelIndex >= 0
-                                                   ? root.document.sampleValue(root.channelIndex, root.cursorBTime) : NaN
-    readonly property real cursorARms: root.analysis && root.channelIndex >= 0
-                                               ? root.analysis.rmsValue(root.channelIndex, root.cursorATime) : NaN
-    readonly property real cursorBRms: root.analysis && root.channelIndex >= 0
-                                               ? root.analysis.rmsValue(root.channelIndex, root.cursorBTime) : NaN
+
+    // Evaluate only the measurement mode that is visible. Keeping four always-live bindings here
+    // would run two one-cycle RMS traversals per lane even while the operator is viewing samples.
+    readonly property real cursorAValue: {
+        const representationDependency = root.valueRepresentation
+        if (!root.document || root.channelIndex < 0) return NaN
+        if (root.displayMode === "rms")
+            return root.analysis ? root.analysis.rmsValue(root.channelIndex, root.cursorATime) : NaN
+        return root.document.sampleValue(root.channelIndex, root.cursorATime)
+    }
+    readonly property real cursorBValue: {
+        const representationDependency = root.valueRepresentation
+        if (!root.document || root.channelIndex < 0) return NaN
+        if (root.displayMode === "rms")
+            return root.analysis ? root.analysis.rmsValue(root.channelIndex, root.cursorBTime) : NaN
+        return root.document.sampleValue(root.channelIndex, root.cursorBTime)
+    }
 
     function formatAxis(value) {
         const magnitude = Math.abs(value)
@@ -130,7 +135,7 @@ Rectangle {
                 Label { text: "C1"; color: root.cursorAColor; font.pixelSize: 9; font.weight: Font.Bold; anchors.verticalCenter: parent.verticalCenter }
                 Label {
                     width: Math.max(1, parent.width - 30)
-                    text: root.displayMode === "rms" ? root.formatCursorValue(root.cursorARms) : root.formatCursorValue(root.cursorAInstant)
+                    text: root.formatCursorValue(root.cursorAValue)
                     color: "#23282d"; font.pixelSize: 10; font.family: "Consolas"; font.weight: Font.DemiBold
                     horizontalAlignment: Text.AlignRight; anchors.verticalCenter: parent.verticalCenter; elide: Text.ElideLeft
                 }
@@ -155,7 +160,7 @@ Rectangle {
                 Label { text: "C2"; color: root.cursorBColor; font.pixelSize: 9; font.weight: Font.Bold; anchors.verticalCenter: parent.verticalCenter }
                 Label {
                     width: Math.max(1, parent.width - 30)
-                    text: root.displayMode === "rms" ? root.formatCursorValue(root.cursorBRms) : root.formatCursorValue(root.cursorBInstant)
+                    text: root.formatCursorValue(root.cursorBValue)
                     color: "#23282d"; font.pixelSize: 10; font.family: "Consolas"; font.weight: Font.DemiBold
                     horizontalAlignment: Text.AlignRight; anchors.verticalCenter: parent.verticalCenter; elide: Text.ElideLeft
                 }
