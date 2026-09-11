@@ -9,9 +9,12 @@ Rectangle {
 
     property var document
     property var analysis
+    property var channels: []
     property string role: "Voltage"
-    property string title: "VOLTAGE PHASORS"
+    property string title: "PHASORS"
     property real cursorTime: 0.0
+    property real scaleMagnitude: 0.0
+    property color cursorAccent: "#244f9e"
     property string valueRepresentation: document ? document.valueRepresentation : "secondary"
 
     function wrapDegrees(value) {
@@ -21,19 +24,68 @@ Rectangle {
         return angle
     }
 
+    function fallbackChannels() {
+        let result = []
+        if (!root.analysis) return result
+        const phases = ["L1", "L2", "L3", "E"]
+        for (let phase of phases) {
+            const index = root.analysis.phaseChannel(root.role, phase)
+            if (index >= 0) result.push(index)
+        }
+        return result
+    }
+
+    function effectiveChannels() {
+        return root.channels && root.channels.length ? root.channels : root.fallbackChannels()
+    }
+
     function phasorForChannel(index) {
         const representationDependency = root.valueRepresentation
         if (index < 0 || !root.analysis) return ({valid:false})
         const row = root.analysis.phasorAt(index, root.cursorTime)
         if (!row || !row.valid || !Number.isFinite(row.magnitude) || !Number.isFinite(row.angle))
             return ({valid:false})
-        // AnalysisController stores a fixed record-time cosine reference. +90 deg presents the
-        // familiar sine-wave engineering phase convention without making the phasor spin as the
-        // cursor advances through a stationary sinusoid.
+        // AnalysisController uses a fixed record cosine reference. +90° displays the familiar
+        // sine-wave engineering convention without making a stationary phasor rotate with time.
         return ({valid:true,
                  magnitude: row.magnitude,
                  angle: root.wrapDegrees(row.angle + 90.0),
                  unit: row.unit || (root.document ? root.document.channelUnit(index) : "")})
+    }
+
+    function displayScale(index) {
+        if (!root.document || index < 0 || root.valueRepresentation !== "primary") return 1.0
+        const unit = root.document.channelUnit(index).trim().toUpperCase()
+        const peak = Math.abs(root.document.channelPeak(index))
+        if (unit === "V" || unit === "A") {
+            if (peak >= 1000000.0) return 0.000001
+            if (peak >= 1000.0) return 0.001
+        }
+        return 1.0
+    }
+
+    function displayUnit(index) {
+        if (!root.document || index < 0) return ""
+        const unit = root.document.channelUnit(index)
+        const scale = root.displayScale(index)
+        if (scale === 0.000001) return unit.trim().toUpperCase() === "V" ? "MV" : "MA"
+        if (scale === 0.001) return unit.trim().toUpperCase() === "V" ? "kV" : "kA"
+        return unit
+    }
+
+    function formatMagnitude(index, magnitude) {
+        if (!Number.isFinite(magnitude)) return "—"
+        const value = magnitude * root.displayScale(index)
+        const absValue = Math.abs(value)
+        const decimals = absValue >= 100 ? 1 : absValue >= 10 ? 2 : 3
+        const unit = root.displayUnit(index)
+        return value.toFixed(decimals) + (unit.length ? " " + unit : "")
+    }
+
+    function scaleText() {
+        const list = root.effectiveChannels()
+        if (!list.length || !(root.scaleMagnitude > 0)) return "AUTO SCALE"
+        return "RMAX " + root.formatMagnitude(list[0], root.scaleMagnitude)
     }
 
     function requestRepaint() {
@@ -42,6 +94,8 @@ Rectangle {
 
     onCursorTimeChanged: requestRepaint()
     onRoleChanged: requestRepaint()
+    onChannelsChanged: requestRepaint()
+    onScaleMagnitudeChanged: requestRepaint()
     onValueRepresentationChanged: requestRepaint()
     onVisibleChanged: if (visible) requestRepaint()
     onWidthChanged: requestRepaint()
@@ -50,19 +104,29 @@ Rectangle {
     Connections {
         target: root.document
         function onDocumentChanged() { root.requestRepaint() }
+        function onRepresentationChanged() { root.requestRepaint() }
+    }
+
+    Rectangle {
+        id: accent
+        anchors.left: parent.left
+        anchors.top: parent.top
+        anchors.bottom: header.bottom
+        width: 4
+        color: root.cursorAccent
     }
 
     Label {
         id: header
         anchors.left: parent.left
         anchors.top: parent.top
-        anchors.leftMargin: 10
+        anchors.leftMargin: 12
         anchors.topMargin: 8
         text: root.title + " · " + (root.valueRepresentation === "primary" ? "PRIMARY" : "SECONDARY")
         color: "#3d464d"
         font.pixelSize: 9
         font.weight: Font.DemiBold
-        font.letterSpacing: 0.6
+        font.letterSpacing: 0.5
     }
 
     Label {
@@ -70,7 +134,7 @@ Rectangle {
         anchors.top: parent.top
         anchors.rightMargin: 10
         anchors.topMargin: 8
-        text: "0° → · +90° ↑"
+        text: root.scaleText() + " · 0° → · +90° ↑"
         color: "#778087"
         font.pixelSize: 8
     }
@@ -90,21 +154,19 @@ Rectangle {
             ctx.clearRect(0, 0, width, height)
             if (!root.visible || !root.document || !root.analysis || width < 80 || height < 80) return
 
-            const phases = ["L1", "L2", "L3", "E"]
+            const list = root.effectiveChannels()
             let vectors = []
-            let maxMag = 0.0
-            for (let phase of phases) {
-                const index = root.analysis.phaseChannel(root.role, phase)
-                if (index < 0) continue
+            let localMax = 0.0
+            for (let index of list) {
                 const p = root.phasorForChannel(index)
                 if (!p.valid) continue
+                const phase = root.analysis.channelPhase(index)
                 vectors.push({phase: phase, index: index, p: p})
-                maxMag = Math.max(maxMag, p.magnitude)
+                localMax = Math.max(localMax, p.magnitude)
             }
+            const maxMag = root.scaleMagnitude > 0 ? root.scaleMagnitude : localMax
             if (!(maxMag > 0.0)) return
 
-            // Use one square engineering plane inside any panel aspect ratio. This prevents an
-            // optical ellipse and leaves deliberate space for degree labels instead of stretching.
             const labelMargin = 28
             const diameter = Math.max(40, Math.min(width, height) - labelMargin * 2)
             const radius = diameter * 0.5
@@ -114,7 +176,6 @@ Rectangle {
             ctx.save()
             ctx.lineCap = "round"
 
-            // Fine 30-degree polar reference spokes.
             ctx.lineWidth = 0.7
             ctx.strokeStyle = "#d8dde1"
             ctx.setLineDash([2, 4])
@@ -127,7 +188,6 @@ Rectangle {
                 ctx.stroke()
             }
 
-            // Magnitude rings.
             ctx.setLineDash([])
             for (let ring = 1; ring <= 4; ++ring) {
                 ctx.strokeStyle = ring === 4 ? "#b9c0c6" : "#e2e6e9"
@@ -137,13 +197,11 @@ Rectangle {
                 ctx.stroke()
             }
 
-            // Strong quadrant axes.
             ctx.strokeStyle = "#7f8991"
             ctx.lineWidth = 1.0
             ctx.beginPath(); ctx.moveTo(cx - radius, cy); ctx.lineTo(cx + radius, cy); ctx.stroke()
             ctx.beginPath(); ctx.moveTo(cx, cy - radius); ctx.lineTo(cx, cy + radius); ctx.stroke()
 
-            // Degree labels around the outer ring. Engineering angle is positive counter-clockwise.
             ctx.font = "8px sans-serif"
             ctx.fillStyle = "#59636b"
             ctx.textAlign = "center"
@@ -157,27 +215,24 @@ Rectangle {
                              cy - Math.sin(a) * labelRadius)
             }
 
-            // Ring scale labels help compare magnitude change without replacing exact legend values.
             ctx.textAlign = "left"
             ctx.textBaseline = "bottom"
             ctx.fillStyle = "#90979c"
             ctx.font = "7px sans-serif"
             for (let ring = 1; ring <= 4; ++ring) {
-                const percent = ring * 25
-                ctx.fillText(percent + "%", cx + 4, cy - radius * ring / 4.0 + 1)
+                ctx.fillText((ring * 25) + "%", cx + 4, cy - radius * ring / 4.0 + 1)
             }
 
-            // Phasor vectors.
             for (let v of vectors) {
                 const a = v.p.angle * Math.PI / 180.0
-                const length = radius * 0.94 * v.p.magnitude / maxMag
+                const length = radius * 0.94 * Math.min(1.0, v.p.magnitude / maxMag)
                 const ex = cx + Math.cos(a) * length
                 const ey = cy - Math.sin(a) * length
-                const color = root.analysis.phaseColorForName(v.phase)
+                const color = root.analysis.phaseColor(v.index)
 
                 ctx.strokeStyle = color
                 ctx.fillStyle = color
-                ctx.lineWidth = v.phase === "E" ? 1.5 : 2.2
+                ctx.lineWidth = v.phase === "E" ? 1.6 : 2.2
                 ctx.setLineDash([])
                 ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(ex, ey); ctx.stroke()
 
@@ -188,12 +243,12 @@ Rectangle {
                 ctx.lineTo(ex - Math.cos(a + 0.45) * head, ey + Math.sin(a + 0.45) * head)
                 ctx.closePath(); ctx.fill()
 
-                // Phase tag is offset back from the arrow head so it stays inside the circle.
+                const tag = v.phase !== "Other" ? v.phase : root.document.channelName(v.index)
                 const tagRadius = Math.max(18, length - 16)
                 ctx.font = "600 8px sans-serif"
                 ctx.textAlign = Math.cos(a) >= 0 ? "left" : "right"
                 ctx.textBaseline = Math.sin(a) >= 0 ? "bottom" : "top"
-                ctx.fillText(v.phase,
+                ctx.fillText(tag,
                              cx + Math.cos(a) * tagRadius + (Math.cos(a) >= 0 ? 3 : -3),
                              cy - Math.sin(a) * tagRadius + (Math.sin(a) >= 0 ? -2 : 2))
             }
@@ -204,38 +259,48 @@ Rectangle {
         }
     }
 
-    Row {
-        id: legend
+    Flickable {
+        id: legendScroll
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         anchors.leftMargin: 10
         anchors.rightMargin: 10
-        anchors.bottomMargin: 8
-        spacing: 16
-        height: 22
+        anchors.bottomMargin: 5
+        height: 27
+        contentWidth: legend.implicitWidth
+        contentHeight: height
+        clip: true
+        boundsBehavior: Flickable.StopAtBounds
 
-        Repeater {
-            model: ["L1", "L2", "L3", "E"]
-            Row {
-                required property string modelData
-                spacing: 4
-                visible: root.analysis && root.analysis.phaseChannel(root.role, modelData) >= 0
-                Rectangle {
-                    width: 12
-                    height: 2
-                    anchors.verticalCenter: parent.verticalCenter
-                    color: root.analysis ? root.analysis.phaseColorForName(modelData) : "#777"
-                }
-                Label {
-                    readonly property int channelIndex: root.analysis ? root.analysis.phaseChannel(root.role, modelData) : -1
-                    readonly property var phasor: root.phasorForChannel(channelIndex)
-                    text: modelData + (phasor.valid
-                                       ? "  " + phasor.magnitude.toFixed(2) + " " + phasor.unit
-                                         + "  ∠" + phasor.angle.toFixed(1) + "°"
-                                       : "")
-                    color: "#4e565c"
-                    font.pixelSize: 8
+        Row {
+            id: legend
+            spacing: 15
+            height: parent.height
+
+            Repeater {
+                model: root.effectiveChannels()
+                Row {
+                    required property int modelData
+                    spacing: 4
+                    visible: root.analysis && modelData >= 0
+                    Rectangle {
+                        width: 12
+                        height: 2
+                        anchors.verticalCenter: parent.verticalCenter
+                        color: root.analysis ? root.analysis.phaseColor(modelData) : "#777"
+                    }
+                    Label {
+                        readonly property var phasor: root.phasorForChannel(modelData)
+                        text: (root.document ? root.document.channelName(modelData) : "—")
+                              + (phasor.valid
+                                 ? "  " + root.formatMagnitude(modelData, phasor.magnitude)
+                                   + "  ∠" + phasor.angle.toFixed(1) + "°"
+                                 : "")
+                        color: "#4e565c"
+                        font.pixelSize: 8
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
                 }
             }
         }

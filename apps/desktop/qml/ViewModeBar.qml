@@ -13,14 +13,12 @@ Rectangle {
     property string timeDisplayMode: "instantaneous"
     property string valueRepresentation: "secondary"
     property string ratioSummary: ""
-    property int activeAnalysisCursor: 1
     property bool hasRecord: false
     property bool transformerRatiosAvailable: false
 
     signal viewRequested(string viewName)
     signal timeDisplayModeRequested(string mode)
     signal valueRepresentationRequested(string representation)
-    signal activeAnalysisCursorRequested(int cursorNumber)
 
     function viewButtonText(viewName) {
         if (viewName === "time") return "Time Signals"
@@ -84,23 +82,25 @@ Rectangle {
 
         RowLayout {
             visible: root.currentView === "phasor"
-            spacing: 2
-            Label { text: "Analysis cursor"; color: "#6b7279"; font.pixelSize: 8; Layout.rightMargin: 3 }
-            ToolButton {
-                text: "C1"
-                checkable: true
-                checked: root.activeAnalysisCursor === 1
-                enabled: root.hasRecord
-                font.pixelSize: 8
-                onClicked: root.activeAnalysisCursorRequested(1)
+            spacing: 5
+            Rectangle {
+                width: 7; height: 7; radius: 4; color: "#244f9e"
             }
-            ToolButton {
-                text: "C2"
-                checkable: true
-                checked: root.activeAnalysisCursor === 2
-                enabled: root.hasRecord
+            Label {
+                text: "C1"
+                color: "#244f9e"
                 font.pixelSize: 8
-                onClicked: root.activeAnalysisCursorRequested(2)
+                font.weight: Font.DemiBold
+            }
+            Label { text: "↔"; color: "#858c92"; font.pixelSize: 9 }
+            Rectangle {
+                width: 7; height: 7; radius: 4; color: "#b77900"
+            }
+            Label {
+                text: "C2 · simultaneous comparison"
+                color: "#775817"
+                font.pixelSize: 8
+                font.weight: Font.DemiBold
             }
         }
 
@@ -142,7 +142,7 @@ Rectangle {
 
         Label {
             text: root.currentView === "time" ? (root.timeDisplayMode === "rms" ? "ONE-CYCLE RMS" : "RECORDED SAMPLES")
-                  : root.currentView === "phasor" ? "FUNDAMENTAL DFT"
+                  : root.currentView === "phasor" ? "FUNDAMENTAL DFT · SHARED SCALE"
                   : root.currentView === "locus" ? "PROTECTION R-X"
                   : root.currentView === "harmonics" ? "TRAILING 1-CYCLE DFT"
                   : "1-CYCLE SNAPSHOT"
