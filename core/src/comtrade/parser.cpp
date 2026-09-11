@@ -2,9 +2,11 @@
 #include "ardirec/comtrade/parser.hpp"
 
 #include <algorithm>
+#include <array>
 #include <charconv>
 #include <cctype>
 #include <cmath>
+#include <cstdint>
 #include <fstream>
 #include <limits>
 #include <stdexcept>
@@ -23,6 +25,124 @@ std::string trim(std::string value) {
         value.erase(0, 3);
     }
     return value;
+}
+
+
+bool continuation(unsigned char value) {
+    return value >= 0x80 && value <= 0xBF;
+}
+
+bool valid_utf8(std::string_view value) {
+    std::size_t i = 0;
+    while (i < value.size()) {
+        const auto first = static_cast<unsigned char>(value[i]);
+        if (first <= 0x7F) {
+            ++i;
+            continue;
+        }
+        if (first >= 0xC2 && first <= 0xDF) {
+            if (i + 1 >= value.size()
+                || !continuation(static_cast<unsigned char>(value[i + 1]))) return false;
+            i += 2;
+            continue;
+        }
+        if (first == 0xE0) {
+            if (i + 2 >= value.size()) return false;
+            const auto second = static_cast<unsigned char>(value[i + 1]);
+            if (second < 0xA0 || second > 0xBF
+                || !continuation(static_cast<unsigned char>(value[i + 2]))) return false;
+            i += 3;
+            continue;
+        }
+        if ((first >= 0xE1 && first <= 0xEC) || (first >= 0xEE && first <= 0xEF)) {
+            if (i + 2 >= value.size()
+                || !continuation(static_cast<unsigned char>(value[i + 1]))
+                || !continuation(static_cast<unsigned char>(value[i + 2]))) return false;
+            i += 3;
+            continue;
+        }
+        if (first == 0xED) {
+            if (i + 2 >= value.size()) return false;
+            const auto second = static_cast<unsigned char>(value[i + 1]);
+            if (second < 0x80 || second > 0x9F
+                || !continuation(static_cast<unsigned char>(value[i + 2]))) return false;
+            i += 3;
+            continue;
+        }
+        if (first == 0xF0) {
+            if (i + 3 >= value.size()) return false;
+            const auto second = static_cast<unsigned char>(value[i + 1]);
+            if (second < 0x90 || second > 0xBF
+                || !continuation(static_cast<unsigned char>(value[i + 2]))
+                || !continuation(static_cast<unsigned char>(value[i + 3]))) return false;
+            i += 4;
+            continue;
+        }
+        if (first >= 0xF1 && first <= 0xF3) {
+            if (i + 3 >= value.size()
+                || !continuation(static_cast<unsigned char>(value[i + 1]))
+                || !continuation(static_cast<unsigned char>(value[i + 2]))
+                || !continuation(static_cast<unsigned char>(value[i + 3]))) return false;
+            i += 4;
+            continue;
+        }
+        if (first == 0xF4) {
+            if (i + 3 >= value.size()) return false;
+            const auto second = static_cast<unsigned char>(value[i + 1]);
+            if (second < 0x80 || second > 0x8F
+                || !continuation(static_cast<unsigned char>(value[i + 2]))
+                || !continuation(static_cast<unsigned char>(value[i + 3]))) return false;
+            i += 4;
+            continue;
+        }
+        return false;
+    }
+    return true;
+}
+
+void append_utf8(std::string& output, std::uint32_t codepoint) {
+    if (codepoint <= 0x7F) {
+        output.push_back(static_cast<char>(codepoint));
+    } else if (codepoint <= 0x7FF) {
+        output.push_back(static_cast<char>(0xC0 | (codepoint >> 6)));
+        output.push_back(static_cast<char>(0x80 | (codepoint & 0x3F)));
+    } else if (codepoint <= 0xFFFF) {
+        output.push_back(static_cast<char>(0xE0 | (codepoint >> 12)));
+        output.push_back(static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F)));
+        output.push_back(static_cast<char>(0x80 | (codepoint & 0x3F)));
+    } else {
+        output.push_back(static_cast<char>(0xF0 | (codepoint >> 18)));
+        output.push_back(static_cast<char>(0x80 | ((codepoint >> 12) & 0x3F)));
+        output.push_back(static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F)));
+        output.push_back(static_cast<char>(0x80 | (codepoint & 0x3F)));
+    }
+}
+
+std::string windows_1252_to_utf8(std::string_view value) {
+    // Undefined Windows-1252 positions intentionally map to their C1 code points so no source
+    // byte is silently discarded. Printable CP1252 punctuation uses its Unicode code point.
+    static constexpr std::array<std::uint16_t, 32> extension = {
+        0x20AC, 0x0081, 0x201A, 0x0192, 0x201E, 0x2026, 0x2020, 0x2021,
+        0x02C6, 0x2030, 0x0160, 0x2039, 0x0152, 0x008D, 0x017D, 0x008F,
+        0x0090, 0x2018, 0x2019, 0x201C, 0x201D, 0x2022, 0x2013, 0x2014,
+        0x02DC, 0x2122, 0x0161, 0x203A, 0x0153, 0x009D, 0x017E, 0x0178
+    };
+
+    std::string output;
+    output.reserve(value.size() + value.size() / 4);
+    for (const unsigned char byte : value) {
+        std::uint32_t codepoint = byte;
+        if (byte >= 0x80 && byte <= 0x9F) codepoint = extension[byte - 0x80];
+        append_utf8(output, codepoint);
+    }
+    return output;
+}
+
+std::string normalize_cfg_text(std::string value) {
+    if (value.empty() || valid_utf8(value)) return value;
+    // Legacy COMTRADE exports commonly predate an explicit Unicode encoding. For invalid UTF-8
+    // only, interpret Western-European relay metadata deterministically as Windows-1252.
+    return windows_1252_to_utf8(value);
 }
 
 std::string_view trim_view(std::string_view value) {
@@ -157,13 +277,13 @@ ConfigParseResult ConfigParser::try_parse_file(const std::filesystem::path& path
             result.error = "CFG header is empty";
             return result;
         }
-        cfg.station_name = header[0];
+        cfg.station_name = normalize_cfg_text(header[0]);
         if (cfg.station_name.empty()) {
             cfg.station_name = path.stem().string();
             diagnostic_fallback(cfg.diagnostics, "Station name", "CFG filename");
         }
         if (header.size() > 1 && !header[1].empty()) {
-            cfg.recorder_id = header[1];
+            cfg.recorder_id = normalize_cfg_text(header[1]);
         } else {
             cfg.recorder_id = "unknown";
             diagnostic_fallback(cfg.diagnostics, "Recorder id", "unknown");
@@ -221,14 +341,14 @@ ConfigParseResult ConfigParser::try_parse_file(const std::filesystem::path& path
                 channel.index = i + 1;
                 diagnostic_fallback(cfg.diagnostics, prefix + "index", std::to_string(channel.index));
             }
-            if (fields.size() > 1 && !fields[1].empty()) channel.id = fields[1];
+            if (fields.size() > 1 && !fields[1].empty()) channel.id = normalize_cfg_text(fields[1]);
             else {
                 channel.id = "A" + std::to_string(i + 1);
                 diagnostic_fallback(cfg.diagnostics, prefix + "id", channel.id);
             }
-            if (fields.size() > 2) channel.phase = fields[2];
-            if (fields.size() > 3) channel.circuit = fields[3];
-            if (fields.size() > 4) channel.units = fields[4];
+            if (fields.size() > 2) channel.phase = normalize_cfg_text(fields[2]);
+            if (fields.size() > 3) channel.circuit = normalize_cfg_text(fields[3]);
+            if (fields.size() > 4) channel.units = normalize_cfg_text(fields[4]);
 
             auto recoverDouble = [&](std::size_t fieldIndex,
                                      double& target,
@@ -245,7 +365,7 @@ ConfigParseResult ConfigParser::try_parse_file(const std::filesystem::path& path
             recoverDouble(9, channel.max_value, 0.0, "maximum");
             channel.primary = optional_double(fields, 10, cfg.diagnostics, prefix + "primary ratio");
             channel.secondary = optional_double(fields, 11, cfg.diagnostics, prefix + "secondary ratio");
-            if (fields.size() > 12) channel.primary_secondary = fields[12];
+            if (fields.size() > 12) channel.primary_secondary = normalize_cfg_text(fields[12]);
             cfg.analog_channels.push_back(std::move(channel));
         }
 
@@ -260,13 +380,13 @@ ConfigParseResult ConfigParser::try_parse_file(const std::filesystem::path& path
                 channel.index = i + 1;
                 diagnostic_fallback(cfg.diagnostics, prefix + "index", std::to_string(channel.index));
             }
-            if (fields.size() > 1 && !fields[1].empty()) channel.id = fields[1];
+            if (fields.size() > 1 && !fields[1].empty()) channel.id = normalize_cfg_text(fields[1]);
             else {
                 channel.id = "D" + std::to_string(i + 1);
                 diagnostic_fallback(cfg.diagnostics, prefix + "id", channel.id);
             }
-            if (fields.size() > 2) channel.phase = fields[2];
-            if (fields.size() > 3) channel.circuit = fields[3];
+            if (fields.size() > 2) channel.phase = normalize_cfg_text(fields[2]);
+            if (fields.size() > 3) channel.circuit = normalize_cfg_text(fields[3]);
             if (fields.size() > 4 && !fields[4].empty()) {
                 int normal = 0;
                 if (parse_int_prefix(fields[4], normal) && (normal == 0 || normal == 1)) {
