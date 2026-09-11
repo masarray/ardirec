@@ -1,8 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import QtQuick
 
-QtObject {
+Item {
     id: root
+    visible: false
+    width: 0
+    height: 0
+
     property var source
     property var document
     property string cachedKey: ""
@@ -34,6 +38,9 @@ QtObject {
 
     function distanceLocus(loopId, startSeconds, durationSeconds, maximumPoints, kLMagnitude, kLAngle) {
         if (!source || !document) return []
+
+        // Keep the presentation budget bounded while the numerical engine still works on the
+        // original COMTRADE samples. All six loop trajectories are populated by one C++ batch call.
         const pointBudget = Math.max(16, Math.min(2048, maximumPoints))
         const representation = document.valueRepresentation || "secondary"
         const key = representation + "|" + startSeconds.toPrecision(16) + "|" + durationSeconds.toPrecision(16)
@@ -49,4 +56,10 @@ QtObject {
 
     onSourceChanged: invalidate()
     onDocumentChanged: invalidate()
+
+    Connections {
+        target: root.document
+        function onDocumentChanged() { root.invalidate() }
+        function onRepresentationChanged() { root.invalidate() }
+    }
 }
