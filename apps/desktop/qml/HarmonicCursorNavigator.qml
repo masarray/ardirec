@@ -4,7 +4,7 @@ import QtQuick.Controls
 
 Rectangle {
     id: root
-    height: 32
+    height: 36
     color: "#f8f9fa"
     border.color: "#c7ccd1"
 
@@ -13,13 +13,21 @@ Rectangle {
     property real visibleDuration: 1.0
     property real cursorTime: 0.0
     property real axisWidth: 170
-    property real hoverRadius: 8
+    property real hoverRadius: 20
     property real snapRadius: 12
     property color cursorColor: "#244f9e"
-    property string labelText: "HARMONIC CURSOR"
+    property string labelText: "ANALYSIS CURSOR"
     property string detailText: "1-cycle trailing DFT"
 
+    property real previewTime: cursorTime
+    property bool previewActive: false
+    property real pendingTime: 0.0
+    property bool pendingValid: false
+    readonly property real displayedTime: previewActive ? previewTime : cursorTime
+
     signal cursorRequested(real timeSeconds)
+
+    onCursorTimeChanged: if (!previewActive) previewTime = cursorTime
 
     function clamp(value, lo, hi) { return Math.max(lo, Math.min(hi, value)) }
     function relativeMs(timeSeconds) {
@@ -46,6 +54,27 @@ Rectangle {
         const threshold = visibleDuration * snapRadius / Math.max(1, ruler.width)
         return document.snapToDigitalEdge(clamped, threshold)
     }
+    function queue(timeSeconds) {
+        previewTime = timeSeconds
+        previewActive = true
+        pendingTime = timeSeconds
+        pendingValid = true
+        if (!commitTimer.running) commitTimer.start()
+    }
+    function flushPending() {
+        if (commitTimer.running) commitTimer.stop()
+        if (!pendingValid) return
+        const value = pendingTime
+        pendingValid = false
+        cursorRequested(value)
+    }
+
+    Timer {
+        id: commitTimer
+        interval: 16
+        repeat: false
+        onTriggered: root.flushPending()
+    }
 
     Rectangle {
         anchors.left: parent.left
@@ -57,8 +86,8 @@ Rectangle {
         Column {
             anchors.centerIn: parent
             spacing: 1
-            Label { text: root.labelText; color: "#4c545b"; font.pixelSize: 8; font.weight: Font.DemiBold }
-            Label { text: root.detailText; color: "#747d84"; font.pixelSize: 7 }
+            Label { text: root.labelText; color: "#3f4951"; font.pixelSize: 9; font.weight: Font.DemiBold }
+            Label { text: root.detailText; color: "#6e7880"; font.pixelSize: 8 }
         }
     }
 
@@ -78,14 +107,14 @@ Rectangle {
                 x: ruler.width * index / 10
                 width: 1
                 height: ruler.height
-                Rectangle { anchors.horizontalCenter: parent.horizontalCenter; anchors.bottom: parent.bottom; width: 1; height: 6; color: "#788087" }
+                Rectangle { anchors.horizontalCenter: parent.horizontalCenter; anchors.bottom: parent.bottom; width: 1; height: 7; color: "#788087" }
                 Label {
                     anchors.horizontalCenter: parent.horizontalCenter
                     anchors.top: parent.top
                     anchors.topMargin: 3
                     text: root.formatTick(root.viewStart + root.visibleDuration * index / 10)
                     color: "#4f575d"
-                    font.pixelSize: 8
+                    font.pixelSize: 9
                 }
             }
         }
@@ -100,17 +129,55 @@ Rectangle {
             lineOpacity: 0.62
         }
 
-        Rectangle {
-            visible: root.cursorTime >= root.viewStart && root.cursorTime <= root.viewStart + root.visibleDuration
-            x: root.pixelForTime(root.cursorTime) - 4
-            anchors.bottom: parent.bottom
-            width: 8
-            height: 8
-            color: root.cursorColor
-            rotation: 45
+        Item {
+            visible: root.displayedTime >= root.viewStart && root.displayedTime <= root.viewStart + root.visibleDuration
+            x: root.pixelForTime(root.displayedTime) - width * 0.5
+            y: 2
+            width: 24
+            height: ruler.height - 4
+            z: 4
+
+            Rectangle {
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.top: parent.top
+                anchors.topMargin: 4
+                anchors.bottom: parent.bottom
+                width: 2
+                color: root.cursorColor
+                opacity: 0.9
+            }
+            Rectangle {
+                anchors.centerIn: parent
+                width: 17
+                height: 17
+                radius: 2
+                rotation: 45
+                color: root.cursorColor
+                border.width: 2
+                border.color: "#ffffff"
+            }
+            Rectangle {
+                anchors.centerIn: parent
+                width: 19
+                height: 19
+                radius: 3
+                rotation: 45
+                color: "transparent"
+                border.width: 1
+                border.color: "#6d7378"
+                opacity: 0.45
+            }
+            Label {
+                anchors.centerIn: parent
+                text: "1"
+                color: "#ffffff"
+                font.pixelSize: 8
+                font.weight: Font.Bold
+            }
         }
 
         MouseArea {
+            id: cursorMouse
             anchors.fill: parent
             hoverEnabled: true
             acceptedButtons: Qt.LeftButton
@@ -120,23 +187,39 @@ Rectangle {
             cursorShape: moving || nearCursor ? Qt.SizeHorCursor : Qt.ArrowCursor
 
             function updateHover(mouseX) {
-                nearCursor = root.cursorTime >= root.viewStart
-                             && root.cursorTime <= root.viewStart + root.visibleDuration
-                             && Math.abs(mouseX - root.pixelForTime(root.cursorTime)) <= root.hoverRadius
+                nearCursor = root.displayedTime >= root.viewStart
+                             && root.displayedTime <= root.viewStart + root.visibleDuration
+                             && Math.abs(mouseX - root.pixelForTime(root.displayedTime)) <= root.hoverRadius
             }
+            function updateCursor(mouseX) {
+                root.queue(root.snapTime(root.timeForPixel(mouseX)))
+            }
+
             onPressed: mouse => {
+                root.previewTime = root.cursorTime
+                root.previewActive = true
                 moving = true
-                root.cursorRequested(root.snapTime(root.timeForPixel(mouse.x)))
+                updateCursor(mouse.x)
                 updateHover(mouse.x)
             }
             onPositionChanged: mouse => {
                 updateHover(mouse.x)
-                if (moving && (mouse.buttons & Qt.LeftButton))
-                    root.cursorRequested(root.snapTime(root.timeForPixel(mouse.x)))
+                if (moving && (mouse.buttons & Qt.LeftButton)) updateCursor(mouse.x)
             }
-            onReleased: mouse => { moving = false; updateHover(mouse.x) }
-            onCanceled: { moving = false; nearCursor = false }
-            onExited: { if (!moving) nearCursor = false }
+            onReleased: mouse => {
+                if (moving) updateCursor(mouse.x)
+                root.flushPending()
+                moving = false
+                root.previewActive = false
+                updateHover(mouse.x)
+            }
+            onCanceled: {
+                root.flushPending()
+                moving = false
+                root.previewActive = false
+                nearCursor = false
+            }
+            onExited: if (!moving) nearCursor = false
         }
     }
 }

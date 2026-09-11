@@ -47,6 +47,14 @@ public:
     Q_INVOKABLE QVariantMap distanceLoopsAt(double absoluteTimeSeconds,
                                             double groundingFactorMagnitude,
                                             double groundingFactorAngleDegrees) const;
+    // Fast static-locus path: traverses the requested timestamps once and returns all
+    // six protection-loop trajectories. This prevents six repeated DFT traversals when
+    // entering the Locus view.
+    Q_INVOKABLE QVariantMap distanceLoci(double viewStartSeconds,
+                                         double visibleDurationSeconds,
+                                         int maximumPoints,
+                                         double groundingFactorMagnitude,
+                                         double groundingFactorAngleDegrees) const;
     Q_INVOKABLE QVariantList distanceLocus(const QString& loopId,
                                            double viewStartSeconds,
                                            double visibleDurationSeconds,

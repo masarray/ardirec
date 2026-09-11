@@ -45,8 +45,6 @@ Rectangle {
         const row = root.analysis.phasorAt(index, root.cursorTime)
         if (!row || !row.valid || !Number.isFinite(row.magnitude) || !Number.isFinite(row.angle))
             return ({valid:false})
-        // AnalysisController uses a fixed record cosine reference. +90° displays the familiar
-        // sine-wave engineering convention without making a stationary phasor rotate with time.
         return ({valid:true,
                  magnitude: row.magnitude,
                  angle: root.wrapDegrees(row.angle + 90.0),
@@ -95,11 +93,14 @@ Rectangle {
     onCursorTimeChanged: requestRepaint()
     onRoleChanged: requestRepaint()
     onChannelsChanged: requestRepaint()
+    onAnalysisChanged: requestRepaint()
+    onDocumentChanged: requestRepaint()
     onScaleMagnitudeChanged: requestRepaint()
     onValueRepresentationChanged: requestRepaint()
-    onVisibleChanged: if (visible) requestRepaint()
+    onVisibleChanged: if (visible) Qt.callLater(requestRepaint)
     onWidthChanged: requestRepaint()
     onHeightChanged: requestRepaint()
+    Component.onCompleted: Qt.callLater(requestRepaint)
 
     Connections {
         target: root.document
@@ -120,23 +121,23 @@ Rectangle {
         id: header
         anchors.left: parent.left
         anchors.top: parent.top
-        anchors.leftMargin: 12
-        anchors.topMargin: 8
+        anchors.leftMargin: 14
+        anchors.topMargin: 9
         text: root.title + " · " + (root.valueRepresentation === "primary" ? "PRIMARY" : "SECONDARY")
-        color: "#3d464d"
-        font.pixelSize: 9
+        color: "#303940"
+        font.pixelSize: 11
         font.weight: Font.DemiBold
-        font.letterSpacing: 0.5
+        font.letterSpacing: 0.4
     }
 
     Label {
         anchors.right: parent.right
         anchors.top: parent.top
-        anchors.rightMargin: 10
-        anchors.topMargin: 8
+        anchors.rightMargin: 12
+        anchors.topMargin: 10
         text: root.scaleText() + " · 0° → · +90° ↑"
-        color: "#778087"
-        font.pixelSize: 8
+        color: "#68737b"
+        font.pixelSize: 9
     }
 
     Canvas {
@@ -152,22 +153,9 @@ Rectangle {
         onPaint: {
             const ctx = getContext("2d")
             ctx.clearRect(0, 0, width, height)
-            if (!root.visible || !root.document || !root.analysis || width < 80 || height < 80) return
+            if (!root.visible || width < 80 || height < 80) return
 
-            const list = root.effectiveChannels()
-            let vectors = []
-            let localMax = 0.0
-            for (let index of list) {
-                const p = root.phasorForChannel(index)
-                if (!p.valid) continue
-                const phase = root.analysis.channelPhase(index)
-                vectors.push({phase: phase, index: index, p: p})
-                localMax = Math.max(localMax, p.magnitude)
-            }
-            const maxMag = root.scaleMagnitude > 0 ? root.scaleMagnitude : localMax
-            if (!(maxMag > 0.0)) return
-
-            const labelMargin = 28
+            const labelMargin = 32
             const diameter = Math.max(40, Math.min(width, height) - labelMargin * 2)
             const radius = diameter * 0.5
             const cx = width * 0.5
@@ -176,9 +164,11 @@ Rectangle {
             ctx.save()
             ctx.lineCap = "round"
 
-            ctx.lineWidth = 0.7
-            ctx.strokeStyle = "#d8dde1"
-            ctx.setLineDash([2, 4])
+            // Always draw the engineering reference plane. A temporarily unavailable DFT must
+            // never look like a broken/empty tab.
+            ctx.lineWidth = 0.8
+            ctx.strokeStyle = "#d5dbe0"
+            ctx.setLineDash([3, 4])
             for (let degree = 0; degree < 360; degree += 30) {
                 if (degree % 90 === 0) continue
                 const a = degree * Math.PI / 180.0
@@ -190,26 +180,26 @@ Rectangle {
 
             ctx.setLineDash([])
             for (let ring = 1; ring <= 4; ++ring) {
-                ctx.strokeStyle = ring === 4 ? "#b9c0c6" : "#e2e6e9"
-                ctx.lineWidth = ring === 4 ? 1.0 : 0.7
+                ctx.strokeStyle = ring === 4 ? "#aeb7be" : "#dde3e7"
+                ctx.lineWidth = ring === 4 ? 1.1 : 0.8
                 ctx.beginPath()
                 ctx.arc(cx, cy, radius * ring / 4.0, 0, Math.PI * 2)
                 ctx.stroke()
             }
 
-            ctx.strokeStyle = "#7f8991"
-            ctx.lineWidth = 1.0
+            ctx.strokeStyle = "#717d86"
+            ctx.lineWidth = 1.1
             ctx.beginPath(); ctx.moveTo(cx - radius, cy); ctx.lineTo(cx + radius, cy); ctx.stroke()
             ctx.beginPath(); ctx.moveTo(cx, cy - radius); ctx.lineTo(cx, cy + radius); ctx.stroke()
 
-            ctx.font = "8px sans-serif"
-            ctx.fillStyle = "#59636b"
+            ctx.font = "9px sans-serif"
+            ctx.fillStyle = "#4f5b64"
             ctx.textAlign = "center"
             ctx.textBaseline = "middle"
             for (let degree = 0; degree < 360; degree += 30) {
                 const signedDegree = degree <= 180 ? degree : degree - 360
                 const a = degree * Math.PI / 180.0
-                const labelRadius = radius + 15
+                const labelRadius = radius + 17
                 ctx.fillText(signedDegree + "°",
                              cx + Math.cos(a) * labelRadius,
                              cy - Math.sin(a) * labelRadius)
@@ -217,10 +207,36 @@ Rectangle {
 
             ctx.textAlign = "left"
             ctx.textBaseline = "bottom"
-            ctx.fillStyle = "#90979c"
-            ctx.font = "7px sans-serif"
-            for (let ring = 1; ring <= 4; ++ring) {
-                ctx.fillText((ring * 25) + "%", cx + 4, cy - radius * ring / 4.0 + 1)
+            ctx.fillStyle = "#7d878e"
+            ctx.font = "8px sans-serif"
+            for (let ring = 1; ring <= 4; ++ring)
+                ctx.fillText((ring * 25) + "%", cx + 5, cy - radius * ring / 4.0 + 1)
+
+            const list = root.effectiveChannels()
+            let vectors = []
+            let localMax = 0.0
+            for (let index of list) {
+                const p = root.phasorForChannel(index)
+                if (!p.valid) continue
+                const phase = root.analysis ? root.analysis.channelPhase(index) : "Other"
+                vectors.push({phase: phase, index: index, p: p})
+                localMax = Math.max(localMax, p.magnitude)
+            }
+            const maxMag = root.scaleMagnitude > 0 ? root.scaleMagnitude : localMax
+
+            if (!root.analysis || vectors.length === 0 || !(maxMag > 0.0)) {
+                ctx.fillStyle = "#66727a"
+                ctx.font = "600 11px sans-serif"
+                ctx.textAlign = "center"
+                ctx.textBaseline = "middle"
+                ctx.fillText(list.length ? "No valid full-cycle phasor at this cursor" : "No signals assigned to this vector group", cx, cy - 5)
+                ctx.font = "9px sans-serif"
+                ctx.fillStyle = "#8a9298"
+                ctx.fillText(list.length ? "Move the cursor to a window containing at least four valid samples" : "Open Signals → Signal Configuration…", cx, cy + 13)
+                ctx.fillStyle = "#5f6870"
+                ctx.beginPath(); ctx.arc(cx, cy, 2.2, 0, Math.PI * 2); ctx.fill()
+                ctx.restore()
+                return
             }
 
             for (let v of vectors) {
@@ -232,11 +248,11 @@ Rectangle {
 
                 ctx.strokeStyle = color
                 ctx.fillStyle = color
-                ctx.lineWidth = v.phase === "E" ? 1.6 : 2.2
+                ctx.lineWidth = v.phase === "E" ? 1.8 : 2.4
                 ctx.setLineDash([])
                 ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(ex, ey); ctx.stroke()
 
-                const head = 8
+                const head = 9
                 ctx.beginPath()
                 ctx.moveTo(ex, ey)
                 ctx.lineTo(ex - Math.cos(a - 0.45) * head, ey + Math.sin(a - 0.45) * head)
@@ -244,17 +260,17 @@ Rectangle {
                 ctx.closePath(); ctx.fill()
 
                 const tag = v.phase !== "Other" ? v.phase : root.document.channelName(v.index)
-                const tagRadius = Math.max(18, length - 16)
-                ctx.font = "600 8px sans-serif"
+                const tagRadius = Math.max(22, length - 18)
+                ctx.font = "600 10px sans-serif"
                 ctx.textAlign = Math.cos(a) >= 0 ? "left" : "right"
                 ctx.textBaseline = Math.sin(a) >= 0 ? "bottom" : "top"
                 ctx.fillText(tag,
-                             cx + Math.cos(a) * tagRadius + (Math.cos(a) >= 0 ? 3 : -3),
-                             cy - Math.sin(a) * tagRadius + (Math.sin(a) >= 0 ? -2 : 2))
+                             cx + Math.cos(a) * tagRadius + (Math.cos(a) >= 0 ? 4 : -4),
+                             cy - Math.sin(a) * tagRadius + (Math.sin(a) >= 0 ? -3 : 3))
             }
 
             ctx.fillStyle = "#5f6870"
-            ctx.beginPath(); ctx.arc(cx, cy, 2.2, 0, Math.PI * 2); ctx.fill()
+            ctx.beginPath(); ctx.arc(cx, cy, 2.5, 0, Math.PI * 2); ctx.fill()
             ctx.restore()
         }
     }
@@ -264,10 +280,10 @@ Rectangle {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
-        anchors.leftMargin: 10
-        anchors.rightMargin: 10
+        anchors.leftMargin: 12
+        anchors.rightMargin: 12
         anchors.bottomMargin: 5
-        height: 27
+        height: 31
         contentWidth: legend.implicitWidth
         contentHeight: height
         clip: true
@@ -275,18 +291,18 @@ Rectangle {
 
         Row {
             id: legend
-            spacing: 15
+            spacing: 18
             height: parent.height
 
             Repeater {
                 model: root.effectiveChannels()
                 Row {
                     required property int modelData
-                    spacing: 4
+                    spacing: 5
                     visible: root.analysis && modelData >= 0
                     Rectangle {
-                        width: 12
-                        height: 2
+                        width: 14
+                        height: 3
                         anchors.verticalCenter: parent.verticalCenter
                         color: root.analysis ? root.analysis.phaseColor(modelData) : "#777"
                     }
@@ -296,9 +312,9 @@ Rectangle {
                               + (phasor.valid
                                  ? "  " + root.formatMagnitude(modelData, phasor.magnitude)
                                    + "  ∠" + phasor.angle.toFixed(1) + "°"
-                                 : "")
-                        color: "#4e565c"
-                        font.pixelSize: 8
+                                 : "  —")
+                        color: "#3f494f"
+                        font.pixelSize: 10
                         anchors.verticalCenter: parent.verticalCenter
                     }
                 }

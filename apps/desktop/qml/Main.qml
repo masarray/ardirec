@@ -22,11 +22,13 @@ ApplicationWindow {
     property var voltageChannels: []
     property var currentChannels: []
     property var otherChannels: []
+    property var configuredDigitalChannels: []
+    property var displayedDigitalChannels: []
     property var phasorVoltageChannels: []
     property var phasorCurrentChannels: []
     property var phasorResidualChannels: []
-    property var reportChannels: []
-    property var displayedDigitalChannels: []
+    property var harmonicChannels: []
+    property var tableChannels: []
     property int measurementChannel: -1
     property int maximumTracks: 24
     property string digitalDisplayMode: "active"
@@ -75,11 +77,16 @@ ApplicationWindow {
         return preferred
     }
 
+    function allDigitalChannels() {
+        let result = []
+        for (let i = 0; i < documentController.digitalCount; ++i) result.push(i)
+        return result
+    }
+
     function defaultPhasorGroup(role) {
         let result = []
-        for (let i = 0; i < documentController.analogCount; ++i) {
+        for (let i = 0; i < documentController.analogCount; ++i)
             if (documentController.analogRole(i) === role) result.push(i)
-        }
         return result
     }
 
@@ -93,9 +100,8 @@ ApplicationWindow {
 
     function defaultResidualGroup() {
         let result = []
-        for (let i = 0; i < documentController.analogCount; ++i) {
+        for (let i = 0; i < documentController.analogCount; ++i)
             if (signalLooksResidual(i)) result.push(i)
-        }
         return result
     }
 
@@ -116,12 +122,13 @@ ApplicationWindow {
 
     function rebuildDigitalGroup() {
         let result = []
-        for (let i = 0; i < documentController.digitalCount; ++i) {
-            if (digitalDisplayMode === "all" || documentController.digitalIsActive(i)) result.push(i)
+        const configured = configuredDigitalChannels || []
+        for (let channel of configured) {
+            if (channel < 0 || channel >= documentController.digitalCount) continue
+            if (digitalDisplayMode === "all" || documentController.digitalIsActive(channel)) result.push(channel)
         }
-        if (digitalDisplayMode === "active" && result.length === 0) {
-            for (let i = 0; i < documentController.digitalCount; ++i) result.push(i)
-        }
+        if (digitalDisplayMode === "active" && result.length === 0 && configured.length > 0)
+            result = configured.slice()
         displayedDigitalChannels = result
     }
 
@@ -129,26 +136,33 @@ ApplicationWindow {
         waveformZoom = 1.0
         waveformPan = 0.0
         visibleChannels = defaultVisibleChannels()
+        configuredDigitalChannels = allDigitalChannels()
         phasorVoltageChannels = defaultPhasorGroup("Voltage")
         phasorCurrentChannels = defaultPhasorGroup("Current")
         phasorResidualChannels = defaultResidualGroup()
-        reportChannels = visibleChannels.slice()
+        harmonicChannels = visibleChannels.slice()
+        tableChannels = visibleChannels.slice()
         measurementChannel = visibleChannels.length ? visibleChannels[0] : -1
         rebuildAnalogGroups()
         rebuildDigitalGroup()
+        locusAnalysisProxy.invalidate()
         focusTrigger()
         timeSignals.resetScroll()
     }
 
-    function applySignalConfiguration(timeChannels, voltageGroup, currentGroup, residualGroup, reportGroup) {
+    function applySignalConfiguration(timeChannels, digitalChannels, voltageGroup, currentGroup,
+                                      residualGroup, harmonicsGroup, tableGroup) {
         visibleChannels = timeChannels.slice(0, maximumTracks)
+        configuredDigitalChannels = digitalChannels.slice()
         phasorVoltageChannels = voltageGroup.slice()
         phasorCurrentChannels = currentGroup.slice()
         phasorResidualChannels = residualGroup.slice()
-        reportChannels = reportGroup.slice()
+        harmonicChannels = harmonicsGroup.slice()
+        tableChannels = tableGroup.slice()
         rebuildAnalogGroups()
-        if (measurementChannel < 0 || visibleChannels.indexOf(measurementChannel) < 0)
-            measurementChannel = visibleChannels.length ? visibleChannels[0] : -1
+        rebuildDigitalGroup()
+        if (measurementChannel < 0 || (tableChannels.indexOf(measurementChannel) < 0 && visibleChannels.indexOf(measurementChannel) < 0))
+            measurementChannel = tableChannels.length ? tableChannels[0] : (visibleChannels.length ? visibleChannels[0] : -1)
         timeSignals.resetScroll()
     }
 
@@ -224,7 +238,7 @@ ApplicationWindow {
     Drawer {
         id: signalDrawer
         edge: Qt.RightEdge
-        width: Math.min(1020, window.width * 0.82)
+        width: Math.min(1220, window.width * 0.92)
         height: window.height
         modal: true
         interactive: true
@@ -235,18 +249,27 @@ ApplicationWindow {
             anchors.fill: parent
             document: documentController
             analysis: analysisController
-            channels: documentController.channels
             analogCount: documentController.analogCount
+            digitalCount: documentController.digitalCount
             visibleChannels: window.visibleChannels
+            configuredDigitalChannels: window.configuredDigitalChannels
             phasorVoltageChannels: window.phasorVoltageChannels
             phasorCurrentChannels: window.phasorCurrentChannels
             phasorResidualChannels: window.phasorResidualChannels
-            reportChannels: window.reportChannels
+            harmonicChannels: window.harmonicChannels
+            tableChannels: window.tableChannels
             maximumTracks: window.maximumTracks
-            onConfigurationApplied: (timeChannels, voltageGroup, currentGroup, residualGroup, reportGroup) =>
-                                        window.applySignalConfiguration(timeChannels, voltageGroup, currentGroup, residualGroup, reportGroup)
+            onConfigurationApplied: (timeChannels, digitalChannels, voltageGroup, currentGroup, residualGroup, harmonicsGroup, tableGroup) =>
+                                        window.applySignalConfiguration(timeChannels, digitalChannels, voltageGroup, currentGroup,
+                                                                        residualGroup, harmonicsGroup, tableGroup)
             onCloseRequested: signalDrawer.close()
         }
+    }
+
+    LocusAnalysisProxy {
+        id: locusAnalysisProxy
+        source: analysisController
+        document: documentController
     }
 
     ColumnLayout {
@@ -301,7 +324,7 @@ ApplicationWindow {
 
         HarmonicCursorNavigator {
             Layout.fillWidth: true
-            Layout.preferredHeight: visible ? 32 : 0
+            Layout.preferredHeight: visible ? 36 : 0
             visible: window.hasRecord && (window.viewMode === "harmonics" || window.viewMode === "table")
             document: documentController
             viewStart: window.viewStart
@@ -376,7 +399,7 @@ ApplicationWindow {
                 anchors.fill: parent
                 visible: window.hasRecord && window.viewMode === "locus"
                 document: documentController
-                analysis: window.viewMode === "locus" ? analysisController : null
+                analysis: window.viewMode === "locus" ? locusAnalysisProxy : null
                 viewStart: window.viewStart
                 visibleDuration: window.visibleDuration
                 cursorATime: window.cursorATime
@@ -389,7 +412,7 @@ ApplicationWindow {
                 document: documentController
                 analysis: window.viewMode === "harmonics" ? analysisController : null
                 snapshot: window.viewMode === "harmonics" ? harmonicSnapshotController : null
-                visibleChannels: window.visibleChannels
+                visibleChannels: window.harmonicChannels
                 cursorTime: window.cursorATime
             }
 
@@ -399,7 +422,7 @@ ApplicationWindow {
                 document: documentController
                 analysis: window.viewMode === "table" ? analysisController : null
                 snapshot: window.viewMode === "table" ? tableSnapshotController : null
-                visibleChannels: window.visibleChannels
+                visibleChannels: window.tableChannels
                 cursorTime: window.cursorATime
                 valueRepresentation: documentController.valueRepresentation
                 selectedChannel: window.measurementChannel
@@ -415,13 +438,11 @@ ApplicationWindow {
             Layout.preferredHeight: 26
             color: "#ededed"
             border.color: "#bcbcbc"
-
             RowLayout {
                 anchors.fill: parent
                 anchors.leftMargin: 8
                 anchors.rightMargin: 8
                 spacing: 12
-
                 Label {
                     text: documentController.error.length ? documentController.error : documentController.recordHealth
                     color: documentController.error.length ? "#a62a2a" : "#555555"
@@ -433,8 +454,7 @@ ApplicationWindow {
                     text: "View " + ((window.viewStart - documentController.triggerOffsetSeconds) * 1000.0).toFixed(2)
                           + " … " + ((window.viewEnd - documentController.triggerOffsetSeconds) * 1000.0).toFixed(2)
                           + " ms · zoom " + window.waveformZoom.toFixed(2) + "×"
-                    color: "#5c5c5c"
-                    font.pixelSize: 8
+                    color: "#5c5c5c"; font.pixelSize: 8
                 }
                 Rectangle { visible: window.hasRecord; width: 1; height: 14; color: "#c0c0c0" }
                 Label {
@@ -442,29 +462,22 @@ ApplicationWindow {
                     text: (documentController.valueRepresentation === "primary" ? "PRIMARY" : "SECONDARY")
                           + " · " + documentController.transformerRatioSummary
                     color: documentController.transformerRatiosAvailable ? "#4f585f" : "#8a6d3b"
-                    font.pixelSize: 8
-                    elide: Text.ElideRight
-                    Layout.maximumWidth: 330
+                    font.pixelSize: 8; elide: Text.ElideRight; Layout.maximumWidth: 330
                 }
                 Item { Layout.fillWidth: true }
                 Label {
                     text: window.viewMode === "time"
                           ? "Wheel scroll · Ctrl+wheel zoom · values live in each signal lane"
                           : window.viewMode === "phasor"
-                            ? "C1/C2 shown simultaneously · groups come from Signal Configuration"
+                            ? "C1/C2 simultaneous comparison · groups from Signal Configuration"
                           : window.viewMode === "harmonics"
-                            ? "Single Harmonic Cursor · snap to digital edges · full H0/H1/Hn spectra"
+                            ? "Single analysis cursor · 1-cycle DFT · matrix-selected scope"
                             : window.viewMode === "table"
-                              ? "Single Table Cursor · cached one-cycle snapshot · abnormal-first sort/filter"
-                              : "C1/C2 share one investigation context across every view"
-                    color: "#666666"
-                    font.pixelSize: 8
+                              ? "Single analysis cursor · cached snapshot · matrix-selected scope"
+                              : "C1/C2 share one investigation context across views"
+                    color: "#666666"; font.pixelSize: 8
                 }
-                Label {
-                    text: "ardirec " + Qt.application.version
-                    color: "#777777"
-                    font.pixelSize: 8
-                }
+                Label { text: "ardirec " + Qt.application.version; color: "#777777"; font.pixelSize: 8 }
             }
         }
     }
