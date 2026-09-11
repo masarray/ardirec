@@ -17,6 +17,8 @@ Rectangle {
     property var phasorVoltageChannels: []
     property var phasorCurrentChannels: []
     property var phasorResidualChannels: []
+    // Reserved for the future report engine. It intentionally has no UI control until export exists,
+    // so the matrix contains only assignments that have an immediate visible effect.
     property var reportChannels: []
 
     signal configurationApplied(var timeChannels,
@@ -41,27 +43,27 @@ Rectangle {
     function looksResidual(index) {
         if (!root.document) return false
         const name = root.document.channelName(index).trim().toUpperCase().replace(/[^A-Z0-9]/g, "")
-        const phase = root.channelPhase(index)
-        return phase === "E" || name.indexOf("3I0") >= 0 || name.indexOf("3U0") >= 0
-                || name.indexOf("3V0") >= 0 || name === "I0" || name === "U0" || name === "V0"
-                || name.endsWith("IN") || name.endsWith("UN") || name.endsWith("VN")
+        return name.indexOf("3I0") >= 0 || name.indexOf("3U0") >= 0 || name.indexOf("3V0") >= 0
+                || name === "I0" || name === "U0" || name === "V0"
+                || name.indexOf("RESIDUAL") >= 0 || name.indexOf("RESID") >= 0
     }
 
     function reloadConfiguration() {
         rows.clear()
         if (!root.document) return
         for (let i = 0; i < root.analogCount; ++i) {
+            const timeEnabled = root.contains(root.visibleChannels, i)
             rows.append({
                 channelIndex: i,
                 signalName: root.document.channelName(i),
                 unitName: root.document.channelUnit(i),
                 roleName: root.channelRole(i),
                 phaseName: root.channelPhase(i),
-                timeChecked: root.contains(root.visibleChannels, i),
+                timeChecked: timeEnabled,
                 voltageChecked: root.contains(root.phasorVoltageChannels, i),
                 currentChecked: root.contains(root.phasorCurrentChannels, i),
                 residualChecked: root.contains(root.phasorResidualChannels, i),
-                reportChecked: root.contains(root.reportChannels, i)
+                reportChecked: root.contains(root.reportChannels, i) || timeEnabled
             })
         }
     }
@@ -139,7 +141,7 @@ Rectangle {
                         font.weight: Font.DemiBold
                     }
                     Label {
-                        text: "Assign each recorded signal to Time, Phasor and Report workspaces"
+                        text: "Build the Time layout and Phasor vector groups from one assignment matrix"
                         color: "#69727a"
                         font.pixelSize: 9
                     }
@@ -199,7 +201,8 @@ Rectangle {
                 Label {
                     text: root.collect("timeChecked", 0).length + " Time · "
                           + root.collect("voltageChecked", 0).length + " V · "
-                          + root.collect("currentChecked", 0).length + " I"
+                          + root.collect("currentChecked", 0).length + " I · "
+                          + root.collect("residualChecked", 0).length + " Residual"
                     color: "#5d666e"
                     font.pixelSize: 9
                 }
@@ -217,12 +220,11 @@ Rectangle {
                 anchors.leftMargin: 12
                 anchors.rightMargin: 12
                 spacing: 0
-                Label { Layout.fillWidth: true; text: "SIGNAL"; color: "#566069"; font.pixelSize: 8; font.weight: Font.DemiBold; font.letterSpacing: 0.7 }
-                Label { Layout.preferredWidth: 78; text: "TIME"; horizontalAlignment: Text.AlignHCenter; color: "#566069"; font.pixelSize: 8; font.weight: Font.DemiBold }
-                Label { Layout.preferredWidth: 92; text: "PHASOR V"; horizontalAlignment: Text.AlignHCenter; color: "#566069"; font.pixelSize: 8; font.weight: Font.DemiBold }
-                Label { Layout.preferredWidth: 92; text: "PHASOR I"; horizontalAlignment: Text.AlignHCenter; color: "#566069"; font.pixelSize: 8; font.weight: Font.DemiBold }
-                Label { Layout.preferredWidth: 92; text: "RESIDUAL"; horizontalAlignment: Text.AlignHCenter; color: "#566069"; font.pixelSize: 8; font.weight: Font.DemiBold }
-                Label { Layout.preferredWidth: 78; text: "REPORT"; horizontalAlignment: Text.AlignHCenter; color: "#566069"; font.pixelSize: 8; font.weight: Font.DemiBold }
+                Label { Layout.fillWidth: true; text: "SIGNAL / ORDER"; color: "#566069"; font.pixelSize: 8; font.weight: Font.DemiBold; font.letterSpacing: 0.7 }
+                Label { Layout.preferredWidth: 82; text: "TIME"; horizontalAlignment: Text.AlignHCenter; color: "#566069"; font.pixelSize: 8; font.weight: Font.DemiBold }
+                Label { Layout.preferredWidth: 100; text: "PHASOR V"; horizontalAlignment: Text.AlignHCenter; color: "#566069"; font.pixelSize: 8; font.weight: Font.DemiBold }
+                Label { Layout.preferredWidth: 100; text: "PHASOR I"; horizontalAlignment: Text.AlignHCenter; color: "#566069"; font.pixelSize: 8; font.weight: Font.DemiBold }
+                Label { Layout.preferredWidth: 100; text: "RESIDUAL"; horizontalAlignment: Text.AlignHCenter; color: "#566069"; font.pixelSize: 8; font.weight: Font.DemiBold }
             }
         }
 
@@ -271,7 +273,27 @@ Rectangle {
 
                     RowLayout {
                         Layout.fillWidth: true
-                        spacing: 8
+                        spacing: 6
+                        ToolButton {
+                            text: "↑"
+                            enabled: row.index > 0 && filter.text.length === 0
+                            Layout.preferredWidth: 22
+                            Layout.preferredHeight: 24
+                            font.pixelSize: 10
+                            onClicked: rows.move(row.index, row.index - 1, 1)
+                            ToolTip.visible: hovered
+                            ToolTip.text: "Move signal up in workspace order"
+                        }
+                        ToolButton {
+                            text: "↓"
+                            enabled: row.index < rows.count - 1 && filter.text.length === 0
+                            Layout.preferredWidth: 22
+                            Layout.preferredHeight: 24
+                            font.pixelSize: 10
+                            onClicked: rows.move(row.index, row.index + 1, 1)
+                            ToolTip.visible: hovered
+                            ToolTip.text: "Move signal down in workspace order"
+                        }
                         Rectangle {
                             width: 4
                             height: 24
@@ -300,29 +322,27 @@ Rectangle {
                     }
 
                     CheckBox {
-                        Layout.preferredWidth: 78
+                        Layout.preferredWidth: 82
                         checked: row.timeChecked
-                        onToggled: rows.setProperty(row.index, "timeChecked", checked)
+                        onToggled: {
+                            rows.setProperty(row.index, "timeChecked", checked)
+                            rows.setProperty(row.index, "reportChecked", checked)
+                        }
                     }
                     CheckBox {
-                        Layout.preferredWidth: 92
+                        Layout.preferredWidth: 100
                         checked: row.voltageChecked
                         onToggled: rows.setProperty(row.index, "voltageChecked", checked)
                     }
                     CheckBox {
-                        Layout.preferredWidth: 92
+                        Layout.preferredWidth: 100
                         checked: row.currentChecked
                         onToggled: rows.setProperty(row.index, "currentChecked", checked)
                     }
                     CheckBox {
-                        Layout.preferredWidth: 92
+                        Layout.preferredWidth: 100
                         checked: row.residualChecked
                         onToggled: rows.setProperty(row.index, "residualChecked", checked)
-                    }
-                    CheckBox {
-                        Layout.preferredWidth: 78
-                        checked: row.reportChecked
-                        onToggled: rows.setProperty(row.index, "reportChecked", checked)
                     }
                 }
 
@@ -349,12 +369,12 @@ Rectangle {
                 ColumnLayout {
                     spacing: 0
                     Label {
-                        text: "Time is limited to " + root.maximumTracks + " visible analog lanes. Phasor/Report assignments are independent."
+                        text: "Time is limited to " + root.maximumTracks + " visible analog lanes. Row order becomes workspace order."
                         color: "#59636b"
                         font.pixelSize: 9
                     }
                     Label {
-                        text: "Residual is intended for IN/UN/I0/3I0-style signals; derived sequence quantities will be added separately."
+                        text: "Only working assignments are shown; report/export controls appear when the report engine is available."
                         color: "#7a8288"
                         font.pixelSize: 8
                     }
