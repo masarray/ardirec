@@ -15,7 +15,7 @@ Rectangle {
     property int maximumOrder: 15
     property string displayMode: "percent"
     property string spectrumMode: "full"
-    property string scopeMode: "electrical"
+    property string scopeMode: "visible"
     property string valueRepresentation: document ? document.valueRepresentation : "secondary"
 
     function phaseRank(channelIndex) {
@@ -39,17 +39,17 @@ Rectangle {
         return channels
     }
     function buildChannels() {
-        const visibleDependency = root.visibleChannels
+        const configured = root.visibleChannels ? root.visibleChannels.slice() : []
         if (!document) return []
         if (scopeMode === "voltage") return orderedRole("Voltage")
         if (scopeMode === "current") return orderedRole("Current")
-        if (scopeMode === "visible") return visibleDependency ? visibleDependency.slice() : []
         if (scopeMode === "all") {
             let all = []
             for (let i = 0; i < document.analogCount; ++i) all.push(i)
             return all
         }
-        return orderedRole("Voltage").concat(orderedRole("Current"))
+        if (scopeMode === "electrical") return orderedRole("Voltage").concat(orderedRole("Current"))
+        return configured
     }
 
     readonly property var displayedChannels: buildChannels()
@@ -62,113 +62,76 @@ Rectangle {
 
         Rectangle {
             Layout.fillWidth: true
-            Layout.preferredHeight: 38
-            color: "#e8ebed"
-            border.color: "#c4c9cd"
-
+            Layout.preferredHeight: 52
+            color: "#e7eaed"
+            border.color: "#bec5ca"
             RowLayout {
                 anchors.fill: parent
-                anchors.leftMargin: 8
-                anchors.rightMargin: 8
-                spacing: 4
+                anchors.leftMargin: 10
+                anchors.rightMargin: 10
+                spacing: 7
 
-                Label {
-                    text: "HARMONICS"
-                    color: "#343c43"
-                    font.pixelSize: 9
-                    font.weight: Font.DemiBold
-                    font.letterSpacing: 0.7
-                }
-                Label {
-                    text: displayedChannels.length + " signals · " + voltageCount + " V · " + currentCount + " I"
-                    color: "#6d757b"
-                    font.pixelSize: 7
-                }
-
-                Rectangle { width: 1; height: 20; color: "#c1c6ca"; Layout.leftMargin: 4; Layout.rightMargin: 2 }
-                Label { text: "SCOPE"; color: "#687078"; font.pixelSize: 7; font.weight: Font.DemiBold }
-                Repeater {
-                    model: [
-                        {id:"electrical", text:"Electrical"},
-                        {id:"voltage", text:"Voltage"},
-                        {id:"current", text:"Current"},
-                        {id:"visible", text:"Visible"},
-                        {id:"all", text:"All"}
-                    ]
-                    ToolButton {
-                        required property var modelData
-                        text: modelData.text
-                        checkable: true
-                        checked: root.scopeMode === modelData.id
-                        font.pixelSize: 7
-                        onClicked: root.scopeMode = modelData.id
+                ColumnLayout {
+                    spacing: 0
+                    Label { text: "HARMONICS"; color: "#29333a"; font.pixelSize: 12; font.weight: Font.DemiBold; font.letterSpacing: 0.5 }
+                    Label {
+                        text: displayedChannels.length + " displayed · " + voltageCount + " voltage · " + currentCount + " current"
+                        color: "#657078"; font.pixelSize: 9
                     }
                 }
+                Rectangle { width: 1; height: 30; color: "#c0c6ca"; Layout.leftMargin: 4; Layout.rightMargin: 3 }
 
-                Rectangle { width: 1; height: 20; color: "#c1c6ca"; Layout.leftMargin: 2; Layout.rightMargin: 2 }
-                Label { text: "SPECTRUM"; color: "#687078"; font.pixelSize: 7; font.weight: Font.DemiBold }
-                ToolButton { text: "Full"; checkable: true; checked: root.spectrumMode === "full"; font.pixelSize: 7; onClicked: root.spectrumMode = "full" }
-                ToolButton { text: "Distortion"; checkable: true; checked: root.spectrumMode === "distortion"; font.pixelSize: 7; onClicked: root.spectrumMode = "distortion" }
+                Label { text: "Scope"; color: "#56626b"; font.pixelSize: 9; font.weight: Font.DemiBold }
+                ComboBox {
+                    Layout.preferredWidth: 116; Layout.preferredHeight: 30; font.pixelSize: 10
+                    model: ["Configured", "Electrical", "Voltage", "Current", "All analog"]
+                    currentIndex: ["visible", "electrical", "voltage", "current", "all"].indexOf(root.scopeMode)
+                    onActivated: root.scopeMode = ["visible", "electrical", "voltage", "current", "all"][currentIndex]
+                }
 
-                Rectangle { width: 1; height: 20; color: "#c1c6ca"; Layout.leftMargin: 2; Layout.rightMargin: 2 }
-                Label { text: "VALUES"; color: "#687078"; font.pixelSize: 7; font.weight: Font.DemiBold }
-                ToolButton { text: "% H1"; checkable: true; checked: root.displayMode === "percent"; font.pixelSize: 7; onClicked: root.displayMode = "percent" }
-                ToolButton { text: "RMS"; checkable: true; checked: root.displayMode === "rms"; font.pixelSize: 7; onClicked: root.displayMode = "rms" }
+                Label { text: "Spectrum"; color: "#56626b"; font.pixelSize: 9; font.weight: Font.DemiBold; Layout.leftMargin: 4 }
+                ToolButton { text: "Full"; checkable: true; checked: root.spectrumMode === "full"; font.pixelSize: 10; onClicked: root.spectrumMode = "full" }
+                ToolButton { text: "Distortion"; checkable: true; checked: root.spectrumMode === "distortion"; font.pixelSize: 10; onClicked: root.spectrumMode = "distortion" }
 
-                Rectangle { width: 1; height: 20; color: "#c1c6ca"; Layout.leftMargin: 2; Layout.rightMargin: 2 }
-                Label { text: "ORDER"; color: "#687078"; font.pixelSize: 7; font.weight: Font.DemiBold }
-                Repeater {
-                    model: [10, 15, 25, 50]
-                    ToolButton {
-                        required property int modelData
-                        text: "H" + modelData
-                        checkable: true
-                        checked: root.maximumOrder === modelData
-                        font.pixelSize: 7
-                        onClicked: root.maximumOrder = modelData
-                    }
+                Label { text: "Values"; color: "#56626b"; font.pixelSize: 9; font.weight: Font.DemiBold; Layout.leftMargin: 4 }
+                ToolButton { text: "% of H1"; checkable: true; checked: root.displayMode === "percent"; font.pixelSize: 10; onClicked: root.displayMode = "percent" }
+                ToolButton { text: "RMS"; checkable: true; checked: root.displayMode === "rms"; font.pixelSize: 10; onClicked: root.displayMode = "rms" }
+
+                Label { text: "To"; color: "#56626b"; font.pixelSize: 9; font.weight: Font.DemiBold; Layout.leftMargin: 4 }
+                ComboBox {
+                    Layout.preferredWidth: 72; Layout.preferredHeight: 30; font.pixelSize: 10
+                    model: ["H10", "H15", "H25", "H50"]
+                    currentIndex: [10, 15, 25, 50].indexOf(root.maximumOrder)
+                    onActivated: root.maximumOrder = [10, 15, 25, 50][currentIndex]
                 }
 
                 Item { Layout.fillWidth: true }
                 Label {
-                    text: (root.valueRepresentation === "primary" ? "PRIMARY" : "SECONDARY")
-                          + " · 1 cursor · 1-cycle trailing DFT"
-                    color: "#53616b"
-                    font.pixelSize: 7
-                    font.weight: Font.DemiBold
+                    text: root.valueRepresentation === "primary" ? "PRIMARY" : "SECONDARY"
+                    color: "#4d5c66"; font.pixelSize: 9; font.weight: Font.DemiBold
                 }
             }
         }
 
         Rectangle {
             Layout.fillWidth: true
-            Layout.preferredHeight: 24
-            color: "#f7f8f9"
-            border.color: "#d5d9dc"
+            Layout.preferredHeight: 34
+            color: "#f8f9fa"
+            border.color: "#d3d8dc"
             RowLayout {
                 anchors.fill: parent
-                anchors.leftMargin: 8
-                anchors.rightMargin: 8
-                spacing: 10
+                anchors.leftMargin: 10
+                anchors.rightMargin: 10
+                spacing: 12
+                Rectangle { width: 8; height: 8; radius: 4; color: "#244f9e" }
                 Label {
-                    text: document
-                          ? "Cursor " + ((root.cursorTime - document.triggerOffsetSeconds) * 1000.0).toFixed(3) + " ms"
-                          : "Cursor —"
-                    color: "#244f9e"
-                    font.pixelSize: 8
-                    font.weight: Font.DemiBold
+                    text: document ? "Cursor 1  " + ((root.cursorTime - document.triggerOffsetSeconds) * 1000.0).toFixed(3) + " ms" : "Cursor 1 —"
+                    color: "#244f9e"; font.pixelSize: 10; font.weight: Font.DemiBold
                 }
-                Label {
-                    text: "Full = H0/DC + H1 + H2… · bar labels show %H1 and engineering magnitude when space permits"
-                    color: "#687078"
-                    font.pixelSize: 7
-                }
+                Rectangle { width: 1; height: 18; color: "#d0d5d9" }
+                Label { text: "Full-cycle DFT · RMS harmonic magnitude · THD uses H2…Hn"; color: "#56626b"; font.pixelSize: 9 }
                 Item { Layout.fillWidth: true }
-                Label {
-                    text: "Scroll keeps spectra virtualized; moving the harmonic cursor does not change scope or scroll position"
-                    color: "#7a8288"
-                    font.pixelSize: 7
-                }
+                Label { text: "Hover a bar for magnitude, %H1, frequency and angle"; color: "#717b82"; font.pixelSize: 9 }
             }
         }
 
@@ -178,17 +141,17 @@ Rectangle {
             Layout.fillHeight: true
             clip: true
             model: root.displayedChannels
-            spacing: 2
+            spacing: 5
             boundsBehavior: Flickable.StopAtBounds
-            cacheBuffer: height * 0.7
+            cacheBuffer: height
             reuseItems: true
-            ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded; width: 10 }
+            ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded; width: 12 }
 
             delegate: HarmonicDiagram {
                 required property int modelData
-                width: spectrumList.width - 12
-                x: 2
-                height: 128
+                width: spectrumList.width - 14
+                x: 3
+                height: 176
                 document: root.document
                 analysis: root.analysis
                 snapshot: root.snapshot
@@ -199,6 +162,17 @@ Rectangle {
                 spectrumMode: root.spectrumMode
                 valueRepresentation: root.valueRepresentation
             }
+        }
+
+        Label {
+            visible: root.displayedChannels.length === 0
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
+            text: "No signals are assigned to Harmonics. Open Signals → Signal Configuration…"
+            color: "#657078"
+            font.pixelSize: 12
         }
     }
 }
