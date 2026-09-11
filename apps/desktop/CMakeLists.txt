@@ -56,6 +56,16 @@ qt_add_qml_module(ardirec
         qml/icons/zoom-in.svg
         qml/icons/zoom-out.svg
         qml/icons/triangle-alert.svg
+        qml/icons/activity.svg
+        qml/icons/circle-dot.svg
+        qml/icons/chart-column.svg
+        qml/icons/table-2.svg
+        qml/icons/layers-3.svg
+        qml/icons/trash-2.svg
+        qml/icons/eye.svg
+        qml/icons/shield-check.svg
+        qml/icons/minus.svg
+        qml/icons/plus.svg
 )
 
 target_link_libraries(ardirec PRIVATE
