@@ -22,13 +22,16 @@ ApplicationWindow {
     property var voltageChannels: []
     property var currentChannels: []
     property var otherChannels: []
+    property var phasorVoltageChannels: []
+    property var phasorCurrentChannels: []
+    property var phasorResidualChannels: []
+    property var reportChannels: []
     property var displayedDigitalChannels: []
     property int measurementChannel: -1
     property int maximumTracks: 24
     property string digitalDisplayMode: "active"
     property string viewMode: "time"
     property string timeDisplayMode: "instantaneous"
-    property int activeAnalysisCursor: 1
     property real axisWidth: 170
     property real analogTrackHeight: 148
     property real digitalTrackHeight: 28
@@ -42,7 +45,7 @@ ApplicationWindow {
 
     function clamp(value, lo, hi) { return Math.max(lo, Math.min(hi, value)) }
     function viewLabel() {
-        if (viewMode === "phasor") return "PHASOR DIAGRAM"
+        if (viewMode === "phasor") return "PHASOR · C1/C2"
         if (viewMode === "locus") return "LOCUS / R-X"
         if (viewMode === "harmonics") return "HARMONICS"
         if (viewMode === "table") return "ENGINEERING TABLE"
@@ -70,6 +73,30 @@ ApplicationWindow {
             for (let i = 0; i < Math.min(6, documentController.analogCount); ++i) preferred.push(i)
         }
         return preferred
+    }
+
+    function defaultPhasorGroup(role) {
+        let result = []
+        for (let i = 0; i < documentController.analogCount; ++i) {
+            if (documentController.analogRole(i) === role) result.push(i)
+        }
+        return result
+    }
+
+    function signalLooksResidual(index) {
+        const phase = analysisController.channelPhase(index)
+        const name = documentController.channelName(index).trim().toUpperCase().replace(/[^A-Z0-9]/g, "")
+        return phase === "E" || name.indexOf("3I0") >= 0 || name.indexOf("3U0") >= 0
+                || name.indexOf("3V0") >= 0 || name === "I0" || name === "U0" || name === "V0"
+                || name.endsWith("IN") || name.endsWith("UN") || name.endsWith("VN")
+    }
+
+    function defaultResidualGroup() {
+        let result = []
+        for (let i = 0; i < documentController.analogCount; ++i) {
+            if (signalLooksResidual(i)) result.push(i)
+        }
+        return result
     }
 
     function rebuildAnalogGroups() {
@@ -102,10 +129,26 @@ ApplicationWindow {
         waveformZoom = 1.0
         waveformPan = 0.0
         visibleChannels = defaultVisibleChannels()
+        phasorVoltageChannels = defaultPhasorGroup("Voltage")
+        phasorCurrentChannels = defaultPhasorGroup("Current")
+        phasorResidualChannels = defaultResidualGroup()
+        reportChannels = visibleChannels.slice()
         measurementChannel = visibleChannels.length ? visibleChannels[0] : -1
         rebuildAnalogGroups()
         rebuildDigitalGroup()
         focusTrigger()
+        timeSignals.resetScroll()
+    }
+
+    function applySignalConfiguration(timeChannels, voltageGroup, currentGroup, residualGroup, reportGroup) {
+        visibleChannels = timeChannels.slice(0, maximumTracks)
+        phasorVoltageChannels = voltageGroup.slice()
+        phasorCurrentChannels = currentGroup.slice()
+        phasorResidualChannels = residualGroup.slice()
+        reportChannels = reportGroup.slice()
+        rebuildAnalogGroups()
+        if (measurementChannel < 0 || visibleChannels.indexOf(measurementChannel) < 0)
+            measurementChannel = visibleChannels.length ? visibleChannels[0] : -1
         timeSignals.resetScroll()
     }
 
@@ -154,24 +197,7 @@ ApplicationWindow {
                       : 0
     }
 
-    function toggleVisibleChannel(index, enabled) {
-        if (index < 0 || index >= documentController.analogCount) return
-        let next = visibleChannels.slice()
-        const position = next.indexOf(index)
-        if (enabled && position < 0) {
-            if (next.length >= maximumTracks) return
-            next.push(index)
-        } else if (!enabled && position >= 0) {
-            next.splice(position, 1)
-        }
-        visibleChannels = next
-        rebuildAnalogGroups()
-        if (measurementChannel < 0 || visibleChannels.indexOf(measurementChannel) < 0)
-            measurementChannel = visibleChannels.length ? visibleChannels[0] : -1
-    }
-
     onDigitalDisplayModeChanged: rebuildDigitalGroup()
-    onViewModeChanged: if (viewMode === "harmonics" || viewMode === "table") activeAnalysisCursor = 1
 
     FileDialog {
         id: openDialog
@@ -198,18 +224,27 @@ ApplicationWindow {
     Drawer {
         id: signalDrawer
         edge: Qt.RightEdge
-        width: Math.min(360, window.width * 0.34)
+        width: Math.min(1020, window.width * 0.82)
         height: window.height
-        modal: false
+        modal: true
         interactive: true
+        onOpened: signalMatrix.reloadConfiguration()
 
         SignalSidebar {
+            id: signalMatrix
             anchors.fill: parent
+            document: documentController
+            analysis: analysisController
             channels: documentController.channels
             analogCount: documentController.analogCount
             visibleChannels: window.visibleChannels
+            phasorVoltageChannels: window.phasorVoltageChannels
+            phasorCurrentChannels: window.phasorCurrentChannels
+            phasorResidualChannels: window.phasorResidualChannels
+            reportChannels: window.reportChannels
             maximumTracks: window.maximumTracks
-            onChannelToggled: (index, enabled) => window.toggleVisibleChannel(index, enabled)
+            onConfigurationApplied: (timeChannels, voltageGroup, currentGroup, residualGroup, reportGroup) =>
+                                        window.applySignalConfiguration(timeChannels, voltageGroup, currentGroup, residualGroup, reportGroup)
             onCloseRequested: signalDrawer.close()
         }
     }
@@ -244,12 +279,10 @@ ApplicationWindow {
             valueRepresentation: documentController.valueRepresentation
             ratioSummary: documentController.transformerRatioSummary
             transformerRatiosAvailable: documentController.transformerRatiosAvailable
-            activeAnalysisCursor: window.activeAnalysisCursor
             hasRecord: window.hasRecord
             onViewRequested: viewName => window.viewMode = viewName
             onTimeDisplayModeRequested: mode => window.timeDisplayMode = mode
             onValueRepresentationRequested: representation => documentController.setValueRepresentation(representation)
-            onActiveAnalysisCursorRequested: cursorNumber => window.activeAnalysisCursor = cursorNumber
         }
 
         CursorNavigator {
@@ -334,7 +367,9 @@ ApplicationWindow {
                 analysis: window.viewMode === "phasor" ? analysisController : null
                 cursorATime: window.cursorATime
                 cursorBTime: window.cursorBTime
-                activeCursor: window.activeAnalysisCursor
+                voltageChannels: window.phasorVoltageChannels
+                currentChannels: window.phasorCurrentChannels
+                residualChannels: window.phasorResidualChannels
             }
 
             LocusView {
@@ -414,12 +449,14 @@ ApplicationWindow {
                 Item { Layout.fillWidth: true }
                 Label {
                     text: window.viewMode === "time"
-                          ? "Wheel scroll · Ctrl+wheel zoom · C1/C2 snap to digital edges"
+                          ? "Wheel scroll · Ctrl+wheel zoom · values live in each signal lane"
+                          : window.viewMode === "phasor"
+                            ? "C1/C2 shown simultaneously · groups come from Signal Configuration"
                           : window.viewMode === "harmonics"
                             ? "Single Harmonic Cursor · snap to digital edges · full H0/H1/Hn spectra"
                             : window.viewMode === "table"
-                              ? "Single Table Cursor · cached one-cycle snapshot · abnormal-first sort/filter · click row to carry signal context"
-                              : "C1/C2 use one shared investigation context across every view"
+                              ? "Single Table Cursor · cached one-cycle snapshot · abnormal-first sort/filter"
+                              : "C1/C2 share one investigation context across every view"
                     color: "#666666"
                     font.pixelSize: 8
                 }
