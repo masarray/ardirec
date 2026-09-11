@@ -356,9 +356,34 @@ Rectangle {
                 anchors.rightMargin: 10
                 spacing: 7
                 Label { visible:root.distanceMode; text:"kL"; color:"#56626b"; font.pixelSize:10; font.weight:Font.DemiBold }
-                TextField { visible:root.distanceMode; Layout.preferredWidth:64; Layout.preferredHeight:28; text:root.kLMagnitude.toFixed(4); horizontalAlignment:TextInput.AlignRight; font.pixelSize:10; validator:DoubleValidator{bottom:0.0}; onEditingFinished:if(root.zoneController)root.zoneController.groundingFactorMagnitude=Number(text) }
+                TextField {
+                    visible: root.distanceMode
+                    Layout.preferredWidth: 64
+                    Layout.preferredHeight: 28
+                    text: root.kLMagnitude.toFixed(4)
+                    horizontalAlignment: TextInput.AlignRight
+                    font.pixelSize: 10
+                    validator: DoubleValidator {
+                        bottom: 0.0
+                        notation: DoubleValidator.StandardNotation
+                    }
+                    onEditingFinished: if (root.zoneController) root.zoneController.groundingFactorMagnitude = Number(text)
+                }
                 Label { visible:root.distanceMode; text:"∠"; color:"#56626b"; font.pixelSize:10 }
-                TextField { visible:root.distanceMode; Layout.preferredWidth:58; Layout.preferredHeight:28; text:root.kLAngle.toFixed(2); horizontalAlignment:TextInput.AlignRight; font.pixelSize:10; validator:DoubleValidator{bottom:-360;top:360}; onEditingFinished:if(root.zoneController)root.zoneController.groundingFactorAngle=Number(text) }
+                TextField {
+                    visible: root.distanceMode
+                    Layout.preferredWidth: 58
+                    Layout.preferredHeight: 28
+                    text: root.kLAngle.toFixed(2)
+                    horizontalAlignment: TextInput.AlignRight
+                    font.pixelSize: 10
+                    validator: DoubleValidator {
+                        bottom: -360
+                        top: 360
+                        notation: DoubleValidator.StandardNotation
+                    }
+                    onEditingFinished: if (root.zoneController) root.zoneController.groundingFactorAngle = Number(text)
+                }
                 Label { visible:root.distanceMode; text:"° · " + (root.zoneController ? root.zoneController.groundingFactorSource : "manual"); color:"#657078"; font.pixelSize:9 }
                 Label { visible:root.distanceMode && (!root.zoneController || !root.zoneController.groundingFactorValid || Math.abs(root.kLMagnitude)<1e-12); text:"UNCOMPENSATED EARTH LOOPS"; color:"#9a5c00"; font.pixelSize:9; font.weight:Font.DemiBold }
                 Rectangle { visible:root.distanceMode; width:1; height:22; color:"#d0d5d9"; Layout.leftMargin:3; Layout.rightMargin:3 }
