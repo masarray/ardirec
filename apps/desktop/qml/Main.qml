@@ -45,6 +45,39 @@ ApplicationWindow {
     readonly property real viewStart: documentController.dataStartSeconds + waveformPan * movableDuration
     readonly property real viewEnd: viewStart + visibleDuration
 
+    menuBar: WorkstationMenuBar { actions: appActions }
+
+    AppActions {
+        id: appActions
+        hasRecord: window.hasRecord
+        diagnosticCount: documentController.diagnosticCount
+        currentView: window.viewMode
+        timeDisplayMode: window.timeDisplayMode
+        valueRepresentation: documentController.valueRepresentation
+        fullScreen: window.visibility === Window.FullScreen
+
+        onOpenRequested: openDialog.open()
+        onOpenRecentRequested: url => {
+            appActions.noteRecentFile(url)
+            documentController.openCfg(url)
+        }
+        onPropertiesRequested: topBar.showProperties()
+        onDiagnosticsRequested: topBar.showDiagnostics()
+        onSignalsRequested: signalDrawer.open()
+        onFitRequested: window.fitRecord()
+        onTriggerRequested: window.focusTrigger()
+        onZoomInRequested: window.zoomAround(1.4, 0.5)
+        onZoomOutRequested: window.zoomAround(1.0 / 1.4, 0.5)
+        onViewRequested: viewName => window.viewMode = viewName
+        onWaveformModeRequested: mode => window.timeDisplayMode = mode
+        onValueRepresentationRequested: representation => documentController.setValueRepresentation(representation)
+        onFullScreenRequested: {
+            if (window.visibility === Window.FullScreen) window.showNormal()
+            else window.showFullScreen()
+        }
+        onAboutRequested: topBar.showAbout()
+    }
+
     function clamp(value, lo, hi) { return Math.max(lo, Math.min(hi, value)) }
     function viewLabel() {
         if (viewMode === "phasor") return "PHASOR · C1/C2"
@@ -217,16 +250,11 @@ ApplicationWindow {
         id: openDialog
         title: "Open COMTRADE configuration"
         nameFilters: ["COMTRADE configuration (*.cfg *.CFG)"]
-        onAccepted: documentController.openCfg(selectedFile)
+        onAccepted: {
+            appActions.noteRecentFile(selectedFile.toString())
+            documentController.openCfg(selectedFile)
+        }
     }
-
-    Shortcut { sequence: StandardKey.Open; onActivated: openDialog.open() }
-    Shortcut { sequence: "Ctrl+0"; onActivated: fitRecord() }
-    Shortcut { sequence: "1"; onActivated: if (hasRecord) viewMode = "time" }
-    Shortcut { sequence: "2"; onActivated: if (hasRecord) viewMode = "phasor" }
-    Shortcut { sequence: "3"; onActivated: if (hasRecord) viewMode = "locus" }
-    Shortcut { sequence: "4"; onActivated: if (hasRecord) viewMode = "harmonics" }
-    Shortcut { sequence: "5"; onActivated: if (hasRecord) viewMode = "table" }
 
     Connections {
         target: documentController
@@ -277,35 +305,24 @@ ApplicationWindow {
         spacing: 0
 
         TopBar {
+            id: topBar
             Layout.fillWidth: true
             document: documentController
+            actions: appActions
             recordTitle: documentController.title
-            recordMetadata: documentController.metadata
             currentViewLabel: window.viewLabel()
             hasRecord: window.hasRecord
-            cursorATime: window.cursorATime
-            cursorBTime: window.cursorBTime
-            triggerOffsetSeconds: documentController.triggerOffsetSeconds
-            nominalFrequency: documentController.nominalFrequency
-            onOpenRequested: openDialog.open()
-            onSignalsRequested: signalDrawer.open()
-            onFitRequested: window.fitRecord()
-            onTriggerRequested: window.focusTrigger()
-            onZoomInRequested: window.zoomAround(1.4, 0.5)
-            onZoomOutRequested: window.zoomAround(1.0 / 1.4, 0.5)
         }
 
         ViewModeBar {
             Layout.fillWidth: true
+            actions: appActions
             currentView: window.viewMode
             timeDisplayMode: window.timeDisplayMode
             valueRepresentation: documentController.valueRepresentation
             ratioSummary: documentController.transformerRatioSummary
             transformerRatiosAvailable: documentController.transformerRatiosAvailable
             hasRecord: window.hasRecord
-            onViewRequested: viewName => window.viewMode = viewName
-            onTimeDisplayModeRequested: mode => window.timeDisplayMode = mode
-            onValueRepresentationRequested: representation => documentController.setValueRepresentation(representation)
         }
 
         CursorNavigator {
@@ -433,52 +450,13 @@ ApplicationWindow {
             }
         }
 
-        Rectangle {
+        WorkstationStatusBar {
             Layout.fillWidth: true
-            Layout.preferredHeight: 26
-            color: "#ededed"
-            border.color: "#bcbcbc"
-            RowLayout {
-                anchors.fill: parent
-                anchors.leftMargin: 8
-                anchors.rightMargin: 8
-                spacing: 12
-                Label {
-                    text: documentController.error.length ? documentController.error : documentController.recordHealth
-                    color: documentController.error.length ? "#a62a2a" : "#555555"
-                    font.pixelSize: 8
-                }
-                Rectangle { width: 1; height: 14; color: "#c0c0c0" }
-                Label {
-                    visible: window.hasRecord
-                    text: "View " + ((window.viewStart - documentController.triggerOffsetSeconds) * 1000.0).toFixed(2)
-                          + " … " + ((window.viewEnd - documentController.triggerOffsetSeconds) * 1000.0).toFixed(2)
-                          + " ms · zoom " + window.waveformZoom.toFixed(2) + "×"
-                    color: "#5c5c5c"; font.pixelSize: 8
-                }
-                Rectangle { visible: window.hasRecord; width: 1; height: 14; color: "#c0c0c0" }
-                Label {
-                    visible: window.hasRecord
-                    text: (documentController.valueRepresentation === "primary" ? "PRIMARY" : "SECONDARY")
-                          + " · " + documentController.transformerRatioSummary
-                    color: documentController.transformerRatiosAvailable ? "#4f585f" : "#8a6d3b"
-                    font.pixelSize: 8; elide: Text.ElideRight; Layout.maximumWidth: 330
-                }
-                Item { Layout.fillWidth: true }
-                Label {
-                    text: window.viewMode === "time"
-                          ? "Wheel scroll · Ctrl+wheel zoom · values live in each signal lane"
-                          : window.viewMode === "phasor"
-                            ? "C1/C2 simultaneous comparison · groups from Signal Configuration"
-                          : window.viewMode === "harmonics"
-                            ? "Single analysis cursor · 1-cycle DFT · matrix-selected scope"
-                            : window.viewMode === "table"
-                              ? "Single analysis cursor · cached snapshot · matrix-selected scope"
-                              : "C1/C2 share one investigation context across views"
-                    color: "#666666"; font.pixelSize: 8
-                }
-                Label { text: "ardirec " + Qt.application.version; color: "#777777"; font.pixelSize: 8 }
-            }
+            document: documentController
+            hasRecord: window.hasRecord
+            viewStart: window.viewStart
+            viewEnd: window.viewEnd
+            zoomFactor: window.waveformZoom
         }
     }
 }
