@@ -12,6 +12,18 @@ constexpr double kPi = 3.141592653589793238462643383279502884;
     return std::isfinite(value.real()) && std::isfinite(value.imag());
 }
 
+[[nodiscard]] bool has_minimum_finite_samples(const DocumentController& document,
+                                              int channelIndex,
+                                              std::size_t first,
+                                              std::size_t end) noexcept {
+    std::size_t finiteCount = 0;
+    for (std::size_t i = first; i < end; ++i) {
+        if (!std::isfinite(document.recordedAnalogSampleAt(channelIndex, i))) continue;
+        if (++finiteCount >= 4) return true;
+    }
+    return false;
+}
+
 [[nodiscard]] QVariantMap invalid_sequence_snapshot(const QString& role) {
     return {{QStringLiteral("valid"), false},
             {QStringLiteral("role"), role},
@@ -65,6 +77,11 @@ QVariantMap AnalysisController::sequenceComponentsAt(const QString& role,
 
     const auto [first, end] = oneCycleWindow(absoluteTimeSeconds);
     if (end <= first || end - first < 4) return invalid_sequence_snapshot(normalizedRole);
+    if (!has_minimum_finite_samples(*m_document, l1, first, end)
+        || !has_minimum_finite_samples(*m_document, l2, first, end)
+        || !has_minimum_finite_samples(*m_document, l3, first, end)) {
+        return invalid_sequence_snapshot(normalizedRole);
+    }
 
     const ardirec::power::ThreePhasePhasors phases{
         phasorComplex(l1, absoluteTimeSeconds, 1),
