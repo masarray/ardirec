@@ -6,6 +6,7 @@ add_library(ardirec_core STATIC
     src/comtrade/channel_semantics.cpp
     src/comtrade/value_representation.cpp
     src/power/harmonics.cpp
+    src/power/symmetrical_components.cpp
     src/power/waveform_metrics.cpp
     src/distance/distance.cpp
     src/distance/rio.cpp

@@ -52,6 +52,12 @@ ardirec_set_warnings(ardirec_power_tests)
 ardirec_enable_sanitizers(ardirec_power_tests)
 add_test(NAME ardirec_power_tests COMMAND ardirec_power_tests)
 
+add_executable(ardirec_symmetrical_component_tests test_symmetrical_components.cpp)
+target_link_libraries(ardirec_symmetrical_component_tests PRIVATE ardirec::core)
+ardirec_set_warnings(ardirec_symmetrical_component_tests)
+ardirec_enable_sanitizers(ardirec_symmetrical_component_tests)
+add_test(NAME ardirec_symmetrical_component_tests COMMAND ardirec_symmetrical_component_tests)
+
 add_executable(ardirec_distance_tests test_distance.cpp)
 target_link_libraries(ardirec_distance_tests PRIVATE ardirec::core)
 target_compile_definitions(ardirec_distance_tests PRIVATE ARDIREC_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
