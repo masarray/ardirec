@@ -23,6 +23,7 @@ Rectangle {
     readonly property real residualVoltageScale: sharedScale(residualVoltageChannels)
     readonly property real residualCurrentScale: sharedScale(residualCurrentChannels)
     readonly property real residualOtherScale: sharedScale(residualOtherChannels)
+    readonly property bool sequenceAvailable: hasThreePhase("Voltage") || hasThreePhase("Current")
     readonly property var groupModel: [
         { title: "VOLTAGE", subtitle: "phase / neutral voltage vectors", channels: voltageChannels, scale: voltageScale },
         { title: "CURRENT", subtitle: "phase / neutral current vectors", channels: currentChannels, scale: currentScale },
@@ -42,6 +43,13 @@ Rectangle {
             if (root.document.analogRole(index) === role) result.push(index)
         }
         return result
+    }
+
+    function hasThreePhase(role) {
+        if (!root.analysis) return false
+        return root.analysis.phaseChannel(role, "L1") >= 0
+            && root.analysis.phaseChannel(role, "L2") >= 0
+            && root.analysis.phaseChannel(role, "L3") >= 0
     }
 
     function sharedScale(channels) {
@@ -157,6 +165,93 @@ Rectangle {
                 id: groupColumn
                 width: scroller.width
                 spacing: 8
+
+                Rectangle {
+                    width: groupColumn.width
+                    height: root.sequenceAvailable ? 132 : 0
+                    visible: height > 0
+                    color: "#eef1f3"
+                    border.color: "#c5cbd0"
+                    radius: 2
+
+                    Rectangle {
+                        id: sequenceHeader
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        height: 30
+                        color: "#e8ecef"
+                        border.color: "#c9ced2"
+
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: 10
+                            anchors.rightMargin: 10
+                            spacing: 8
+                            Label {
+                                text: "SEQUENCE COMPONENTS"
+                                color: "#30383e"
+                                font.pixelSize: 9
+                                font.weight: Font.DemiBold
+                                font.letterSpacing: 0.6
+                            }
+                            Rectangle {
+                                Layout.preferredWidth: 58
+                                Layout.preferredHeight: 16
+                                radius: 2
+                                color: "#f3f5f7"
+                                border.color: "#cbd3d9"
+                                Label {
+                                    anchors.centerIn: parent
+                                    text: "DERIVED"
+                                    color: "#64717a"
+                                    font.pixelSize: 7
+                                    font.weight: Font.Bold
+                                }
+                            }
+                            Label {
+                                text: "Fortescue V1/V2/V0 and I1/I2/I0 from recorded L1/L2/L3 fundamental phasors"
+                                color: "#798087"
+                                font.pixelSize: 8
+                            }
+                            Item { Layout.fillWidth: true }
+                            Label {
+                                text: "V2/V1 · I2/I1 unbalance"
+                                color: "#697178"
+                                font.pixelSize: 8
+                            }
+                        }
+                    }
+
+                    RowLayout {
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.top: sequenceHeader.bottom
+                        anchors.bottom: parent.bottom
+                        anchors.margins: 6
+                        spacing: 6
+
+                        SequenceSummary {
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            document: root.document
+                            analysis: root.analysis
+                            cursorTime: root.cursorATime
+                            cursorLabel: "C1 · " + root.relativeMs(root.cursorATime).toFixed(3) + " ms"
+                            cursorAccent: "#244f9e"
+                        }
+
+                        SequenceSummary {
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            document: root.document
+                            analysis: root.analysis
+                            cursorTime: root.cursorBTime
+                            cursorLabel: "C2 · " + root.relativeMs(root.cursorBTime).toFixed(3) + " ms"
+                            cursorAccent: "#b77900"
+                        }
+                    }
+                }
 
                 Repeater {
                     model: root.groupModel
