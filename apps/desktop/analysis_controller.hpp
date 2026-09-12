@@ -3,6 +3,7 @@
 
 #include "ardirec/distance/distance.hpp"
 #include "ardirec/power/harmonics.hpp"
+#include "ardirec/power/symmetrical_components.hpp"
 #include "document_controller.hpp"
 
 #include <QObject>
@@ -27,6 +28,8 @@ public:
     Q_INVOKABLE double rmsValue(int channelIndex, double absoluteTimeSeconds) const;
     Q_INVOKABLE QString rmsValueText(int channelIndex, double absoluteTimeSeconds) const;
     Q_INVOKABLE QVariantMap phasorAt(int channelIndex, double absoluteTimeSeconds) const;
+    Q_INVOKABLE QVariantMap sequenceComponentsAt(const QString& role,
+                                                 double absoluteTimeSeconds) const;
     Q_INVOKABLE QVariantMap harmonicSpectrumAt(int channelIndex,
                                                double absoluteTimeSeconds,
                                                int maximumOrder = 15) const;
