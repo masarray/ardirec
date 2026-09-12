@@ -9,6 +9,7 @@ qt_add_executable(ardirec WIN32 MACOSX_BUNDLE
     analysis_controller.cpp
     analysis_controller.hpp
     analysis_cursor_batch.cpp
+    analysis_sequence.cpp
     harmonic_snapshot_controller.cpp
     harmonic_snapshot_controller.hpp
     table_snapshot_controller.cpp
