@@ -14,6 +14,7 @@ Rectangle {
     property real cursorTime: 0.0
     property string cursorLabel: "C1"
     property color cursorAccent: "#244f9e"
+    property real angleOffsetDegrees: 0.0
     property string valueRepresentation: document ? document.valueRepresentation : "secondary"
 
     readonly property var voltageSnapshot: {
@@ -27,6 +28,13 @@ Rectangle {
     readonly property bool hasVoltage: voltageSnapshot && voltageSnapshot.valid
     readonly property bool hasCurrent: currentSnapshot && currentSnapshot.valid
     readonly property bool hasData: hasVoltage || hasCurrent
+
+    function wrapDegrees(value) {
+        let angle = value
+        while (angle <= -180.0) angle += 360.0
+        while (angle > 180.0) angle -= 360.0
+        return angle
+    }
 
     function displayScale(snapshot) {
         if (!root.document || !snapshot || !snapshot.valid || root.valueRepresentation !== "primary") return 1.0
@@ -63,7 +71,8 @@ Rectangle {
         if (!snapshot || !snapshot.valid) return "—"
         const component = snapshot[key]
         if (!component || !component.valid) return "—"
-        const angle = Number.isFinite(component.angle) ? component.angle.toFixed(1) + "°" : "—"
+        const displayAngle = root.wrapDegrees(component.angle + root.angleOffsetDegrees)
+        const angle = Number.isFinite(displayAngle) ? displayAngle.toFixed(1) + "°" : "—"
         return component.name + "  " + root.formatMagnitude(snapshot, component) + "  ∠" + angle
     }
 
