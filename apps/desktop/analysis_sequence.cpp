@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "analysis_controller.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <limits>
 
