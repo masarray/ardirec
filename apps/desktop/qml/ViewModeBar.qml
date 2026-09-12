@@ -9,6 +9,7 @@ Rectangle {
     color: "#e9ecef"
     border.color: "#c4c9ce"
 
+    property var actions
     property string currentView: "time"
     property string timeDisplayMode: "instantaneous"
     property string valueRepresentation: "secondary"
@@ -16,10 +17,6 @@ Rectangle {
     property bool hasRecord: false
     property bool transformerRatiosAvailable: false
     readonly property bool showViewLabels: width >= 1260
-
-    signal viewRequested(string viewName)
-    signal timeDisplayModeRequested(string mode)
-    signal valueRepresentationRequested(string representation)
 
     function viewButtonText(viewName) {
         if (viewName === "time") return "Time Signals"
@@ -37,19 +34,26 @@ Rectangle {
         return "icons/table-2.svg"
     }
 
+    function viewAction(viewName) {
+        if (!root.actions) return null
+        if (viewName === "time") return root.actions.timeView
+        if (viewName === "phasor") return root.actions.phasorView
+        if (viewName === "locus") return root.actions.locusView
+        if (viewName === "harmonics") return root.actions.harmonicsView
+        return root.actions.tableView
+    }
+
     component ViewButton: ToolButton {
         id: control
         required property string viewName
         property string labelText: root.viewButtonText(viewName)
         property url iconSource: root.viewIcon(viewName)
+        action: root.viewAction(viewName)
         checkable: true
-        checked: root.currentView === viewName
-        enabled: root.hasRecord
         hoverEnabled: true
         Layout.preferredWidth: root.showViewLabels ? Math.max(80, contentRow.implicitWidth + 20) : 40
         Layout.preferredHeight: 36
         padding: 0
-        onClicked: root.viewRequested(viewName)
 
         contentItem: Item {
             implicitWidth: contentRow.implicitWidth
@@ -114,12 +118,18 @@ Rectangle {
             spacing: 3
             Label { text: "Waveform"; color: "#626c74"; font.pixelSize: 10; font.weight: Font.DemiBold; Layout.rightMargin: 3 }
             ToolButton {
-                text: "Instant"; checkable: true; checked: root.timeDisplayMode === "instantaneous"; enabled: root.hasRecord
-                font.pixelSize: 10; Layout.preferredHeight: 32; onClicked: root.timeDisplayModeRequested("instantaneous")
+                action: root.actions?.waveformInstant ?? null
+                text: "Instant"
+                checkable: true
+                font.pixelSize: 10
+                Layout.preferredHeight: 32
             }
             ToolButton {
-                text: "RMS"; checkable: true; checked: root.timeDisplayMode === "rms"; enabled: root.hasRecord
-                font.pixelSize: 10; Layout.preferredHeight: 32; onClicked: root.timeDisplayModeRequested("rms")
+                action: root.actions?.waveformRms ?? null
+                text: "RMS"
+                checkable: true
+                font.pixelSize: 10
+                Layout.preferredHeight: 32
             }
         }
 
@@ -140,14 +150,22 @@ Rectangle {
             spacing: 3
             Label { text: "VALUES"; color: "#56616a"; font.pixelSize: 9; font.weight: Font.DemiBold; font.letterSpacing: 0.5; Layout.rightMargin: 2 }
             ToolButton {
-                text: "Secondary"; checkable: true; checked: root.valueRepresentation === "secondary"; enabled: root.hasRecord
-                font.pixelSize: 10; Layout.preferredHeight: 32; onClicked: root.valueRepresentationRequested("secondary")
-                ToolTip.visible: hovered; ToolTip.text: root.transformerRatiosAvailable ? root.ratioSummary : "No valid CT/PT ratio metadata; values remain 1:1"
+                action: root.actions?.secondaryValues ?? null
+                text: "Secondary"
+                checkable: true
+                font.pixelSize: 10
+                Layout.preferredHeight: 32
+                ToolTip.visible: hovered
+                ToolTip.text: root.transformerRatiosAvailable ? root.ratioSummary : "No valid CT/PT ratio metadata; values remain 1:1"
             }
             ToolButton {
-                text: "Primary"; checkable: true; checked: root.valueRepresentation === "primary"; enabled: root.hasRecord
-                font.pixelSize: 10; Layout.preferredHeight: 32; onClicked: root.valueRepresentationRequested("primary")
-                ToolTip.visible: hovered; ToolTip.text: root.transformerRatiosAvailable ? root.ratioSummary : "No valid CT/PT ratio metadata; values remain 1:1"
+                action: root.actions?.primaryValues ?? null
+                text: "Primary"
+                checkable: true
+                font.pixelSize: 10
+                Layout.preferredHeight: 32
+                ToolTip.visible: hovered
+                ToolTip.text: root.transformerRatiosAvailable ? root.ratioSummary : "No valid CT/PT ratio metadata; values remain 1:1"
             }
         }
 
