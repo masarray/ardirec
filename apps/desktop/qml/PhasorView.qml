@@ -168,7 +168,7 @@ Rectangle {
 
                 Rectangle {
                     width: groupColumn.width
-                    height: root.sequenceAvailable ? 132 : 0
+                    height: root.sequenceAvailable ? 138 : 0
                     visible: height > 0
                     color: "#eef1f3"
                     border.color: "#c5cbd0"
@@ -239,6 +239,7 @@ Rectangle {
                             cursorTime: root.cursorATime
                             cursorLabel: "C1 · " + root.relativeMs(root.cursorATime).toFixed(3) + " ms"
                             cursorAccent: "#244f9e"
+                            angleOffsetDegrees: 90.0
                         }
 
                         SequenceSummary {
@@ -249,6 +250,7 @@ Rectangle {
                             cursorTime: root.cursorBTime
                             cursorLabel: "C2 · " + root.relativeMs(root.cursorBTime).toFixed(3) + " ms"
                             cursorAccent: "#b77900"
+                            angleOffsetDegrees: 90.0
                         }
                     }
                 }
