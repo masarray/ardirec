@@ -223,6 +223,17 @@ Rectangle {
             }
         }
 
+        SequenceSummary {
+            Layout.fillWidth: true
+            Layout.preferredHeight: hasData ? 92 : 0
+            visible: hasData
+            document: root.document
+            analysis: root.analysis
+            cursorTime: root.cursorTime
+            cursorLabel: "C1 · SEQUENCE COMPONENTS · " + root.relativeMs().toFixed(3) + " ms"
+            cursorAccent: "#244f9e"
+        }
+
         Flickable {
             id: horizontalPan
             Layout.fillWidth: true
