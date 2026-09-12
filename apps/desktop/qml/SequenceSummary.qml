@@ -72,14 +72,14 @@ Rectangle {
         const value = numerator === "negative" ? snapshot.negativePercent : snapshot.zeroPercent
         if (!Number.isFinite(value)) return "—"
         const prefix = snapshot.role === "Voltage" ? "V" : "I"
-        return prefix + (numerator === "negative" ? "2/" : "0/") + prefix + "1  " + value.toFixed(value < 10.0 ? 2 : 1) + "%"
+        return prefix + (numerator === "negative" ? "2/" : "0/") + prefix + "1  "
+               + value.toFixed(value < 10.0 ? 2 : 1) + "%"
     }
 
     component MetricCell: Rectangle {
         required property string valueText
-        property bool emphasize: false
-        color: emphasize ? "#fff7e8" : "#f8fafb"
-        border.color: emphasize ? "#e1bd77" : "#dde3e7"
+        color: "#f8fafb"
+        border.color: "#dde3e7"
         radius: 2
         Label {
             anchors.fill: parent
@@ -87,10 +87,9 @@ Rectangle {
             anchors.rightMargin: 7
             verticalAlignment: Text.AlignVCenter
             text: parent.valueText
-            color: parent.emphasize ? "#7b5607" : "#364149"
+            color: "#364149"
             font.pixelSize: 9
             font.family: "Consolas"
-            font.weight: parent.emphasize ? Font.DemiBold : Font.Normal
             elide: Text.ElideRight
         }
     }
@@ -153,12 +152,7 @@ Rectangle {
             MetricCell { Layout.fillWidth: true; Layout.preferredWidth: 1; valueText: root.componentText(root.voltageSnapshot, "positive") }
             MetricCell { Layout.fillWidth: true; Layout.preferredWidth: 1; valueText: root.componentText(root.voltageSnapshot, "negative") }
             MetricCell { Layout.fillWidth: true; Layout.preferredWidth: 1; valueText: root.componentText(root.voltageSnapshot, "zero") }
-            MetricCell {
-                Layout.preferredWidth: 94
-                valueText: root.ratioText(root.voltageSnapshot, "negative")
-                emphasize: root.voltageSnapshot && Number.isFinite(root.voltageSnapshot.negativePercent)
-                           && root.voltageSnapshot.negativePercent >= 2.0
-            }
+            MetricCell { Layout.preferredWidth: 94; valueText: root.ratioText(root.voltageSnapshot, "negative") }
         }
 
         RowLayout {
@@ -170,12 +164,7 @@ Rectangle {
             MetricCell { Layout.fillWidth: true; Layout.preferredWidth: 1; valueText: root.componentText(root.currentSnapshot, "positive") }
             MetricCell { Layout.fillWidth: true; Layout.preferredWidth: 1; valueText: root.componentText(root.currentSnapshot, "negative") }
             MetricCell { Layout.fillWidth: true; Layout.preferredWidth: 1; valueText: root.componentText(root.currentSnapshot, "zero") }
-            MetricCell {
-                Layout.preferredWidth: 94
-                valueText: root.ratioText(root.currentSnapshot, "negative")
-                emphasize: root.currentSnapshot && Number.isFinite(root.currentSnapshot.negativePercent)
-                           && root.currentSnapshot.negativePercent >= 2.0
-            }
+            MetricCell { Layout.preferredWidth: 94; valueText: root.ratioText(root.currentSnapshot, "negative") }
         }
     }
 }
