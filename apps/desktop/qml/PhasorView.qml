@@ -15,6 +15,10 @@ Rectangle {
     property var currentChannels: []
     property var residualChannels: []
 
+    readonly property var snapshotA: cursorSnapshotController.cursorA
+    readonly property var snapshotB: cursorSnapshotController.cursorB
+    readonly property var displaySnapshotA: snapshotMatches(snapshotA, cursorATime) ? snapshotA : ({valid:false})
+    readonly property var displaySnapshotB: snapshotMatches(snapshotB, cursorBTime) ? snapshotB : ({valid:false})
     readonly property var residualVoltageChannels: filterRole(residualChannels, "Voltage")
     readonly property var residualCurrentChannels: filterRole(residualChannels, "Current")
     readonly property var residualOtherChannels: filterRole(residualChannels, "Other")
@@ -36,12 +40,21 @@ Rectangle {
         return root.document ? (timeSeconds - root.document.triggerOffsetSeconds) * 1000.0 : 0.0
     }
 
+    function snapshotMatches(snapshot, timeSeconds) {
+        return snapshot && snapshot.valid && Number.isFinite(snapshot.time)
+               && Math.abs(Number(snapshot.time) - Number(timeSeconds)) <= 1.0e-10
+    }
+
+    function snapshotRow(snapshot, index) {
+        if (!snapshot || !snapshot.valid || !snapshot.channels || index < 0 || index >= snapshot.channels.length)
+            return ({valid:false})
+        return snapshot.channels[index] || ({valid:false})
+    }
+
     function filterRole(channels, role) {
         let result = []
         if (!root.document || !channels) return result
-        for (let index of channels) {
-            if (root.document.analogRole(index) === role) result.push(index)
-        }
+        for (let index of channels) if (root.document.analogRole(index) === role) result.push(index)
         return result
     }
 
@@ -53,18 +66,27 @@ Rectangle {
     }
 
     function sharedScale(channels) {
-        const representationDependency = root.document ? root.document.valueRepresentation : "secondary"
-        if (!root.analysis || !channels || !channels.length) return 0.0
+        if (!channels || !channels.length) return 0.0
         let maximum = 0.0
         for (let index of channels) {
-            const a = root.analysis.phasorAt(index, root.cursorATime)
-            const b = root.analysis.phasorAt(index, root.cursorBTime)
-            if (a && a.valid && Number.isFinite(a.magnitude)) maximum = Math.max(maximum, a.magnitude)
-            if (b && b.valid && Number.isFinite(b.magnitude)) maximum = Math.max(maximum, b.magnitude)
+            const a = root.snapshotRow(root.displaySnapshotA, index)
+            const b = root.snapshotRow(root.displaySnapshotB, index)
+            if (a.valid && Number.isFinite(a.magnitude)) maximum = Math.max(maximum, a.magnitude)
+            if (b.valid && Number.isFinite(b.magnitude)) maximum = Math.max(maximum, b.magnitude)
         }
-        if (!(maximum > 0.0)) return 0.0
-        return maximum * 1.06
+        return maximum > 0.0 ? maximum * 1.06 : 0.0
     }
+
+    function requestSnapshots() {
+        if (!root.document || !root.visible) return
+        cursorSnapshotController.requestCursorA(root.cursorATime)
+        cursorSnapshotController.requestCursorB(root.cursorBTime)
+    }
+
+    onCursorATimeChanged: if (visible) cursorSnapshotController.requestCursorA(cursorATime)
+    onCursorBTimeChanged: if (visible) cursorSnapshotController.requestCursorB(cursorBTime)
+    onVisibleChanged: if (visible) Qt.callLater(requestSnapshots)
+    Component.onCompleted: if (visible) Qt.callLater(requestSnapshots)
 
     ColumnLayout {
         anchors.fill: parent
@@ -93,7 +115,7 @@ Rectangle {
                         font.weight: Font.DemiBold
                     }
                     Label {
-                        text: "Full-cycle DFT · RMS magnitude · C1/C2 share the same radial scale within each engineering quantity"
+                        text: "Shared async one-cycle DFT snapshot · C1/C2 share the same radial scale within each engineering quantity"
                         color: "#778087"
                         font.pixelSize: 8
                     }
@@ -117,10 +139,7 @@ Rectangle {
                         Item { Layout.fillWidth: true }
                         Label {
                             text: root.relativeMs(root.cursorATime).toFixed(3) + " ms"
-                            color: "#26323d"
-                            font.pixelSize: 10
-                            font.family: "Consolas"
-                            font.weight: Font.DemiBold
+                            color: "#26323d"; font.pixelSize: 10; font.family: "Consolas"; font.weight: Font.DemiBold
                         }
                     }
                 }
@@ -141,10 +160,7 @@ Rectangle {
                         Item { Layout.fillWidth: true }
                         Label {
                             text: root.relativeMs(root.cursorBTime).toFixed(3) + " ms"
-                            color: "#3b3222"
-                            font.pixelSize: 10
-                            font.family: "Consolas"
-                            font.weight: Font.DemiBold
+                            color: "#3b3222"; font.pixelSize: 10; font.family: "Consolas"; font.weight: Font.DemiBold
                         }
                     }
                 }
@@ -188,66 +204,35 @@ Rectangle {
                             anchors.leftMargin: 10
                             anchors.rightMargin: 10
                             spacing: 8
-                            Label {
-                                text: "SEQUENCE COMPONENTS"
-                                color: "#30383e"
-                                font.pixelSize: 9
-                                font.weight: Font.DemiBold
-                                font.letterSpacing: 0.6
-                            }
+                            Label { text: "SEQUENCE COMPONENTS"; color: "#30383e"; font.pixelSize: 9; font.weight: Font.DemiBold; font.letterSpacing: 0.6 }
                             Rectangle {
-                                Layout.preferredWidth: 58
-                                Layout.preferredHeight: 16
-                                radius: 2
-                                color: "#f3f5f7"
-                                border.color: "#cbd3d9"
-                                Label {
-                                    anchors.centerIn: parent
-                                    text: "DERIVED"
-                                    color: "#64717a"
-                                    font.pixelSize: 7
-                                    font.weight: Font.Bold
-                                }
+                                Layout.preferredWidth: 58; Layout.preferredHeight: 16; radius: 2
+                                color: "#f3f5f7"; border.color: "#cbd3d9"
+                                Label { anchors.centerIn: parent; text: "DERIVED"; color: "#64717a"; font.pixelSize: 7; font.weight: Font.Bold }
                             }
-                            Label {
-                                text: "Fortescue V1/V2/V0 and I1/I2/I0 from recorded L1/L2/L3 fundamental phasors"
-                                color: "#798087"
-                                font.pixelSize: 8
-                            }
+                            Label { text: "Fortescue V1/V2/V0 and I1/I2/I0 reuse the shared fundamental snapshot"; color: "#798087"; font.pixelSize: 8 }
                             Item { Layout.fillWidth: true }
-                            Label {
-                                text: "V2/V1 · I2/I1 unbalance"
-                                color: "#697178"
-                                font.pixelSize: 8
-                            }
+                            Label { text: "V2/V1 · I2/I1 unbalance"; color: "#697178"; font.pixelSize: 8 }
                         }
                     }
 
                     RowLayout {
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        anchors.top: sequenceHeader.bottom
-                        anchors.bottom: parent.bottom
-                        anchors.margins: 6
-                        spacing: 6
+                        anchors.left: parent.left; anchors.right: parent.right
+                        anchors.top: sequenceHeader.bottom; anchors.bottom: parent.bottom
+                        anchors.margins: 6; spacing: 6
 
                         SequenceSummary {
-                            Layout.fillWidth: true
-                            Layout.fillHeight: true
+                            Layout.fillWidth: true; Layout.fillHeight: true
                             document: root.document
-                            analysis: root.analysis
-                            cursorTime: root.cursorATime
+                            snapshot: root.displaySnapshotA
                             cursorLabel: "C1 · " + root.relativeMs(root.cursorATime).toFixed(3) + " ms"
                             cursorAccent: "#244f9e"
                             angleOffsetDegrees: 90.0
                         }
-
                         SequenceSummary {
-                            Layout.fillWidth: true
-                            Layout.fillHeight: true
+                            Layout.fillWidth: true; Layout.fillHeight: true
                             document: root.document
-                            analysis: root.analysis
-                            cursorTime: root.cursorBTime
+                            snapshot: root.displaySnapshotB
                             cursorLabel: "C2 · " + root.relativeMs(root.cursorBTime).toFixed(3) + " ms"
                             cursorAccent: "#b77900"
                             angleOffsetDegrees: 90.0
@@ -257,7 +242,6 @@ Rectangle {
 
                 Repeater {
                     model: root.groupModel
-
                     Rectangle {
                         required property int index
                         required property var modelData
@@ -270,69 +254,37 @@ Rectangle {
 
                         Rectangle {
                             id: groupHeader
-                            anchors.left: parent.left
-                            anchors.right: parent.right
-                            anchors.top: parent.top
-                            height: 34
-                            color: "#e8ecef"
-                            border.color: "#c9ced2"
-
+                            anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top
+                            height: 34; color: "#e8ecef"; border.color: "#c9ced2"
                             RowLayout {
-                                anchors.fill: parent
-                                anchors.leftMargin: 10
-                                anchors.rightMargin: 10
-                                spacing: 8
-                                Label {
-                                    text: modelData.title
-                                    color: "#30383e"
-                                    font.pixelSize: 9
-                                    font.weight: Font.DemiBold
-                                    font.letterSpacing: 0.6
-                                }
-                                Label {
-                                    text: modelData.subtitle
-                                    color: "#798087"
-                                    font.pixelSize: 8
-                                }
+                                anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10; spacing: 8
+                                Label { text: modelData.title; color: "#30383e"; font.pixelSize: 9; font.weight: Font.DemiBold; font.letterSpacing: 0.6 }
+                                Label { text: modelData.subtitle; color: "#798087"; font.pixelSize: 8 }
                                 Item { Layout.fillWidth: true }
-                                Label {
-                                    text: modelData.channels.length + " signal" + (modelData.channels.length === 1 ? "" : "s")
-                                    color: "#697178"
-                                    font.pixelSize: 8
-                                }
+                                Label { text: modelData.channels.length + " signal" + (modelData.channels.length === 1 ? "" : "s"); color: "#697178"; font.pixelSize: 8 }
                             }
                         }
 
                         RowLayout {
-                            anchors.left: parent.left
-                            anchors.right: parent.right
-                            anchors.top: groupHeader.bottom
-                            anchors.bottom: parent.bottom
-                            anchors.margins: 6
-                            spacing: 6
+                            anchors.left: parent.left; anchors.right: parent.right
+                            anchors.top: groupHeader.bottom; anchors.bottom: parent.bottom
+                            anchors.margins: 6; spacing: 6
 
                             PhasorDiagram {
-                                Layout.fillWidth: true
-                                Layout.fillHeight: true
-                                Layout.minimumWidth: 360
-                                document: root.document
-                                analysis: root.analysis
+                                Layout.fillWidth: true; Layout.fillHeight: true; Layout.minimumWidth: 360
+                                document: root.document; analysis: root.analysis
+                                snapshot: root.displaySnapshotA
                                 channels: modelData.channels
                                 title: "C1 · " + modelData.title
-                                cursorTime: root.cursorATime
                                 scaleMagnitude: modelData.scale
                                 cursorAccent: "#244f9e"
                             }
-
                             PhasorDiagram {
-                                Layout.fillWidth: true
-                                Layout.fillHeight: true
-                                Layout.minimumWidth: 360
-                                document: root.document
-                                analysis: root.analysis
+                                Layout.fillWidth: true; Layout.fillHeight: true; Layout.minimumWidth: 360
+                                document: root.document; analysis: root.analysis
+                                snapshot: root.displaySnapshotB
                                 channels: modelData.channels
                                 title: "C2 · " + modelData.title
-                                cursorTime: root.cursorBTime
                                 scaleMagnitude: modelData.scale
                                 cursorAccent: "#b77900"
                             }
