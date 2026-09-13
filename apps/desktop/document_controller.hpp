@@ -20,6 +20,10 @@
 #include <vector>
 
 struct LoadedDocumentData;
+namespace ardirec::desktop {
+class AnalogLodPyramid;
+class RmsTileCache;
+}
 
 class DocumentController final : public QObject {
     Q_OBJECT
@@ -97,6 +101,12 @@ public:
     [[nodiscard]] std::shared_ptr<const ardirec::comtrade::IndexedDatFile> dataStoreSnapshot() const { return m_datStore; }
     [[nodiscard]] std::shared_ptr<const ardirec::comtrade::AnalogLodIndex> analogLodSnapshot() const {
         return m_datStore ? m_datStore->analogLodSnapshot() : nullptr;
+    }
+    [[nodiscard]] std::shared_ptr<const ardirec::desktop::AnalogLodPyramid> analogLodPyramidSnapshot() const {
+        return m_analogLodPyramid;
+    }
+    [[nodiscard]] std::shared_ptr<ardirec::desktop::RmsTileCache> rmsTileCacheSnapshot() const {
+        return m_rmsTileCache;
     }
     [[nodiscard]] double recordedAnalogSampleAt(int channelIndex, std::size_t frameIndex) const noexcept;
     [[nodiscard]] bool recordedDigitalSampleAt(int channelIndex, std::size_t frameIndex) const noexcept;
@@ -177,6 +187,8 @@ private:
     std::shared_ptr<std::atomic_bool> m_activeLoadCancel;
     std::shared_ptr<const ardirec::comtrade::IndexedDatFile> m_datStore;
     std::shared_ptr<const std::vector<double>> m_timeSeconds{std::make_shared<const std::vector<double>>()};
+    std::shared_ptr<const ardirec::desktop::AnalogLodPyramid> m_analogLodPyramid;
+    std::shared_ptr<ardirec::desktop::RmsTileCache> m_rmsTileCache;
     std::vector<ardirec::comtrade::AnalogChannel> m_channelConfigs;
     std::vector<ardirec::comtrade::AnalogRole> m_analogRoles;
     std::vector<ardirec::comtrade::PhaseRole> m_phaseRoles;
