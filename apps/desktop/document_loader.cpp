@@ -2,20 +2,29 @@
 #include "document_loader.hpp"
 
 #include "ardirec/comtrade/bundle.hpp"
+#include "ardirec/comtrade/channel_semantics.hpp"
 #include "ardirec/comtrade/parser.hpp"
 
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <complex>
+#include <cstdio>
 #include <fstream>
 #include <iterator>
+#include <limits>
+#include <optional>
 #include <sstream>
+#include <utility>
+#include <vector>
 
 namespace {
 
 constexpr std::uintmax_t kMaximumCfgBytes = 32u * 1024u * 1024u;
 constexpr std::uintmax_t kMaximumHeaderPreviewBytes = 4u * 1024u * 1024u;
 constexpr std::string_view kNormalMmapDiagnostic = "DAT access: read-only memory map.";
+constexpr std::size_t kMaximumFrequencySamples = 8192u;
+constexpr double kPi = 3.141592653589793238462643383279502884;
 
 std::string join_diagnostics(const std::vector<std::string>& diagnostics) {
     std::ostringstream out;
@@ -122,6 +131,207 @@ void retain_safe_time_prefix(ardirec::comtrade::DatIndexSummary& index,
         index.digital_edge_times.end());
 }
 
+std::optional<double> time_of_day_seconds(const std::string& raw) {
+    const auto comma = raw.find(',');
+    if (comma == std::string::npos || comma + 1u >= raw.size()) return std::nullopt;
+    int hour = 0;
+    int minute = 0;
+    double second = 0.0;
+    if (std::sscanf(raw.c_str() + static_cast<std::ptrdiff_t>(comma + 1u), "%d:%d:%lf",
+                    &hour, &minute, &second) != 3) {
+        return std::nullopt;
+    }
+    if (hour < 0 || hour > 23 || minute < 0 || minute > 59
+        || !std::isfinite(second) || second < 0.0 || second >= 60.0) {
+        return std::nullopt;
+    }
+    return static_cast<double>(hour * 3600 + minute * 60) + second;
+}
+
+std::optional<double> trigger_relative_seconds(const ardirec::comtrade::RecordConfig& config,
+                                               double recordDuration) {
+    const auto start = time_of_day_seconds(config.start_time.raw);
+    const auto trigger = time_of_day_seconds(config.trigger_time.raw);
+    if (!start || !trigger || !std::isfinite(recordDuration) || recordDuration <= 0.0) return std::nullopt;
+    double delta = *trigger - *start;
+    if (delta < -0.5) delta += 24.0 * 3600.0;
+    if (delta < -1.0e-6 || delta > recordDuration + 1.0e-3) return std::nullopt;
+    return std::clamp(delta, 0.0, recordDuration);
+}
+
+struct PhaseTriplet final {
+    std::array<int, 3> channel{{-1, -1, -1}};
+    const char* provenance{nullptr};
+
+    [[nodiscard]] bool complete() const noexcept {
+        return channel[0] >= 0 && channel[1] >= 0 && channel[2] >= 0;
+    }
+};
+
+PhaseTriplet phase_triplet(const ardirec::comtrade::RecordConfig& config,
+                           ardirec::comtrade::AnalogRole wantedRole,
+                           const char* provenance) {
+    PhaseTriplet result;
+    result.provenance = provenance;
+    for (std::size_t index = 0; index < config.analog_channels.size(); ++index) {
+        const auto& definition = config.analog_channels[index];
+        if (ardirec::comtrade::analog_role(definition) != wantedRole) continue;
+        int slot = -1;
+        switch (ardirec::comtrade::phase_role(definition)) {
+        case ardirec::comtrade::PhaseRole::L1: slot = 0; break;
+        case ardirec::comtrade::PhaseRole::L2: slot = 1; break;
+        case ardirec::comtrade::PhaseRole::L3: slot = 2; break;
+        default: break;
+        }
+        if (slot >= 0 && result.channel[static_cast<std::size_t>(slot)] < 0) {
+            result.channel[static_cast<std::size_t>(slot)] = static_cast<int>(index);
+        }
+    }
+    return result;
+}
+
+struct FrequencyEstimate final {
+    bool valid{false};
+    double hz{0.0};
+    std::string provenance;
+};
+
+FrequencyEstimate estimate_triplet_frequency(
+    const ardirec::comtrade::IndexedDatFile& data,
+    const std::vector<double>& times,
+    const PhaseTriplet& triplet,
+    double windowStart,
+    double windowEnd,
+    double nominalFrequency,
+    const std::shared_ptr<std::atomic_bool>& cancel) {
+    FrequencyEstimate result;
+    if (!triplet.complete() || times.size() < 8 || !(windowEnd > windowStart)
+        || !(nominalFrequency > 1.0)) {
+        return result;
+    }
+
+    const auto beginIt = std::lower_bound(times.begin(), times.end(), windowStart);
+    const auto endIt = std::upper_bound(times.begin(), times.end(), windowEnd);
+    const std::size_t begin = static_cast<std::size_t>(std::distance(times.begin(), beginIt));
+    const std::size_t end = static_cast<std::size_t>(std::distance(times.begin(), endIt));
+    if (end <= begin + 7u) return result;
+
+    const std::size_t available = end - begin;
+    const std::size_t stride = std::max<std::size_t>(1u,
+        (available + kMaximumFrequencySamples - 1u) / kMaximumFrequencySamples);
+    const std::complex<double> a{-0.5, std::sqrt(3.0) * 0.5};
+    const std::complex<double> a2 = a * a;
+
+    struct Point final { double time; double angle; double magnitude; };
+    std::vector<Point> points;
+    points.reserve(std::min<std::size_t>(available, kMaximumFrequencySamples));
+    double maximumMagnitude = 0.0;
+    for (std::size_t index = begin; index < end; index += stride) {
+        if (cancel && (points.size() & 255u) == 0u && cancel->load(std::memory_order_relaxed)) return {};
+        const double l1 = data.analogValue(index, static_cast<std::size_t>(triplet.channel[0]));
+        const double l2 = data.analogValue(index, static_cast<std::size_t>(triplet.channel[1]));
+        const double l3 = data.analogValue(index, static_cast<std::size_t>(triplet.channel[2]));
+        if (!std::isfinite(l1) || !std::isfinite(l2) || !std::isfinite(l3)) continue;
+        const std::complex<double> space = (2.0 / 3.0) * (std::complex<double>{l1, 0.0}
+                                                   + a * l2 + a2 * l3);
+        const double magnitude = std::abs(space);
+        if (!std::isfinite(magnitude)) continue;
+        maximumMagnitude = std::max(maximumMagnitude, magnitude);
+        points.push_back({times[index], std::atan2(space.imag(), space.real()), magnitude});
+    }
+    if (points.size() < 8 || !(maximumMagnitude > 1.0e-12)) return result;
+
+    const double magnitudeFloor = maximumMagnitude * 0.05;
+    std::vector<std::pair<double, double>> unwrapped;
+    unwrapped.reserve(points.size());
+    bool haveAngle = false;
+    double previousRaw = 0.0;
+    double running = 0.0;
+    for (const auto& point : points) {
+        if (point.magnitude < magnitudeFloor) continue;
+        if (!haveAngle) {
+            previousRaw = point.angle;
+            running = point.angle;
+            haveAngle = true;
+        } else {
+            running += std::remainder(point.angle - previousRaw, 2.0 * kPi);
+            previousRaw = point.angle;
+        }
+        unwrapped.emplace_back(point.time, running);
+    }
+    if (unwrapped.size() < 8) return result;
+
+    const double span = unwrapped.back().first - unwrapped.front().first;
+    if (!(span >= 2.0 / nominalFrequency)) return result;
+
+    long double sumT = 0.0L;
+    long double sumA = 0.0L;
+    long double sumTT = 0.0L;
+    long double sumTA = 0.0L;
+    const double origin = unwrapped.front().first;
+    for (const auto& [time, angle] : unwrapped) {
+        const long double t = static_cast<long double>(time - origin);
+        const long double y = static_cast<long double>(angle);
+        sumT += t;
+        sumA += y;
+        sumTT += t * t;
+        sumTA += t * y;
+    }
+    const long double n = static_cast<long double>(unwrapped.size());
+    const long double denominator = n * sumTT - sumT * sumT;
+    if (std::abs(denominator) <= 1.0e-18L) return result;
+    const long double slope = (n * sumTA - sumT * sumA) / denominator;
+    const long double intercept = (sumA - slope * sumT) / n;
+    const double frequency = std::abs(static_cast<double>(slope)) / (2.0 * kPi);
+    if (!std::isfinite(frequency)
+        || frequency < nominalFrequency * 0.80
+        || frequency > nominalFrequency * 1.20) {
+        return result;
+    }
+
+    long double squaredResidual = 0.0L;
+    for (const auto& [time, angle] : unwrapped) {
+        const long double t = static_cast<long double>(time - origin);
+        const long double residual = static_cast<long double>(angle) - (intercept + slope * t);
+        squaredResidual += residual * residual;
+    }
+    const double rmsResidual = std::sqrt(static_cast<double>(squaredResidual / n));
+    if (!std::isfinite(rmsResidual) || rmsResidual > 0.20) return result;
+
+    result.valid = true;
+    result.hz = frequency;
+    result.provenance = triplet.provenance ? triplet.provenance : "PREFault estimated";
+    return result;
+}
+
+FrequencyEstimate estimate_prefault_frequency(
+    const ardirec::comtrade::RecordConfig& config,
+    const ardirec::comtrade::IndexedDatFile& data,
+    const std::vector<double>& times,
+    const std::shared_ptr<std::atomic_bool>& cancel) {
+    FrequencyEstimate result;
+    const double nominal = config.nominal_frequency > 1.0 ? config.nominal_frequency : 50.0;
+    if (times.size() < 8) return result;
+    const double duration = times.back() - times.front();
+    const auto triggerRelative = trigger_relative_seconds(config, duration);
+    if (!triggerRelative) return result;
+
+    const double period = 1.0 / nominal;
+    const double triggerTime = times.front() + *triggerRelative;
+    const double windowEnd = triggerTime - 0.25 * period;
+    const double windowStart = std::max(times.front(), windowEnd - 6.0 * period);
+    if (!(windowEnd - windowStart >= 2.0 * period)) return result;
+
+    const PhaseTriplet voltage = phase_triplet(config, ardirec::comtrade::AnalogRole::Voltage,
+                                                "PREFault estimated · voltage V1");
+    result = estimate_triplet_frequency(data, times, voltage, windowStart, windowEnd, nominal, cancel);
+    if (result.valid) return result;
+
+    const PhaseTriplet current = phase_triplet(config, ardirec::comtrade::AnalogRole::Current,
+                                                "PREFault estimated · current I1");
+    return estimate_triplet_frequency(data, times, current, windowStart, windowEnd, nominal, cancel);
+}
+
 } // namespace
 
 std::shared_ptr<LoadedDocumentData>
@@ -193,6 +403,30 @@ loadDocumentData(const std::filesystem::path& cfgPath,
         if (index.time_seconds.size() != result->dat->frameCount()) {
             result->diagnostics.emplace_back(
                 "DAT time index covers a valid prefix rather than the full physical frame count.");
+        }
+
+        const double nominal = result->config.nominal_frequency > 1.0
+                                   ? result->config.nominal_frequency : 50.0;
+        result->calculation_frequency_hz = nominal;
+        result->calculation_frequency_provenance = "COMTRADE nominal";
+        const auto estimated = estimate_prefault_frequency(result->config, *result->dat,
+                                                            index.time_seconds, cancel);
+        if (estimated.valid) {
+            result->calculation_frequency_hz = estimated.hz;
+            result->calculation_frequency_provenance = estimated.provenance;
+        }
+        {
+            std::ostringstream diagnostic;
+            diagnostic.setf(std::ios::fixed);
+            diagnostic.precision(4);
+            diagnostic << "Calculation frequency: " << result->calculation_frequency_hz
+                       << " Hz (" << result->calculation_frequency_provenance << ").";
+            result->diagnostics.push_back(diagnostic.str());
+        }
+
+        if (cancel && cancel->load(std::memory_order_relaxed)) {
+            result->cancelled = true;
+            return result;
         }
 
         // Build all record-sized visual indexing in this worker. Level 0 remains
