@@ -26,6 +26,8 @@ Full-record RMS, phasor sweeps, locus generation, large transforms, and export w
 
 Consumers at one cursor position reuse one immutable engineering snapshot. Fundamental V/I phasors sharing a window use one timestamp/window traversal and one trigonometric basis per sample; Sequence, Phasor and distance cursor math reuse those values rather than repeating DFTs.
 
+Multiple visible MDI child windows must share the same document mapping, LOD/RMS caches and scalar snapshot engines. Opening another child is not permission to duplicate record-sized stores or full-record preprocessing.
+
 ### 5. Plot complexity follows pixels, not samples
 
 A 10M-sample record and a 10k-sample record displayed in the same 1600-pixel viewport must have the same order of rendering complexity.
@@ -46,11 +48,15 @@ Dynamic waveform, phasor and locus trajectories use Qt Quick Scene Graph / nativ
 
 Channel role/phase/unit classification belongs at document-load or snapshot-source construction. Repeated DFT/RMS/locus loops operate on integer indices/scales and contiguous numeric storage, not regex, QString normalization or channel scans.
 
-### 9. First-interactive work is demand-driven
+### 9. First-interactive and MDI child work is demand-driven
 
-Application/record startup must not synchronously instantiate every heavyweight engineering workspace. Time Signals is the immediate primary workspace; Phasor, Locus, Harmonics and Engineering Table are created asynchronously on first explicit use and retained for fast return switching.
+Application/record startup must not synchronously instantiate every heavyweight engineering workspace. A newly loaded record starts with one Time Signals child. Additional Time Signals, Phasor, Locus, Harmonics and Engineering Table children are created only on explicit user request; heavyweight non-Time views instantiate asynchronously.
 
-A retained hidden view must be quiescent: it may keep immutable UI state, but it must not continue issuing cursor/trajectory/spectrum jobs while another view is active. Record loading remains visibly non-blocking, and load-to-ready timing is telemetry rather than a cloud-runner hard wall-clock gate.
+The internal MDI layer is Qt Quick scene-graph UI state only. Child geometry, z-order, activation, Cascade and Tile operations must not trigger record traversal or create duplicate document/cache engines. Multiple visible children may legitimately render and consume shared immutable numerical results at the same time.
+
+A minimized child must be quiescent: it may retain lightweight child-local UI state for restore, but it must detach expensive analysis/snapshot inputs and must not retain Time Signals native lane render workers. Closing a child destroys its view host. Record loading remains visibly non-blocking, and load-to-ready timing is telemetry rather than a cloud-runner hard wall-clock gate.
+
+Native `QMdiArea`/`QQuickWidget` embedding is prohibited for the analysis workspace because it would add a QWidget/offscreen-render integration path and can disable the Qt Quick threaded render loop. The MDI remains inside the existing `QQuickWindow` scene graph.
 
 ### 10. Derived time-series data is multi-resolution and reusable
 
@@ -64,6 +70,8 @@ Harmonic and Engineering Table scalar snapshots use compact sampled-window keys 
 
 A record may contain hundreds of channels, but only visible or near-visible Time Signals lanes may own native waveform/digital render workers. Lightweight lane shells may remain for layout continuity; distant lanes must not decode data, run RMS workers, or rebuild geometry. A small prefetch margin is allowed to keep scrolling visually immediate.
 
+A minimized Time Signals MDI child is stronger than an off-screen lane case: its channel models must be detached or otherwise prevented from owning native lane render workers until restore.
+
 ## Release targets
 
 These are product targets, not promises about GitHub-hosted runner wall-clock timing:
@@ -74,7 +82,9 @@ These are product targets, not promises about GitHub-hosted runner wall-clock ti
 - plot vertex count: O(viewport pixels), not O(record samples);
 - waveform overview work: nearest bounded Min/Max LOD level, not repeated full-resolution scanning;
 - RMS display work: shared bounded derived tiles across repeated viewport requests;
-- heavy engineering views: asynchronous first activation, retained/quiescent when hidden;
+- heavy engineering MDI children: asynchronous first creation where applicable; minimized children quiescent;
+- visible MDI children: reuse shared record/cache/snapshot engines rather than duplicating record-sized state;
+- MDI move/resize/activate/Cascade/Tile: bounded UI geometry work, independent of record sample count;
 - off-screen Time Signals lanes: no native render/analysis workers outside a small prefetch margin;
 - large-record design cases: 10M samples, 100+ channels, ~250 MB;
 - background work: cancellable/latest-wins with no stale publication;
@@ -92,17 +102,19 @@ These are product targets, not promises about GitHub-hosted runner wall-clock ti
 - synchronous full-record locus calls from QML;
 - production locus point materialization into per-point QVariant objects;
 - direct raw pointer-rate cursor commits bypassing coalescing;
-- eager construction of all heavyweight engineering views at startup;
+- eager construction of heavyweight engineering views at application/record startup;
+- minimized MDI children retaining active analysis/snapshot/lane-render inputs;
+- replacement of the Qt Quick MDI with `QMdiArea`/`QQuickWidget` embedding;
 - regex/string phase discovery reintroduced into analysis interaction paths;
 - removal of cancellable background snapshot engines or native retained trajectory renderers.
 
-The existing `large-record-contract` benchmark remains mandatory. Measured analysis/frame-time benchmarks should be added where runner variance can be controlled or compared against stable regression baselines.
+The existing `large-record-contract` benchmark remains mandatory. Measured multi-child interaction/frame-time benchmarks should be added where runner variance can be controlled or compared against stable regression baselines; R4 owns the dedicated multi-child runtime qualification.
 
 ## Review rule
 
 A performance-sensitive PR is incomplete until it answers four questions:
 
 1. What work occurs on the GUI/render thread before and after the change?
-2. What is the asymptotic cost with respect to samples, channels and viewport pixels?
-3. How are cancellation and stale-result publication prevented?
+2. What is the asymptotic cost with respect to samples, channels, visible MDI children and viewport pixels?
+3. How are cancellation, quiescence and stale-result publication prevented?
 4. Which CI/test/benchmark proves the architecture and numerical behavior remain valid?
