@@ -21,7 +21,7 @@ class LocusTrajectoryItem : public QQuickItem {
 public:
     explicit LocusTrajectoryItem(QQuickItem* parent = nullptr);
 
-    QObject* source() const { return m_source.data(); }
+    QObject* source() const;
     void setSource(QObject* value);
     bool rawPhase() const { return m_rawPhase; }
     void setRawPhase(bool value);
