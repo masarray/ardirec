@@ -161,6 +161,18 @@ std::pair<std::size_t, std::size_t> one_cycle_window(const std::vector<double>& 
     return {first, end};
 }
 
+bool window_has_status_change(const std::vector<double>& edges,
+                              const std::vector<double>& times,
+                              std::size_t first,
+                              std::size_t end) {
+    if (edges.empty() || first >= end || end > times.size()) return false;
+    constexpr double epsilon = 1.0e-10;
+    const double start = times[first] - epsilon;
+    const double finish = times[end - 1] + epsilon;
+    const auto it = std::lower_bound(edges.begin(), edges.end(), start);
+    return it != edges.end() && *it <= finish;
+}
+
 QVariantMap invalid_distance(const QString& loop, double minimumCurrent) {
     return {{QStringLiteral("valid"), false},
             {QStringLiteral("r"), 0.0},
@@ -176,6 +188,7 @@ QVariantMap invalid_distance(const QString& loop, double minimumCurrent) {
 struct CursorSnapshotSource {
     std::shared_ptr<const ardirec::comtrade::IndexedDatFile> data;
     std::shared_ptr<const std::vector<double>> times;
+    std::shared_ptr<const std::vector<double>> statusEdges;
     std::vector<CursorChannelInfo> channels;
     std::array<int, 3> voltage{{-1, -1, -1}};
     std::array<int, 3> current{{-1, -1, -1}};
@@ -200,6 +213,8 @@ QVariantMap build_cursor_snapshot(const std::shared_ptr<const CursorSnapshotSour
     const double frequency = source->nominalFrequency > 1.0 ? source->nominalFrequency : 50.0;
     const auto [first, end] = one_cycle_window(times, absoluteTimeSeconds, frequency);
     if (first >= end || end - first < 4) return {{QStringLiteral("valid"), false}};
+    const bool statusWindowValid = !source->statusEdges
+                                   || !window_has_status_change(*source->statusEdges, times, first, end);
 
     const std::size_t channelCount = source->channels.size();
     std::vector<std::complex<long double>> accumulators(channelCount, {0.0L, 0.0L});
@@ -270,6 +285,7 @@ QVariantMap build_cursor_snapshot(const std::shared_ptr<const CursorSnapshotSour
             {QStringLiteral("time"), std::clamp(absoluteTimeSeconds, times.front(), times.back())},
             {QStringLiteral("windowFirst"), static_cast<qulonglong>(first)},
             {QStringLiteral("windowEnd"), static_cast<qulonglong>(end)},
+            {QStringLiteral("statusWindowValid"), statusWindowValid},
             {QStringLiteral("channels"), rows},
             {QStringLiteral("semantics"), semantics},
             {QStringLiteral("currentFloor"), source->currentFloor},
@@ -314,6 +330,7 @@ void CursorSnapshotController::rebuildSource() {
     auto source = std::make_shared<CursorSnapshotSource>();
     source->data = m_document->dataStoreSnapshot();
     source->times = m_document->timeIndexSnapshot();
+    source->statusEdges = std::make_shared<const std::vector<double>>(m_document->digitalEdgeTimes());
     source->classicalGrounding = ardirec::desktop::read_classical_grounding_factors(m_document->distanceZonePath());
     source->nominalFrequency = m_document->nominalFrequency() > 1.0 ? m_document->nominalFrequency() : 50.0;
     source->referenceTime = m_document->dataStartSeconds();
@@ -477,6 +494,7 @@ QVariantMap CursorSnapshotController::distanceLoopsForSnapshot(const QVariantMap
         {"L2-L3", ardirec::distance::FaultLoop::L2L3}, {"L3-L1", ardirec::distance::FaultLoop::L3L1},
     }};
 
+    const bool statusWindowValid = snapshot.value(QStringLiteral("statusWindowValid"), true).toBool();
     auto available = [&voltageValid, &currentValid, &measuredResidual](ardirec::distance::FaultLoop loop) {
         const bool residualAvailable = measuredResidual.has_value()
                                        || (currentValid[0] && currentValid[1] && currentValid[2]);
@@ -495,7 +513,7 @@ QVariantMap CursorSnapshotController::distanceLoopsForSnapshot(const QVariantMap
                                     : ardirec::desktop::ClassicalGroundingFactors{};
     for (const auto& definition : loops) {
         const QString loopId = QString::fromLatin1(definition.id);
-        if (!available(definition.loop)) {
+        if (!statusWindowValid || !available(definition.loop)) {
             values.insert(loopId, invalid_distance(loopId, minimumCurrent));
             continue;
         }
