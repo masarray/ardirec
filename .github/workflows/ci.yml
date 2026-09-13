@@ -26,6 +26,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Enforce recovery correctness guards
         run: python3 scripts/check_recovery_contract.py
+      - name: Enforce R2 workstation lifecycle guards
+        run: python3 scripts/check_r2_workstation_contract.py
 
   core:
     strategy:
