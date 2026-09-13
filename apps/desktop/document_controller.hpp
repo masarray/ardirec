@@ -48,6 +48,8 @@ class DocumentController final : public QObject {
     Q_PROPERTY(QString revisionText READ revisionText NOTIFY documentChanged)
     Q_PROPERTY(QString dataFormatText READ dataFormatText NOTIFY documentChanged)
     Q_PROPERTY(double nominalFrequency READ nominalFrequency NOTIFY documentChanged)
+    Q_PROPERTY(double calculationFrequency READ calculationFrequency NOTIFY documentChanged)
+    Q_PROPERTY(QString calculationFrequencyProvenance READ calculationFrequencyProvenance NOTIFY documentChanged)
     Q_PROPERTY(QString startTimeText READ startTimeText NOTIFY documentChanged)
     Q_PROPERTY(QString triggerTimeText READ triggerTimeText NOTIFY documentChanged)
     Q_PROPERTY(QString recordHealth READ recordHealth NOTIFY documentChanged)
@@ -84,6 +86,8 @@ public:
     QString revisionText() const { return m_revisionText; }
     QString dataFormatText() const { return m_dataFormatText; }
     double nominalFrequency() const { return m_nominalFrequency; }
+    double calculationFrequency() const { return m_calculationFrequency; }
+    QString calculationFrequencyProvenance() const { return m_calculationFrequencyProvenance; }
     QString startTimeText() const { return m_startTimeText; }
     QString triggerTimeText() const { return m_triggerTimeText; }
     QString recordHealth() const { return m_recordHealth; }
@@ -174,11 +178,13 @@ private:
     QString m_distanceZonePath;
     QString m_headerSourceName;
     QString m_headerText;
+    QString m_calculationFrequencyProvenance{QStringLiteral("COMTRADE nominal")};
     int m_selectedAnalogIndex{-1};
     int m_analogCount{0};
     int m_digitalCount{0};
     int m_activeDigitalCount{0};
     double m_nominalFrequency{0.0};
+    double m_calculationFrequency{0.0};
     double m_triggerOffsetSeconds{0.0};
     bool m_transformerRatiosAvailable{false};
     bool m_loading{false};
