@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "analysis_controller.hpp"
+#include "cursor_snapshot_controller.hpp"
 #include "digital_item.hpp"
 #include "distance_zone_controller.hpp"
 #include "document_controller.hpp"
@@ -57,6 +58,7 @@ int main(int argc, char* argv[]) {
 
     DocumentController document;
     AnalysisController analysis(&document);
+    CursorSnapshotController cursorSnapshots(&document);
     HarmonicSnapshotController harmonicSnapshots(&document);
     TableSnapshotController tableSnapshots(&document);
     DistanceZoneController distanceZones;
@@ -73,6 +75,7 @@ int main(int argc, char* argv[]) {
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty(QStringLiteral("documentController"), &document);
     engine.rootContext()->setContextProperty(QStringLiteral("analysisController"), &analysis);
+    engine.rootContext()->setContextProperty(QStringLiteral("cursorSnapshotController"), &cursorSnapshots);
     engine.rootContext()->setContextProperty(QStringLiteral("harmonicSnapshotController"), &harmonicSnapshots);
     engine.rootContext()->setContextProperty(QStringLiteral("tableSnapshotController"), &tableSnapshots);
     engine.rootContext()->setContextProperty(QStringLiteral("distanceZoneController"), &distanceZones);
