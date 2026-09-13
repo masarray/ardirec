@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #pragma once
 
+#include "ardirec/comtrade/channel_semantics.hpp"
 #include "ardirec/comtrade/indexed_dat.hpp"
 #include "ardirec/comtrade/parser.hpp"
 #include "ardirec/comtrade/record.hpp"
 
+#include <QElapsedTimer>
 #include <QObject>
 #include <QString>
 #include <QStringList>
@@ -27,6 +29,7 @@ class DocumentController final : public QObject {
     Q_PROPERTY(QString error READ error NOTIFY errorChanged)
     Q_PROPERTY(bool loading READ loading NOTIFY loadingChanged)
     Q_PROPERTY(QString loadingStatus READ loadingStatus NOTIFY loadingChanged)
+    Q_PROPERTY(qint64 lastLoadMilliseconds READ lastLoadMilliseconds NOTIFY loadingChanged)
     Q_PROPERTY(QString selectedSignal READ selectedSignal NOTIFY waveformChanged)
     Q_PROPERTY(int selectedAnalogIndex READ selectedAnalogIndex NOTIFY waveformChanged)
     Q_PROPERTY(int analogCount READ analogCount NOTIFY documentChanged)
@@ -62,6 +65,7 @@ public:
     QString error() const { return m_error; }
     bool loading() const { return m_loading; }
     QString loadingStatus() const { return m_loadingStatus; }
+    qint64 lastLoadMilliseconds() const { return m_lastLoadMilliseconds; }
     QString selectedSignal() const { return m_selectedSignal; }
     int selectedAnalogIndex() const { return m_selectedAnalogIndex; }
     int analogCount() const { return m_analogCount; }
@@ -109,6 +113,7 @@ public:
     Q_INVOKABLE QString channelName(int index) const;
     Q_INVOKABLE QString channelUnit(int index) const;
     Q_INVOKABLE QString analogRole(int index) const;
+    Q_INVOKABLE QString channelPhase(int index) const;
     Q_INVOKABLE double channelPeak(int index) const;
     Q_INVOKABLE double channelDisplayScale(int index) const;
     Q_INVOKABLE QString channelRatioText(int index) const;
@@ -166,11 +171,15 @@ private:
     double m_triggerOffsetSeconds{0.0};
     bool m_transformerRatiosAvailable{false};
     bool m_loading{false};
+    qint64 m_lastLoadMilliseconds{0};
+    QElapsedTimer m_loadTimer;
     quint64 m_loadGeneration{0};
     std::shared_ptr<std::atomic_bool> m_activeLoadCancel;
     std::shared_ptr<const ardirec::comtrade::IndexedDatFile> m_datStore;
     std::shared_ptr<const std::vector<double>> m_timeSeconds{std::make_shared<const std::vector<double>>()};
     std::vector<ardirec::comtrade::AnalogChannel> m_channelConfigs;
+    std::vector<ardirec::comtrade::AnalogRole> m_analogRoles;
+    std::vector<ardirec::comtrade::PhaseRole> m_phaseRoles;
     std::vector<std::uint8_t> m_statusActive;
     std::vector<int> m_statusNormalState;
     std::vector<double> m_digitalEdgeTimes;
