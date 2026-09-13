@@ -132,6 +132,22 @@ if(TARGET Qt6::Core)
     ardirec_enable_sanitizers(ardirec_analysis_sequence_tests)
     add_test(NAME ardirec_analysis_sequence_tests COMMAND ardirec_analysis_sequence_tests)
 
+    qt_add_executable(ardirec_document_lifecycle_tests
+        test_document_lifecycle.cpp
+        ../apps/desktop/document_loader.cpp
+        ../apps/desktop/document_loader.hpp
+        ../apps/desktop/document_controller.cpp
+        ../apps/desktop/document_controller.hpp
+        ${ARDIREC_DOCUMENT_DERIVED_SOURCES}
+    )
+    set_target_properties(ardirec_document_lifecycle_tests PROPERTIES AUTOMOC ON)
+    target_include_directories(ardirec_document_lifecycle_tests PRIVATE ../apps/desktop)
+    target_link_libraries(ardirec_document_lifecycle_tests PRIVATE ardirec::core Qt6::Core Qt6::Concurrent)
+    target_compile_definitions(ardirec_document_lifecycle_tests PRIVATE ARDIREC_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
+    ardirec_set_warnings(ardirec_document_lifecycle_tests)
+    ardirec_enable_sanitizers(ardirec_document_lifecycle_tests)
+    add_test(NAME ardirec_document_lifecycle_tests COMMAND ardirec_document_lifecycle_tests)
+
     qt_add_executable(ardirec_locus_snapshot_tests
         test_locus_snapshot.cpp
         ../apps/desktop/cursor_snapshot_controller.cpp

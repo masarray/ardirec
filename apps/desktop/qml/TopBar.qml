@@ -83,15 +83,16 @@ Rectangle {
 
     Popup {
         id: propertiesPopup
-        width: 540
-        height: 350
-        x: 10
-        y: root.height + 2
+        parent: Overlay.overlay
+        width: Math.min(560, Math.max(420, parent ? parent.width - 48 : 560))
+        height: Math.min(380, Math.max(320, parent ? parent.height - 48 : 380))
+        x: parent ? Math.round((parent.width - width) / 2) : 0
+        y: parent ? Math.round((parent.height - height) / 2) : 0
         padding: 0
-        modal: false
+        modal: true
         focus: true
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
-        background: Rectangle { color: "#ffffff"; border.color: "#aeb4ba"; radius: 4 }
+        background: Rectangle { color: "#ffffff"; border.color: "#9ca5ad"; radius: 4 }
         contentItem: ColumnLayout {
             spacing: 0
             Rectangle {
@@ -159,38 +160,65 @@ Rectangle {
 
     Popup {
         id: aboutPopup
-        width: 410
-        height: 174
-        x: Math.max(8, root.width - width - 10)
-        y: root.height + 2
+        parent: Overlay.overlay
+        width: Math.min(540, Math.max(440, parent ? parent.width - 48 : 540))
+        height: Math.min(336, Math.max(300, parent ? parent.height - 48 : 336))
+        x: parent ? Math.round((parent.width - width) / 2) : 0
+        y: parent ? Math.round((parent.height - height) / 2) : 0
         padding: 0
-        modal: false
+        modal: true
         focus: true
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
-        background: Rectangle { color: "#ffffff"; border.color: "#aeb4ba"; radius: 3 }
+        background: Rectangle { color: "#ffffff"; border.color: "#9ca5ad"; radius: 4 }
         contentItem: ColumnLayout {
-            spacing: 5
+            spacing: 0
             Rectangle {
                 Layout.fillWidth: true
-                Layout.preferredHeight: 46
+                Layout.preferredHeight: 58
                 color: "#eef1f3"
                 border.color: "#d2d6da"
-                Label {
+                Column {
                     anchors.left: parent.left
-                    anchors.leftMargin: 14
+                    anchors.leftMargin: 16
                     anchors.verticalCenter: parent.verticalCenter
-                    text: "ArdIREC — COMTRADE Workstation"
-                    color: "#293139"
-                    font.pixelSize: 13
-                    font.weight: Font.DemiBold
+                    spacing: 2
+                    Label {
+                        text: "ArdIREC — Open-Source COMTRADE Workstation"
+                        color: "#273139"
+                        font.pixelSize: 14
+                        font.weight: Font.DemiBold
+                    }
+                    Label { text: "Version " + Qt.application.version; color: "#69727a"; font.pixelSize: 9 }
                 }
             }
-            Label { Layout.leftMargin: 14; Layout.rightMargin: 14; Layout.topMargin: 6; text: "Protection disturbance-record analysis workstation"; color: "#515b63"; font.pixelSize: 10 }
-            Label { Layout.leftMargin: 14; text: "Version " + Qt.application.version; color: "#69727a"; font.pixelSize: 9 }
-            Label {
-                Layout.leftMargin: 14; Layout.rightMargin: 14; Layout.fillWidth: true
-                text: "COMTRADE waveform, phasor, harmonics, engineering table and distance R-X analysis."
-                color: "#69727a"; font.pixelSize: 9; wrapMode: Text.Wrap
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                Layout.leftMargin: 16
+                Layout.rightMargin: 16
+                Layout.topMargin: 14
+                spacing: 7
+
+                Label { text: "Protection disturbance-record analysis for COMTRADE engineering workflows."; color: "#454f57"; font.pixelSize: 10; wrapMode: Text.Wrap; Layout.fillWidth: true }
+                Label { text: "Developed by Ari Sulistiono"; color: "#353d44"; font.pixelSize: 10; font.weight: Font.DemiBold }
+                Label { text: "Copyright © 2026 Ari Sulistiono and contributors"; color: "#5e6870"; font.pixelSize: 9 }
+                Label { text: "GNU GPL v3.0 or later · distributed without warranty."; color: "#5e6870"; font.pixelSize: 9 }
+                Label {
+                    Layout.fillWidth: true
+                    textFormat: Text.RichText
+                    text: "<a href='https://github.com/masarray/ardirec'>GitHub project &amp; license</a> &nbsp; · &nbsp; <a href='https://www.linkedin.com/in/ari-sulistiono'>LinkedIn</a>"
+                    color: "#315d82"
+                    font.pixelSize: 9
+                    onLinkActivated: link => Qt.openUrlExternally(link)
+                }
+                Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: "#e1e4e7"; Layout.topMargin: 3; Layout.bottomMargin: 3 }
+                Label {
+                    Layout.fillWidth: true
+                    text: "Independent open-source project. ArdIREC is not an official product of, sponsored by, or endorsed by any employer, relay manufacturer, COMTRADE tool vendor, or other third party."
+                    color: "#6b7379"
+                    font.pixelSize: 9
+                    wrapMode: Text.Wrap
+                }
             }
             Item { Layout.fillHeight: true }
         }
