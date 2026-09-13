@@ -54,6 +54,7 @@ ApplicationWindow {
         currentView: window.viewMode
         timeDisplayMode: window.timeDisplayMode
         valueRepresentation: documentController.valueRepresentation
+        workspaceLayout: workspaceHost.layoutMode
         fullScreen: window.visibility === Window.FullScreen
 
         onOpenRequested: openDialog.open()
@@ -68,9 +69,16 @@ ApplicationWindow {
         onTriggerRequested: window.focusTrigger()
         onZoomInRequested: window.zoomAround(1.4, 0.5)
         onZoomOutRequested: window.zoomAround(1.0 / 1.4, 0.5)
-        onViewRequested: viewName => window.viewMode = viewName
+        onViewRequested: viewName => {
+            workspaceHost.setActiveView(viewName)
+            window.viewMode = workspaceHost.activeView
+        }
         onWaveformModeRequested: mode => window.timeDisplayMode = mode
         onValueRepresentationRequested: representation => documentController.setValueRepresentation(representation)
+        onWorkspaceLayoutRequested: layoutName => {
+            workspaceHost.setLayout(layoutName)
+            window.viewMode = workspaceHost.activeView
+        }
         onFullScreenRequested: {
             if (window.visibility === Window.FullScreen) window.showNormal()
             else window.showFullScreen()
@@ -80,11 +88,12 @@ ApplicationWindow {
 
     function clamp(value, lo, hi) { return Math.max(lo, Math.min(hi, value)) }
     function viewLabel() {
-        if (viewMode === "phasor") return "PHASOR · C1/C2"
-        if (viewMode === "locus") return "LOCUS / R-X"
-        if (viewMode === "harmonics") return "HARMONICS"
-        if (viewMode === "table") return "ENGINEERING TABLE"
-        return timeDisplayMode === "rms" ? "TIME SIGNALS · RMS" : "TIME SIGNALS · INSTANT"
+        const layoutPrefix = workspaceHost.layoutMode === "single" ? "" : workspaceHost.layoutLabel + " · "
+        if (viewMode === "phasor") return layoutPrefix + "PHASOR · C1/C2"
+        if (viewMode === "locus") return layoutPrefix + "LOCUS / R-X"
+        if (viewMode === "harmonics") return layoutPrefix + "HARMONICS"
+        if (viewMode === "table") return layoutPrefix + "ENGINEERING TABLE"
+        return layoutPrefix + (timeDisplayMode === "rms" ? "TIME SIGNALS · RMS" : "TIME SIGNALS · INSTANT")
     }
 
     function defaultVisibleChannels() {
@@ -179,9 +188,10 @@ ApplicationWindow {
         rebuildAnalogGroups()
         rebuildDigitalGroup()
         locusAnalysisProxy.invalidate()
-        deferredViews.resetForRecord()
+        workspaceHost.resetForRecord()
         focusTrigger()
-        timeSignals.resetScroll()
+        workspaceHost.resetTimeScrolls()
+        viewMode = workspaceHost.activeView
     }
 
     function applySignalConfiguration(timeChannels, digitalChannels, voltageGroup, currentGroup,
@@ -197,7 +207,7 @@ ApplicationWindow {
         rebuildDigitalGroup()
         if (measurementChannel < 0 || (tableChannels.indexOf(measurementChannel) < 0 && visibleChannels.indexOf(measurementChannel) < 0))
             measurementChannel = tableChannels.length ? tableChannels[0] : (visibleChannels.length ? visibleChannels[0] : -1)
-        timeSignals.resetScroll()
+        workspaceHost.resetTimeScrolls()
     }
 
     function fitRecord() {
@@ -417,12 +427,16 @@ ApplicationWindow {
                 }
             }
 
-            TimeSignalsView {
-                id: timeSignals
+            WorkspaceHost {
+                id: workspaceHost
                 anchors.fill: parent
-                visible: window.hasRecord && window.viewMode === "time"
+                visible: window.hasRecord
+                hasRecord: window.hasRecord
                 document: documentController
                 analysis: analysisController
+                locusAnalysis: locusAnalysisProxy
+                harmonicSnapshot: harmonicSnapshotController
+                tableSnapshot: tableSnapshotController
                 voltageChannels: window.voltageChannels
                 currentChannels: window.currentChannels
                 otherChannels: window.otherChannels
@@ -439,34 +453,18 @@ ApplicationWindow {
                 axisWidth: window.axisWidth
                 analogTrackHeight: window.analogTrackHeight
                 digitalTrackHeight: window.digitalTrackHeight
+                phasorVoltageChannels: window.phasorVoltageChannels
+                phasorCurrentChannels: window.phasorCurrentChannels
+                residualChannels: window.phasorResidualChannels
+                harmonicChannels: window.harmonicChannels
+                tableChannels: window.tableChannels
+                selectedChannel: window.measurementChannel
+                onActiveViewChanged: window.viewMode = workspaceHost.activeView
                 onCursorARequested: timeSeconds => window.cursorATime = timeSeconds
                 onCursorBRequested: timeSeconds => window.cursorBTime = timeSeconds
                 onPanRequested: value => window.waveformPan = value
                 onZoomRequested: (factor, anchorFraction) => window.zoomAround(factor, anchorFraction)
                 onDigitalDisplayModeRequested: mode => window.digitalDisplayMode = mode
-            }
-
-            DeferredEngineeringViews {
-                id: deferredViews
-                anchors.fill: parent
-                hasRecord: window.hasRecord
-                viewMode: window.viewMode
-                document: documentController
-                analysis: analysisController
-                locusAnalysis: locusAnalysisProxy
-                harmonicSnapshot: harmonicSnapshotController
-                tableSnapshot: tableSnapshotController
-                viewStart: window.viewStart
-                visibleDuration: window.visibleDuration
-                cursorATime: window.cursorATime
-                cursorBTime: window.cursorBTime
-                voltageChannels: window.phasorVoltageChannels
-                currentChannels: window.phasorCurrentChannels
-                residualChannels: window.phasorResidualChannels
-                harmonicChannels: window.harmonicChannels
-                tableChannels: window.tableChannels
-                selectedChannel: window.measurementChannel
-                valueRepresentation: documentController.valueRepresentation
                 onSignalActivated: channelIndex => {
                     window.measurementChannel = channelIndex
                     documentController.selectChannel(channelIndex)
