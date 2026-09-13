@@ -48,7 +48,22 @@ def function_body(source: str, signature_fragment: str) -> str:
     return ""
 
 
-# RMS render path: scene-graph synchronization must never traverse source samples.
+# Time-domain renderers consume prepared bounded snapshots; DAT decoding/sample
+# traversal belongs in cancellable workers, never scene-graph synchronization.
+waveform = text("apps/desktop/waveform_item.cpp")
+waveform_paint = function_body(waveform, "WaveformItem::updatePaintNode")
+if not waveform_paint:
+    FAILURES.append("apps/desktop/waveform_item.cpp: updatePaintNode() not found")
+else:
+    for token in ("analogValue(", "blockExtrema(", "lower_bound(", "upper_bound("):
+        if token in waveform_paint:
+            FAILURES.append(
+                f"apps/desktop/waveform_item.cpp: {token!r} inside updatePaintNode() — instantaneous source traversal belongs in background preparation"
+            )
+require("apps/desktop/waveform_item.cpp", "QtConcurrent::run", "instantaneous viewport preparation must stay asynchronous")
+require("apps/desktop/waveform_item.cpp", "m_rebuildGeneration", "instantaneous waveform work must remain latest-wins")
+require("apps/desktop/waveform_item.cpp", "cancel", "instantaneous background preparation must remain cancellable")
+
 rms = text("apps/desktop/rms_waveform_item.cpp")
 rms_paint = function_body(rms, "RmsWaveformItem::updatePaintNode")
 if not rms_paint:
@@ -61,6 +76,20 @@ else:
             )
 require("apps/desktop/rms_waveform_item.cpp", "QtConcurrent::run", "RMS viewport preparation must stay asynchronous")
 require("apps/desktop/rms_waveform_item.cpp", "cancel", "RMS background preparation must remain cancellable/latest-wins")
+
+digital = text("apps/desktop/digital_item.cpp")
+digital_paint = function_body(digital, "DigitalItem::updatePaintNode")
+if not digital_paint:
+    FAILURES.append("apps/desktop/digital_item.cpp: updatePaintNode() not found")
+else:
+    for token in ("statusValue(", "lower_bound(", "upper_bound("):
+        if token in digital_paint:
+            FAILURES.append(
+                f"apps/desktop/digital_item.cpp: {token!r} inside updatePaintNode() — digital source traversal belongs in background preparation"
+            )
+require("apps/desktop/digital_item.cpp", "QtConcurrent::run", "digital viewport preparation must stay asynchronous")
+require("apps/desktop/digital_item.cpp", "m_rebuildGeneration", "digital work must remain latest-wins")
+require("apps/desktop/digital_item.cpp", "minimumVisibleRun", "overview digital geometry must stay bounded by pixel resolution")
 
 # Cursor interaction: raw pointer-rate movement must be preview/coalesced.
 time_view = text("apps/desktop/qml/TimeSignalsView.qml")
@@ -103,6 +132,40 @@ elif "QVariantMap" in bulk_worker or "QVariantList" in bulk_worker:
     FAILURES.append("apps/desktop/locus_snapshot_controller.cpp: bulk locus worker allocates QVariant containers per trajectory")
 if "4096" not in locus_cpp:
     FAILURES.append("apps/desktop/locus_snapshot_controller.cpp: bounded locus point budget guard is missing")
+
+# P1 first-interactive contract: heavy engineering views are demand-created, not
+# all synchronously constructed during application/record startup. Retained hidden
+# views must also be quiescent rather than continuing analysis in the background.
+require("apps/desktop/qml/Main.qml", "DeferredEngineeringViews", "heavy engineering views must be hosted by the deferred workspace")
+deferred = text("apps/desktop/qml/DeferredEngineeringViews.qml")
+if deferred.count("asynchronous: true") < 4:
+    FAILURES.append("apps/desktop/qml/DeferredEngineeringViews.qml: all four heavy engineering loaders must be asynchronous")
+if deferred.count("visible: root.viewMode ===") < 4:
+    FAILURES.append("apps/desktop/qml/DeferredEngineeringViews.qml: retained heavy views must explicitly become locally invisible when inactive")
+if deferred.count("analysis: visible ?") < 3:
+    FAILURES.append("apps/desktop/qml/DeferredEngineeringViews.qml: hidden engineering views must detach analysis inputs")
+for warm_flag in ("phasorWarm", "locusWarm", "harmonicsWarm", "tableWarm"):
+    if warm_flag not in deferred:
+        FAILURES.append(f"apps/desktop/qml/DeferredEngineeringViews.qml: missing retained warm flag {warm_flag}")
+require("apps/desktop/qml/DeferredEngineeringViews.qml", "resetForRecord", "deferred view lifetime must reset at record boundaries")
+
+main_qml = text("apps/desktop/qml/Main.qml")
+for eager_type in ("PhasorView {", "LocusView {", "HarmonicsView {", "ValueTableView {"):
+    if eager_type in main_qml:
+        FAILURES.append(f"apps/desktop/qml/Main.qml: eager heavy view construction {eager_type!r} is forbidden; use DeferredEngineeringViews")
+
+# Channel semantics are classified once when the document is applied. Numeric/UI
+# interaction paths consume integer cached roles instead of regex/string discovery.
+document_cpp = text("apps/desktop/document_controller.cpp")
+for required in ("m_analogRoles", "m_phaseRoles", "ardirec::comtrade::analog_role(channel)", "ardirec::comtrade::phase_role(channel)"):
+    if required not in document_cpp:
+        FAILURES.append(f"apps/desktop/document_controller.cpp: cached semantic source missing {required!r}")
+analysis_cpp = text("apps/desktop/analysis_controller.cpp")
+channel_phase_body = function_body(analysis_cpp, "AnalysisController::channelPhase")
+if "m_document->channelPhase(channelIndex)" not in channel_phase_body:
+    FAILURES.append("apps/desktop/analysis_controller.cpp: channelPhase must reuse cached document semantics")
+if "QRegularExpression" in analysis_cpp:
+    FAILURES.append("apps/desktop/analysis_controller.cpp: regex metadata classification returned to the analysis path")
 
 # Contract documentation itself must remain discoverable from agent rules.
 require("AGENTS.md", "PERFORMANCE_CONTRACT.md", "agents must be directed to the enforceable performance contract")

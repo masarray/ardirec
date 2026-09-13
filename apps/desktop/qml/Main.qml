@@ -124,7 +124,7 @@ ApplicationWindow {
     }
 
     function signalLooksResidual(index) {
-        const phase = analysisController.channelPhase(index)
+        const phase = documentController.channelPhase(index)
         const name = documentController.channelName(index).trim().toUpperCase().replace(/[^A-Z0-9]/g, "")
         return phase === "E" || name.indexOf("3I0") >= 0 || name.indexOf("3U0") >= 0
                 || name.indexOf("3V0") >= 0 || name === "I0" || name === "U0" || name === "V0"
@@ -179,6 +179,7 @@ ApplicationWindow {
         rebuildAnalogGroups()
         rebuildDigitalGroup()
         locusAnalysisProxy.invalidate()
+        deferredViews.resetForRecord()
         focusTrigger()
         timeSignals.resetScroll()
     }
@@ -363,12 +364,57 @@ ApplicationWindow {
 
             Label {
                 anchors.centerIn: parent
-                visible: !window.hasRecord
+                visible: !window.hasRecord && !documentController.loading
                 text: documentController.error.length
                       ? documentController.error
                       : "Open a COMTRADE CFG/DAT record to begin disturbance analysis"
                 color: documentController.error.length ? "#a62a2a" : "#666666"
                 font.pixelSize: 12
+            }
+
+            Column {
+                anchors.centerIn: parent
+                spacing: 10
+                visible: !window.hasRecord && documentController.loading
+                BusyIndicator { anchors.horizontalCenter: parent.horizontalCenter; width: 34; height: 34; running: parent.visible }
+                Label {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: documentController.loadingStatus.length ? documentController.loadingStatus : "Loading COMTRADE…"
+                    color: "#4d5962"
+                    font.pixelSize: 11
+                }
+                Label {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: "The workstation remains responsive while the record is indexed."
+                    color: "#7a838a"
+                    font.pixelSize: 9
+                }
+            }
+
+            Rectangle {
+                anchors.top: parent.top
+                anchors.right: parent.right
+                anchors.topMargin: 8
+                anchors.rightMargin: 8
+                width: loadingRow.implicitWidth + 20
+                height: 32
+                radius: 3
+                visible: window.hasRecord && documentController.loading
+                color: "#f8f9fa"
+                border.color: "#c9cfd4"
+                z: 40
+                Row {
+                    id: loadingRow
+                    anchors.centerIn: parent
+                    spacing: 7
+                    BusyIndicator { width: 18; height: 18; running: parent.parent.visible }
+                    Label {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: documentController.loadingStatus
+                        color: "#56616a"
+                        font.pixelSize: 9
+                    }
+                }
             }
 
             TimeSignalsView {
@@ -400,49 +446,27 @@ ApplicationWindow {
                 onDigitalDisplayModeRequested: mode => window.digitalDisplayMode = mode
             }
 
-            PhasorView {
+            DeferredEngineeringViews {
+                id: deferredViews
                 anchors.fill: parent
-                visible: window.hasRecord && window.viewMode === "phasor"
+                hasRecord: window.hasRecord
+                viewMode: window.viewMode
                 document: documentController
-                analysis: window.viewMode === "phasor" ? analysisController : null
+                analysis: analysisController
+                locusAnalysis: locusAnalysisProxy
+                harmonicSnapshot: harmonicSnapshotController
+                tableSnapshot: tableSnapshotController
+                viewStart: window.viewStart
+                visibleDuration: window.visibleDuration
                 cursorATime: window.cursorATime
                 cursorBTime: window.cursorBTime
                 voltageChannels: window.phasorVoltageChannels
                 currentChannels: window.phasorCurrentChannels
                 residualChannels: window.phasorResidualChannels
-            }
-
-            LocusView {
-                anchors.fill: parent
-                visible: window.hasRecord && window.viewMode === "locus"
-                document: documentController
-                analysis: window.viewMode === "locus" ? locusAnalysisProxy : null
-                viewStart: window.viewStart
-                visibleDuration: window.visibleDuration
-                cursorATime: window.cursorATime
-                cursorBTime: window.cursorBTime
-            }
-
-            HarmonicsView {
-                anchors.fill: parent
-                visible: window.hasRecord && window.viewMode === "harmonics"
-                document: documentController
-                analysis: window.viewMode === "harmonics" ? analysisController : null
-                snapshot: window.viewMode === "harmonics" ? harmonicSnapshotController : null
-                visibleChannels: window.harmonicChannels
-                cursorTime: window.cursorATime
-            }
-
-            ValueTableView {
-                anchors.fill: parent
-                visible: window.hasRecord && window.viewMode === "table"
-                document: documentController
-                analysis: window.viewMode === "table" ? analysisController : null
-                snapshot: window.viewMode === "table" ? tableSnapshotController : null
-                visibleChannels: window.tableChannels
-                cursorTime: window.cursorATime
-                valueRepresentation: documentController.valueRepresentation
+                harmonicChannels: window.harmonicChannels
+                tableChannels: window.tableChannels
                 selectedChannel: window.measurementChannel
+                valueRepresentation: documentController.valueRepresentation
                 onSignalActivated: channelIndex => {
                     window.measurementChannel = channelIndex
                     documentController.selectChannel(channelIndex)

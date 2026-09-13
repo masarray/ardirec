@@ -2,8 +2,6 @@
 #include "analysis_controller.hpp"
 #include "rms_cycle_window.hpp"
 
-#include <QRegularExpression>
-
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -13,50 +11,10 @@
 namespace {
 constexpr double kPi = 3.141592653589793238462643383279502884;
 
-QString compact_name(QString value) {
-    value = value.trimmed().toUpper();
-    value.remove(QRegularExpression(QStringLiteral("[^A-Z0-9]")));
-    return value;
-}
-
 QString normalized_unit(QString value) {
     value = value.trimmed().toUpper();
     value.remove(' ');
     return value;
-}
-
-QString phase_from_name(const QString& rawName) {
-    const QString name = compact_name(rawName);
-    if (name.isEmpty()) return QStringLiteral("Other");
-
-    if (name.contains(QStringLiteral("L1")) || name.endsWith(QStringLiteral("AN"))
-        || name.endsWith(QStringLiteral("IA")) || name.endsWith(QStringLiteral("VA"))
-        || name.endsWith(QStringLiteral("UA")) || name == QStringLiteral("A")) {
-        return QStringLiteral("L1");
-    }
-    if (name.contains(QStringLiteral("L2")) || name.endsWith(QStringLiteral("BN"))
-        || name.endsWith(QStringLiteral("IB")) || name.endsWith(QStringLiteral("VB"))
-        || name.endsWith(QStringLiteral("UB")) || name == QStringLiteral("B")) {
-        return QStringLiteral("L2");
-    }
-    if (name.contains(QStringLiteral("L3")) || name.endsWith(QStringLiteral("CN"))
-        || name.endsWith(QStringLiteral("IC")) || name.endsWith(QStringLiteral("VC"))
-        || name.endsWith(QStringLiteral("UC")) || name == QStringLiteral("C")) {
-        return QStringLiteral("L3");
-    }
-
-    if (name.contains(QStringLiteral("3I0")) || name.contains(QStringLiteral("3V0"))
-        || name.contains(QStringLiteral("3U0")) || name.contains(QStringLiteral("RES"))
-        || name.contains(QStringLiteral("NEUTRAL")) || name.contains(QStringLiteral("GROUND"))
-        || name.contains(QStringLiteral("EARTH")) || name.endsWith(QStringLiteral("IN"))
-        || name.endsWith(QStringLiteral("VN")) || name.endsWith(QStringLiteral("UN"))
-        || name.endsWith(QStringLiteral("IE")) || name.endsWith(QStringLiteral("VE"))
-        || name.endsWith(QStringLiteral("UE")) || name == QStringLiteral("N")
-        || name == QStringLiteral("E")) {
-        return QStringLiteral("E");
-    }
-
-    return QStringLiteral("Other");
 }
 
 QVariantMap invalid_phasor() {
@@ -84,7 +42,7 @@ QString AnalysisController::channelPhase(int channelIndex) const {
     if (!m_document || channelIndex < 0 || channelIndex >= m_document->analogCount()) {
         return QStringLiteral("Other");
     }
-    return phase_from_name(m_document->channelName(channelIndex));
+    return m_document->channelPhase(channelIndex);
 }
 
 QString AnalysisController::phaseColorForName(const QString& phase) const {

@@ -104,6 +104,22 @@ Rectangle {
             color: root.document.transformerRatiosAvailable ? "#4f5961" : "#8a6d3b"
         }
 
+        Separator { visible: root.hasRecord && root.width >= 1420 }
+
+        StatusLabel {
+            visible: root.hasRecord && root.width >= 1420
+            text: "ready " + Number(root.document.lastLoadMilliseconds).toLocaleString(Qt.locale()) + " ms"
+            color: "#65717a"
+            ToolTip.visible: loadTimingHover.containsMouse
+            ToolTip.text: "Background COMTRADE open/index time to first ready document state"
+            MouseArea {
+                id: loadTimingHover
+                anchors.fill: parent
+                hoverEnabled: true
+                acceptedButtons: Qt.NoButton
+            }
+        }
+
         Item { Layout.fillWidth: true }
 
         StatusLabel {
