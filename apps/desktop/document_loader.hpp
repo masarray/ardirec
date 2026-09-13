@@ -24,6 +24,8 @@ struct LoadedDocumentData {
     std::vector<std::string> diagnostics;
     std::string header_text;
     std::string error;
+    double calculation_frequency_hz{0.0};
+    std::string calculation_frequency_provenance{"COMTRADE nominal"};
     bool cancelled{false};
 };
 
