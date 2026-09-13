@@ -28,7 +28,9 @@ Item {
 
     // A heavy engineering view is created only after its first explicit use.
     // Once created it stays alive for the current record, so returning to the
-    // view is a visibility toggle instead of QML object reconstruction.
+    // view is a visibility toggle instead of QML object reconstruction. Hidden
+    // retained views also receive frozen inputs so they do not keep requesting
+    // analysis while another workspace is active.
     property bool phasorWarm: false
     property bool locusWarm: false
     property bool harmonicsWarm: false
@@ -68,10 +70,11 @@ Item {
         visible: status === Loader.Ready && root.viewMode === "phasor"
         sourceComponent: Component {
             PhasorView {
+                visible: root.viewMode === "phasor"
                 document: root.document
-                analysis: root.viewMode === "phasor" ? root.analysis : null
-                cursorATime: root.cursorATime
-                cursorBTime: root.cursorBTime
+                analysis: visible ? root.analysis : null
+                cursorATime: visible ? root.cursorATime : 0.0
+                cursorBTime: visible ? root.cursorBTime : 0.0
                 voltageChannels: root.voltageChannels
                 currentChannels: root.currentChannels
                 residualChannels: root.residualChannels
@@ -87,12 +90,13 @@ Item {
         visible: status === Loader.Ready && root.viewMode === "locus"
         sourceComponent: Component {
             LocusView {
+                visible: root.viewMode === "locus"
                 document: root.document
-                analysis: root.viewMode === "locus" ? root.locusAnalysis : null
-                viewStart: root.viewStart
-                visibleDuration: root.visibleDuration
-                cursorATime: root.cursorATime
-                cursorBTime: root.cursorBTime
+                analysis: visible ? root.locusAnalysis : null
+                viewStart: visible ? root.viewStart : 0.0
+                visibleDuration: visible ? root.visibleDuration : 0.0
+                cursorATime: visible ? root.cursorATime : 0.0
+                cursorBTime: visible ? root.cursorBTime : 0.0
             }
         }
     }
@@ -105,11 +109,12 @@ Item {
         visible: status === Loader.Ready && root.viewMode === "harmonics"
         sourceComponent: Component {
             HarmonicsView {
+                visible: root.viewMode === "harmonics"
                 document: root.document
-                analysis: root.viewMode === "harmonics" ? root.analysis : null
-                snapshot: root.viewMode === "harmonics" ? root.harmonicSnapshot : null
+                analysis: visible ? root.analysis : null
+                snapshot: visible ? root.harmonicSnapshot : null
                 visibleChannels: root.harmonicChannels
-                cursorTime: root.cursorATime
+                cursorTime: visible ? root.cursorATime : 0.0
             }
         }
     }
@@ -122,11 +127,12 @@ Item {
         visible: status === Loader.Ready && root.viewMode === "table"
         sourceComponent: Component {
             ValueTableView {
+                visible: root.viewMode === "table"
                 document: root.document
-                analysis: root.viewMode === "table" ? root.analysis : null
-                snapshot: root.viewMode === "table" ? root.tableSnapshot : null
+                analysis: visible ? root.analysis : null
+                snapshot: visible ? root.tableSnapshot : null
                 visibleChannels: root.tableChannels
-                cursorTime: root.cursorATime
+                cursorTime: visible ? root.cursorATime : 0.0
                 valueRepresentation: root.valueRepresentation
                 selectedChannel: root.selectedChannel
                 onSignalActivated: channelIndex => root.signalActivated(channelIndex)
