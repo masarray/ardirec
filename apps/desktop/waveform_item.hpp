@@ -6,9 +6,13 @@
 #include <QColor>
 #include <QPointer>
 #include <QQuickItem>
+#include <QTimer>
 
+#include <atomic>
 #include <memory>
 #include <vector>
+
+struct WaveformGeometrySnapshot;
 
 class WaveformItem : public QQuickItem {
     Q_OBJECT
@@ -19,6 +23,7 @@ class WaveformItem : public QQuickItem {
     Q_PROPERTY(double panFraction READ panFraction WRITE setPanFraction NOTIFY viewChanged)
 public:
     explicit WaveformItem(QQuickItem* parent = nullptr);
+    ~WaveformItem() override;
 
     QObject* document() const { return m_document.data(); }
     void setDocument(QObject* document);
@@ -41,19 +46,23 @@ signals:
 
 protected:
     QSGNode* updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*) override;
+    void geometryChange(const QRectF& newGeometry, const QRectF& oldGeometry) override;
 
 private:
     void reloadData();
     void refreshRepresentation();
+    void scheduleRebuild();
+    void startRebuild();
+    void clearPreparedGeometry();
 
     QPointer<DocumentController> m_document;
     std::shared_ptr<const ardirec::comtrade::IndexedDatFile> m_data;
     std::shared_ptr<const std::vector<double>> m_times;
     std::shared_ptr<const ardirec::comtrade::AnalogLodIndex> m_lod;
-    // Render-thread scratch arrays keep capacity between paints to avoid heap
-    // churn during pan/zoom. They are not engineering data caches.
-    std::vector<double> m_bucketLows;
-    std::vector<double> m_bucketHighs;
+    std::shared_ptr<const WaveformGeometrySnapshot> m_renderSnapshot;
+    std::shared_ptr<std::atomic_bool> m_activeCancel;
+    QTimer m_rebuildTimer;
+    quint64 m_rebuildGeneration{0};
     int m_channelIndex{0};
     QColor m_traceColor{QStringLiteral("#406a9b")};
     double m_displayScale{1.0};
