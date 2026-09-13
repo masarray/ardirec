@@ -58,6 +58,8 @@ qt_add_qml_module(ardirec
         qml/SectionHeader.qml
         qml/DigitalTrackView.qml
         qml/DeferredEngineeringViews.qml
+        qml/WorkspacePane.qml
+        qml/WorkspaceHost.qml
         qml/PhasorDiagram.qml
         qml/PhasorView.qml
         qml/SequenceSummary.qml
