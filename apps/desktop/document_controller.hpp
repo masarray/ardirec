@@ -134,6 +134,66 @@ public:
                                                                         double panFraction) const;
 
     Q_INVOKABLE void openCfg(const QUrl& url);
+    Q_INVOKABLE void closeDocument() {
+        if (m_activeLoadCancel) m_activeLoadCancel->store(true, std::memory_order_relaxed);
+        ++m_loadGeneration;
+        m_activeLoadCancel.reset();
+        m_loadTimer.invalidate();
+        m_loading = false;
+        m_loadingStatus.clear();
+        m_lastLoadMilliseconds = 0;
+
+        // Release derived caches before the immutable DAT/time stores they retain.
+        m_rmsTileCache.reset();
+        m_analogLodPyramid.reset();
+        m_datStore.reset();
+        m_timeSeconds = std::make_shared<const std::vector<double>>();
+
+        m_channels.clear();
+        m_channelNames.clear();
+        m_channelUnits.clear();
+        m_statusNames.clear();
+        m_diagnostics.clear();
+        m_channelConfigs.clear();
+        m_analogRoles.clear();
+        m_phaseRoles.clear();
+        m_statusActive.clear();
+        m_statusNormalState.clear();
+        m_digitalEdgeTimes.clear();
+        m_channelPeaks.clear();
+
+        m_title = QStringLiteral("No record open");
+        m_metadata = QStringLiteral("Open a COMTRADE CFG to begin");
+        m_selectedSignal = QStringLiteral("No signal");
+        m_recorderId = QStringLiteral("—");
+        m_revisionText = QStringLiteral("—");
+        m_dataFormatText = QStringLiteral("—");
+        m_startTimeText = QStringLiteral("—");
+        m_triggerTimeText = QStringLiteral("—");
+        m_recordHealth = QStringLiteral("No record");
+        m_valueRepresentation = QStringLiteral("secondary");
+        m_transformerRatioSummary = QStringLiteral("No CT/PT ratio metadata");
+        m_distanceZonePath.clear();
+        m_headerSourceName.clear();
+        m_headerText.clear();
+        m_error.clear();
+
+        m_selectedAnalogIndex = -1;
+        m_analogCount = 0;
+        m_digitalCount = 0;
+        m_activeDigitalCount = 0;
+        m_nominalFrequency = 0.0;
+        m_triggerOffsetSeconds = 0.0;
+        m_transformerRatiosAvailable = false;
+
+        // Direct Qt connections synchronously invalidate cursor/locus sources and
+        // clear harmonic/table caches before this call returns.
+        emit loadingChanged();
+        emit documentChanged();
+        emit waveformChanged();
+        emit representationChanged();
+        emit errorChanged();
+    }
     Q_INVOKABLE void selectChannel(int index);
     Q_INVOKABLE void setValueRepresentation(const QString& representation);
     Q_INVOKABLE QString channelName(int index) const;
