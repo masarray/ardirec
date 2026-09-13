@@ -32,7 +32,7 @@ ApplicationWindow {
     property int measurementChannel: -1
     property int maximumTracks: 24
     property string digitalDisplayMode: "active"
-    property string viewMode: "time"
+    readonly property string viewMode: mdiWorkspace.activeViewType
     property string timeDisplayMode: "instantaneous"
     property real axisWidth: 170
     property real analogTrackHeight: 148
@@ -51,6 +51,7 @@ ApplicationWindow {
         id: appActions
         hasRecord: window.hasRecord
         diagnosticCount: documentController.diagnosticCount
+        mdiChildCount: mdiWorkspace.childCount
         currentView: window.viewMode
         timeDisplayMode: window.timeDisplayMode
         valueRepresentation: documentController.valueRepresentation
@@ -68,7 +69,14 @@ ApplicationWindow {
         onTriggerRequested: window.focusTrigger()
         onZoomInRequested: window.zoomAround(1.4, 0.5)
         onZoomOutRequested: window.zoomAround(1.0 / 1.4, 0.5)
-        onViewRequested: viewName => window.viewMode = viewName
+        onViewRequested: viewName => mdiWorkspace.openView(viewName, false)
+        onNewViewRequested: viewName => mdiWorkspace.openView(viewName, true)
+        onCloseAnalysisWindowRequested: mdiWorkspace.closeActiveWindow()
+        onNextWindowRequested: mdiWorkspace.activateNext()
+        onPreviousWindowRequested: mdiWorkspace.activatePrevious()
+        onCascadeRequested: mdiWorkspace.cascade()
+        onTileHorizontalRequested: mdiWorkspace.tileHorizontal()
+        onTileVerticalRequested: mdiWorkspace.tileVertical()
         onWaveformModeRequested: mode => window.timeDisplayMode = mode
         onValueRepresentationRequested: representation => documentController.setValueRepresentation(representation)
         onFullScreenRequested: {
@@ -179,9 +187,8 @@ ApplicationWindow {
         rebuildAnalogGroups()
         rebuildDigitalGroup()
         locusAnalysisProxy.invalidate()
-        deferredViews.resetForRecord()
+        mdiWorkspace.resetForRecord()
         focusTrigger()
-        timeSignals.resetScroll()
     }
 
     function applySignalConfiguration(timeChannels, digitalChannels, voltageGroup, currentGroup,
@@ -197,7 +204,6 @@ ApplicationWindow {
         rebuildDigitalGroup()
         if (measurementChannel < 0 || (tableChannels.indexOf(measurementChannel) < 0 && visibleChannels.indexOf(measurementChannel) < 0))
             measurementChannel = tableChannels.length ? tableChannels[0] : (visibleChannels.length ? visibleChannels[0] : -1)
-        timeSignals.resetScroll()
     }
 
     function fitRecord() {
@@ -358,7 +364,7 @@ ApplicationWindow {
             id: workspace
             Layout.fillWidth: true
             Layout.fillHeight: true
-            color: "#ffffff"
+            color: "#dfe3e6"
             border.color: "#aeb4ba"
             clip: true
 
@@ -402,7 +408,7 @@ ApplicationWindow {
                 visible: window.hasRecord && documentController.loading
                 color: "#f8f9fa"
                 border.color: "#c9cfd4"
-                z: 40
+                z: 10000
                 Row {
                     id: loadingRow
                     anchors.centerIn: parent
@@ -417,25 +423,35 @@ ApplicationWindow {
                 }
             }
 
-            TimeSignalsView {
-                id: timeSignals
+            MdiWorkspace {
+                id: mdiWorkspace
                 anchors.fill: parent
-                visible: window.hasRecord && window.viewMode === "time"
+                visible: window.hasRecord
+                hasRecord: window.hasRecord
                 document: documentController
                 analysis: analysisController
-                voltageChannels: window.voltageChannels
-                currentChannels: window.currentChannels
-                otherChannels: window.otherChannels
-                displayedDigitalChannels: window.displayedDigitalChannels
-                digitalDisplayMode: window.digitalDisplayMode
-                displayMode: window.timeDisplayMode
-                valueRepresentation: documentController.valueRepresentation
+                locusAnalysis: locusAnalysisProxy
+                harmonicSnapshot: harmonicSnapshotController
+                tableSnapshot: tableSnapshotController
                 zoomFactor: window.waveformZoom
                 panFraction: window.waveformPan
                 viewStart: window.viewStart
                 visibleDuration: window.visibleDuration
                 cursorATime: window.cursorATime
                 cursorBTime: window.cursorBTime
+                voltageChannels: window.voltageChannels
+                currentChannels: window.currentChannels
+                otherChannels: window.otherChannels
+                displayedDigitalChannels: window.displayedDigitalChannels
+                digitalDisplayMode: window.digitalDisplayMode
+                timeDisplayMode: window.timeDisplayMode
+                valueRepresentation: documentController.valueRepresentation
+                phasorVoltageChannels: window.phasorVoltageChannels
+                phasorCurrentChannels: window.phasorCurrentChannels
+                residualChannels: window.phasorResidualChannels
+                harmonicChannels: window.harmonicChannels
+                tableChannels: window.tableChannels
+                selectedChannel: window.measurementChannel
                 axisWidth: window.axisWidth
                 analogTrackHeight: window.analogTrackHeight
                 digitalTrackHeight: window.digitalTrackHeight
@@ -444,29 +460,6 @@ ApplicationWindow {
                 onPanRequested: value => window.waveformPan = value
                 onZoomRequested: (factor, anchorFraction) => window.zoomAround(factor, anchorFraction)
                 onDigitalDisplayModeRequested: mode => window.digitalDisplayMode = mode
-            }
-
-            DeferredEngineeringViews {
-                id: deferredViews
-                anchors.fill: parent
-                hasRecord: window.hasRecord
-                viewMode: window.viewMode
-                document: documentController
-                analysis: analysisController
-                locusAnalysis: locusAnalysisProxy
-                harmonicSnapshot: harmonicSnapshotController
-                tableSnapshot: tableSnapshotController
-                viewStart: window.viewStart
-                visibleDuration: window.visibleDuration
-                cursorATime: window.cursorATime
-                cursorBTime: window.cursorBTime
-                voltageChannels: window.phasorVoltageChannels
-                currentChannels: window.phasorCurrentChannels
-                residualChannels: window.phasorResidualChannels
-                harmonicChannels: window.harmonicChannels
-                tableChannels: window.tableChannels
-                selectedChannel: window.measurementChannel
-                valueRepresentation: documentController.valueRepresentation
                 onSignalActivated: channelIndex => {
                     window.measurementChannel = channelIndex
                     documentController.selectChannel(channelIndex)
