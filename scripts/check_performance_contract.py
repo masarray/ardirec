@@ -48,9 +48,8 @@ def function_body(source: str, signature_fragment: str) -> str:
     return ""
 
 
-# Both instantaneous and RMS render paths consume prepared bounded snapshots;
-# DAT decoding/sample traversal belongs in cancellable workers, never scene-graph
-# synchronization where it can create a visible frame stall.
+# Time-domain renderers consume prepared bounded snapshots; DAT decoding/sample
+# traversal belongs in cancellable workers, never scene-graph synchronization.
 waveform = text("apps/desktop/waveform_item.cpp")
 waveform_paint = function_body(waveform, "WaveformItem::updatePaintNode")
 if not waveform_paint:
@@ -77,6 +76,20 @@ else:
             )
 require("apps/desktop/rms_waveform_item.cpp", "QtConcurrent::run", "RMS viewport preparation must stay asynchronous")
 require("apps/desktop/rms_waveform_item.cpp", "cancel", "RMS background preparation must remain cancellable/latest-wins")
+
+digital = text("apps/desktop/digital_item.cpp")
+digital_paint = function_body(digital, "DigitalItem::updatePaintNode")
+if not digital_paint:
+    FAILURES.append("apps/desktop/digital_item.cpp: updatePaintNode() not found")
+else:
+    for token in ("statusValue(", "lower_bound(", "upper_bound("):
+        if token in digital_paint:
+            FAILURES.append(
+                f"apps/desktop/digital_item.cpp: {token!r} inside updatePaintNode() — digital source traversal belongs in background preparation"
+            )
+require("apps/desktop/digital_item.cpp", "QtConcurrent::run", "digital viewport preparation must stay asynchronous")
+require("apps/desktop/digital_item.cpp", "m_rebuildGeneration", "digital work must remain latest-wins")
+require("apps/desktop/digital_item.cpp", "minimumVisibleRun", "overview digital geometry must stay bounded by pixel resolution")
 
 # Cursor interaction: raw pointer-rate movement must be preview/coalesced.
 time_view = text("apps/desktop/qml/TimeSignalsView.qml")
