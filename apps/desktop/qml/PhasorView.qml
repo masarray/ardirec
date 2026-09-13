@@ -9,6 +9,7 @@ Rectangle {
 
     property var document
     property var analysis
+    property bool requestOwner: true
     property real cursorATime: 0.0
     property real cursorBTime: 0.0
     property var voltageChannels: []
@@ -78,16 +79,20 @@ Rectangle {
         return maximum > 0.0 ? maximum * 1.02 : 0.0
     }
 
+    // Multiple visible MDI Phasor children consume the same global immutable
+    // cursor snapshots. Exactly one child of this view type owns requests so
+    // duplicate windows never launch duplicate one-cycle DFT jobs.
     function requestSnapshots() {
-        if (!root.document || !root.visible) return
+        if (!root.requestOwner || !root.document || !root.visible) return
         cursorSnapshotController.requestCursorA(root.cursorATime)
         cursorSnapshotController.requestCursorB(root.cursorBTime)
     }
 
-    onCursorATimeChanged: if (visible) cursorSnapshotController.requestCursorA(cursorATime)
-    onCursorBTimeChanged: if (visible) cursorSnapshotController.requestCursorB(cursorBTime)
-    onVisibleChanged: if (visible) Qt.callLater(requestSnapshots)
-    Component.onCompleted: if (visible) Qt.callLater(requestSnapshots)
+    onCursorATimeChanged: if (visible && requestOwner) cursorSnapshotController.requestCursorA(cursorATime)
+    onCursorBTimeChanged: if (visible && requestOwner) cursorSnapshotController.requestCursorB(cursorBTime)
+    onVisibleChanged: if (visible && requestOwner) Qt.callLater(requestSnapshots)
+    onRequestOwnerChanged: if (visible && requestOwner) Qt.callLater(requestSnapshots)
+    Component.onCompleted: if (visible && requestOwner) Qt.callLater(requestSnapshots)
 
     ColumnLayout {
         anchors.fill: parent
