@@ -2,11 +2,11 @@
 #pragma once
 
 #include "document_controller.hpp"
+#include "sample_snapshot_key.hpp"
 
 #include <QHash>
 #include <QObject>
 #include <QPointer>
-#include <QString>
 #include <QVariantMap>
 
 #include <cstddef>
@@ -23,11 +23,23 @@ public:
     Q_INVOKABLE void clearCache();
 
 private:
+    struct CacheEntry final {
+        QVariantMap value;
+        double referenceTime{0.0};
+        quint64 touch{0};
+    };
+
     [[nodiscard]] std::pair<std::size_t, std::size_t> oneCycleWindow(double absoluteTimeSeconds) const;
-    [[nodiscard]] QString cacheKey(int channelIndex,
-                                   double absoluteTimeSeconds,
-                                   int maximumOrder) const;
+    [[nodiscard]] std::size_t windowEndSample(double absoluteTimeSeconds) const;
+    [[nodiscard]] SampleSnapshotKey cacheKey(int channelIndex,
+                                             double absoluteTimeSeconds,
+                                             int maximumOrder) const;
+    [[nodiscard]] QVariantMap adjustedForReference(const CacheEntry& entry,
+                                                   double absoluteTimeSeconds) const;
+    void trimCache();
 
     QPointer<DocumentController> m_document;
-    QHash<QString, QVariantMap> m_cache;
+    QHash<SampleSnapshotKey, CacheEntry> m_cache;
+    quint64 m_touchCounter{0};
+    int m_maxCacheEntries{256};
 };
