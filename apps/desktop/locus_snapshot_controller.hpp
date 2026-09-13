@@ -39,7 +39,6 @@ struct LocusNativeSnapshot final {
     double rawMaxAbsX{0.0};
     int pointBudget{0};
     int analyzedPointCount{0};
-    int statusRejectedCount{0};
 };
 
 class LocusSnapshotController final : public QObject {
@@ -59,7 +58,9 @@ class LocusSnapshotController final : public QObject {
     Q_PROPERTY(double rawMaxAbsR READ rawMaxAbsR NOTIFY snapshotChanged)
     Q_PROPERTY(double rawMaxAbsX READ rawMaxAbsX NOTIFY snapshotChanged)
     Q_PROPERTY(int analyzedPointCount READ analyzedPointCount NOTIFY snapshotChanged)
-    Q_PROPERTY(int statusRejectedCount READ statusRejectedCount NOTIFY snapshotChanged)
+    Q_PROPERTY(bool classicalGroundingValid READ classicalGroundingValid NOTIFY snapshotChanged)
+    Q_PROPERTY(double reOverRl READ reOverRl NOTIFY snapshotChanged)
+    Q_PROPERTY(double xeOverXl READ xeOverXl NOTIFY snapshotChanged)
 
 public:
     explicit LocusSnapshotController(DocumentController* document, QObject* parent = nullptr);
@@ -80,7 +81,9 @@ public:
     double rawMaxAbsR() const { return m_nativeSnapshot ? m_nativeSnapshot->rawMaxAbsR : 0.0; }
     double rawMaxAbsX() const { return m_nativeSnapshot ? m_nativeSnapshot->rawMaxAbsX : 0.0; }
     int analyzedPointCount() const { return m_nativeSnapshot ? m_nativeSnapshot->analyzedPointCount : 0; }
-    int statusRejectedCount() const { return m_nativeSnapshot ? m_nativeSnapshot->statusRejectedCount : 0; }
+    bool classicalGroundingValid() const { return m_classicalGroundingValid; }
+    double reOverRl() const { return m_reOverRl; }
+    double xeOverXl() const { return m_xeOverXl; }
 
     Q_INVOKABLE void request(double viewStartSeconds,
                              double visibleDurationSeconds,
@@ -112,6 +115,9 @@ private:
     quint64 m_generation{0};
     int m_revision{0};
     bool m_busy{false};
+    bool m_classicalGroundingValid{false};
+    double m_reOverRl{0.0};
+    double m_xeOverXl{0.0};
 
     double m_lastStart{0.0};
     double m_lastDuration{0.0};
