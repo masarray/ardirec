@@ -53,6 +53,7 @@ qt_add_qml_module(ardirec
         qml/TriggerReference.qml
         qml/SectionHeader.qml
         qml/DigitalTrackView.qml
+        qml/DeferredEngineeringViews.qml
         qml/PhasorDiagram.qml
         qml/PhasorView.qml
         qml/SequenceSummary.qml
