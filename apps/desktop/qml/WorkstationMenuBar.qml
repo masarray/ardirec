@@ -96,17 +96,6 @@ MenuBar {
     }
 
     Menu {
-        title: "&Window"
-        MenuItem { action: root.actions?.workspaceSingle ?? null }
-        MenuSeparator { }
-        MenuItem { action: root.actions?.workspaceSplitHorizontal ?? null }
-        MenuItem { action: root.actions?.workspaceSplitVertical ?? null }
-        MenuItem { action: root.actions?.workspaceGrid ?? null }
-        MenuSeparator { }
-        MenuItem { action: root.actions?.workspaceReport ?? null }
-    }
-
-    Menu {
         title: "&Help"
         MenuItem { action: root.actions?.about ?? null }
     }

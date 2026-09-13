@@ -176,13 +176,10 @@ elif "QVariantMap" in bulk_worker or "QVariantList" in bulk_worker:
 if "4096" not in locus_cpp:
     FAILURES.append("apps/desktop/locus_snapshot_controller.cpp: bounded locus point budget guard is missing")
 
-# Heavy engineering views remain demand-created and quiescent. The P2 workspace
-# hosts the existing deferred view container inside reusable panes rather than
-# creating independent numerical controllers per pane.
-require("apps/desktop/qml/Main.qml", "WorkspaceHost", "application workspace must use the shared multi-pane host")
-require("apps/desktop/qml/WorkspacePane.qml", "DeferredEngineeringViews", "each pane must reuse the deferred heavy-view container")
-require("apps/desktop/qml/WorkspacePane.qml", "active: root.visible && root.hasRecord && root.viewMode === \"time\"", "Time Signals must be demand-loaded only for a visible active pane")
-require("apps/desktop/qml/WorkspacePane.qml", "hasRecord: root.visible && root.hasRecord", "hidden workspace panes must deactivate retained engineering views")
+# P1 first-interactive contract: heavy engineering views are demand-created, not
+# all synchronously constructed during application/record startup. Retained hidden
+# views must also be quiescent rather than continuing analysis in the background.
+require("apps/desktop/qml/Main.qml", "DeferredEngineeringViews", "heavy engineering views must be hosted by the deferred workspace")
 deferred = text("apps/desktop/qml/DeferredEngineeringViews.qml")
 if deferred.count("asynchronous: true") < 4:
     FAILURES.append("apps/desktop/qml/DeferredEngineeringViews.qml: all four heavy engineering loaders must be asynchronous")
@@ -198,26 +195,7 @@ require("apps/desktop/qml/DeferredEngineeringViews.qml", "resetForRecord", "defe
 main_qml = text("apps/desktop/qml/Main.qml")
 for eager_type in ("PhasorView {", "LocusView {", "HarmonicsView {", "ValueTableView {"):
     if eager_type in main_qml:
-        FAILURES.append(f"apps/desktop/qml/Main.qml: eager heavy view construction {eager_type!r} is forbidden; use WorkspaceHost/DeferredEngineeringViews")
-
-workspace = text("apps/desktop/qml/WorkspaceHost.qml")
-if workspace.count("WorkspacePane {") < 4:
-    FAILURES.append("apps/desktop/qml/WorkspaceHost.qml: report/grid workspace must provide four reusable panes")
-for shared_binding in (
-    "analysis: root.analysis",
-    "locusAnalysis: root.locusAnalysis",
-    "harmonicSnapshot: root.harmonicSnapshot",
-    "tableSnapshot: root.tableSnapshot",
-    "cursorATime: root.cursorATime",
-    "cursorBTime: root.cursorBTime",
-):
-    if workspace.count(shared_binding) < 4:
-        FAILURES.append(f"apps/desktop/qml/WorkspaceHost.qml: panes must share global binding {shared_binding!r}")
-require("apps/desktop/qml/WorkspaceHost.qml", "pane0View = \"time\"", "report preset must include Time Signals")
-require("apps/desktop/qml/WorkspaceHost.qml", "pane1View = \"phasor\"", "report preset must include Phasor")
-require("apps/desktop/qml/WorkspaceHost.qml", "pane2View = \"locus\"", "report preset must include R-X Locus")
-require("apps/desktop/qml/WorkspaceHost.qml", "pane3View = \"table\"", "report preset must include Engineering Table")
-require("apps/desktop/qml/WorkstationMenuBar.qml", "title: \"&Window\"", "real workspace layouts require a Window menu")
+        FAILURES.append(f"apps/desktop/qml/Main.qml: eager heavy view construction {eager_type!r} is forbidden; use DeferredEngineeringViews")
 
 # Channel semantics are classified once when the document is applied. Numeric/UI
 # interaction paths consume integer cached roles instead of regex/string discovery.
