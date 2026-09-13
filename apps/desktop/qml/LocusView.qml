@@ -199,28 +199,22 @@ Rectangle {
         return 10 * base
     }
 
-    // Relevant fit follows the engineering investigation context: loaded zones and
-    // the two committed cursor measurements. Extreme finite trajectory values remain
-    // in the native buffer and are available through Fit All; they never rewrite data.
-    function distanceTarget(zones, loops) {
+    // Relevant fit is family-local and uses protection zones, committed cursors,
+    // and the robust 99th-percentile valid trajectory extent. This avoids both
+    // clipping the meaningful path and letting rare forensic outliers dominate.
+    // Fit All remains the exact finite family extent with no numerical clipping.
+    function distanceTarget(zones, loops, fullR, fullX, relevantR, relevantX) {
         const zone = zoneMagnitude(zones)
         if (fitMode === "all") {
             return {
-                r: niceCeil(Math.max(3.0, zone.r, locusSnapshotController.maxAbsR) * 1.08),
-                x: niceCeil(Math.max(3.0, zone.x, locusSnapshotController.maxAbsX) * 1.08)
+                r: niceCeil(Math.max(3.0, zone.r, Number(fullR)) * 1.08),
+                x: niceCeil(Math.max(3.0, zone.x, Number(fullX)) * 1.08)
             }
         }
         const cursor = cursorExtent(loops)
-        const hasReference = zone.r > 0 || zone.x > 0 || cursor.r > 0 || cursor.x > 0
-        if (!hasReference) {
-            return {
-                r: niceCeil(Math.max(3.0, locusSnapshotController.maxAbsR) * 1.08),
-                x: niceCeil(Math.max(3.0, locusSnapshotController.maxAbsX) * 1.08)
-            }
-        }
         return {
-            r: niceCeil(Math.max(3.0, zone.r, cursor.r) * 1.15),
-            x: niceCeil(Math.max(3.0, zone.x, cursor.x) * 1.15)
+            r: niceCeil(Math.max(3.0, zone.r, cursor.r, Number(relevantR)) * 1.12),
+            x: niceCeil(Math.max(3.0, zone.x, cursor.x, Number(relevantX)) * 1.12)
         }
     }
 
@@ -252,11 +246,19 @@ Rectangle {
     readonly property real panelHeight: Math.max(1, (graphSurface.height - panelGap) * 0.5)
     readonly property var earthTransform: distanceMode
                                           ? panelTransform(0, 0, graphSurface.width, panelHeight,
-                                                           distanceTarget(earthZones, earthLoops), true)
+                                                           distanceTarget(earthZones, earthLoops,
+                                                                          locusSnapshotController.earthMaxAbsR,
+                                                                          locusSnapshotController.earthMaxAbsX,
+                                                                          locusSnapshotController.earthRelevantMaxAbsR,
+                                                                          locusSnapshotController.earthRelevantMaxAbsX), true)
                                           : ({valid:false})
     readonly property var phaseTransform: distanceMode
                                           ? panelTransform(0, panelHeight + panelGap, graphSurface.width, panelHeight,
-                                                           distanceTarget(phaseZones, phaseLoops), true)
+                                                           distanceTarget(phaseZones, phaseLoops,
+                                                                          locusSnapshotController.phaseMaxAbsR,
+                                                                          locusSnapshotController.phaseMaxAbsX,
+                                                                          locusSnapshotController.phaseRelevantMaxAbsR,
+                                                                          locusSnapshotController.phaseRelevantMaxAbsX), true)
                                           : ({valid:false})
     readonly property var rawTransform: !distanceMode
                                         ? panelTransform(0, 0, graphSurface.width, graphSurface.height,
@@ -367,7 +369,7 @@ Rectangle {
                     checked: root.fitMode === "relevant"
                     onClicked: { root.fitMode = "relevant"; root.setLocusZoom(1.0) }
                     ToolTip.visible:hovered
-                    ToolTip.text:"Fit protection zones and C1/C2 measurement context; trajectory outliers remain available in Fit All"
+                    ToolTip.text:"Family-local fit of valid trajectory, protection zones and C1/C2; rare outliers remain available in Fit All"
                 }
                 ToolButton {
                     text:"Fit All"
