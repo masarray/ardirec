@@ -12,6 +12,8 @@ qt_add_executable(ardirec WIN32 MACOSX_BUNDLE
     analysis_sequence.cpp
     cursor_snapshot_controller.cpp
     cursor_snapshot_controller.hpp
+    locus_snapshot_controller.cpp
+    locus_snapshot_controller.hpp
     harmonic_snapshot_controller.cpp
     harmonic_snapshot_controller.hpp
     table_snapshot_controller.cpp
