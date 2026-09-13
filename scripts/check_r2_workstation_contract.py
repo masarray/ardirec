@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -71,11 +72,22 @@ require("tests/test_document_lifecycle.cpp", "rmsTileCacheSnapshot() == nullptr"
 require("tests/test_document_lifecycle.cpp", "pump_events(250)", "test must give the cancelled loader callback a chance to publish stale data")
 require("tests/CMakeLists.txt", "ardirec_document_lifecycle_tests", "close lifecycle regression must run under CTest")
 
-# Build identity must stay aligned across the executable and the downloadable
-# Windows artifact so operators never test an alpha.20 binary labelled alpha.17.
-require("apps/desktop/main.cpp", "0.2.0-alpha.20", "R2 candidate must be distinguishable from frozen R1.2 builds")
-require(".github/workflows/windows-build.yml", "ardirec-v0.2.0-alpha.20-windows-x64", "Windows staging folder must match the R2 candidate version")
-require(".github/workflows/windows-build.yml", "ardirec-v0.2.0-alpha.20-windows-x64-portable.zip", "portable ZIP name must match the R2 candidate version")
+# R2 discovered that the executable version and Windows artifact identity could
+# drift. Preserve that invariant across later milestones instead of pinning the
+# repository forever to the historical R2 alpha.20 candidate.
+main_cpp = text("apps/desktop/main.cpp")
+windows_workflow = text(".github/workflows/windows-build.yml")
+version_match = re.search(r'setApplicationVersion\(QStringLiteral\("([^\"]+)"\)\)', main_cpp)
+if not version_match:
+    FAILURES.append("apps/desktop/main.cpp: application version declaration not found")
+else:
+    version = version_match.group(1)
+    staging = f"ardirec-v{version}-windows-x64"
+    archive = f"ardirec-v{version}-windows-x64-portable.zip"
+    if staging not in windows_workflow:
+        FAILURES.append(f".github/workflows/windows-build.yml: staging folder does not match application version {version!r}")
+    if archive not in windows_workflow:
+        FAILURES.append(f".github/workflows/windows-build.yml: portable ZIP does not match application version {version!r}")
 
 if FAILURES:
     print("ArdIREC R2 workstation contract: FAIL", file=sys.stderr)
