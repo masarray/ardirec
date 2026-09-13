@@ -9,6 +9,7 @@ QtObject {
     property var document: documentController
     property bool hasRecord: false
     property int diagnosticCount: 0
+    property int mdiChildCount: 0
     property string currentView: "time"
     property string timeDisplayMode: "instantaneous"
     property string valueRepresentation: "secondary"
@@ -24,6 +25,13 @@ QtObject {
     signal zoomInRequested()
     signal zoomOutRequested()
     signal viewRequested(string viewName)
+    signal newViewRequested(string viewName)
+    signal closeAnalysisWindowRequested()
+    signal nextWindowRequested()
+    signal previousWindowRequested()
+    signal cascadeRequested()
+    signal tileHorizontalRequested()
+    signal tileVerticalRequested()
     signal waveformModeRequested(string mode)
     signal valueRepresentationRequested(string representation)
     signal fullScreenRequested()
@@ -120,6 +128,8 @@ QtObject {
         onTriggered: root.signalsRequested()
     }
 
+    // 1..5 activate an existing child of that type or create it when absent.
+    // Shift+1..5 always creates a duplicate analysis child.
     property Action timeView: Action {
         text: "&Time Signals"
         shortcut: "1"
@@ -163,6 +173,71 @@ QtObject {
         checked: root.currentView === "table"
         enabled: root.hasRecord
         onTriggered: root.viewRequested("table")
+    }
+
+    property Action newTimeView: Action {
+        text: "New &Time Signals Window"
+        shortcut: "Shift+1"
+        enabled: root.hasRecord
+        onTriggered: root.newViewRequested("time")
+    }
+    property Action newPhasorView: Action {
+        text: "New &Phasor Window"
+        shortcut: "Shift+2"
+        enabled: root.hasRecord
+        onTriggered: root.newViewRequested("phasor")
+    }
+    property Action newLocusView: Action {
+        text: "New R-&X Locus Window"
+        shortcut: "Shift+3"
+        enabled: root.hasRecord
+        onTriggered: root.newViewRequested("locus")
+    }
+    property Action newHarmonicsView: Action {
+        text: "New &Harmonics Window"
+        shortcut: "Shift+4"
+        enabled: root.hasRecord
+        onTriggered: root.newViewRequested("harmonics")
+    }
+    property Action newTableView: Action {
+        text: "New Engineering &Table Window"
+        shortcut: "Shift+5"
+        enabled: root.hasRecord
+        onTriggered: root.newViewRequested("table")
+    }
+
+    property Action closeAnalysisWindow: Action {
+        text: "&Close Active Analysis Window"
+        shortcut: "Ctrl+F4"
+        enabled: root.hasRecord && root.mdiChildCount > 0
+        onTriggered: root.closeAnalysisWindowRequested()
+    }
+    property Action nextAnalysisWindow: Action {
+        text: "Activate &Next Window"
+        shortcut: "Ctrl+Tab"
+        enabled: root.mdiChildCount > 1
+        onTriggered: root.nextWindowRequested()
+    }
+    property Action previousAnalysisWindow: Action {
+        text: "Activate &Previous Window"
+        shortcut: "Ctrl+Shift+Tab"
+        enabled: root.mdiChildCount > 1
+        onTriggered: root.previousWindowRequested()
+    }
+    property Action cascadeWindows: Action {
+        text: "&Cascade"
+        enabled: root.mdiChildCount > 0
+        onTriggered: root.cascadeRequested()
+    }
+    property Action tileHorizontalWindows: Action {
+        text: "Tile &Horizontally"
+        enabled: root.mdiChildCount > 0
+        onTriggered: root.tileHorizontalRequested()
+    }
+    property Action tileVerticalWindows: Action {
+        text: "Tile &Vertically"
+        enabled: root.mdiChildCount > 0
+        onTriggered: root.tileVerticalRequested()
     }
 
     property Action fitRecord: Action {
