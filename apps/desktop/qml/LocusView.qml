@@ -574,23 +574,23 @@ Rectangle {
 
                             component CursorCross: Item {
                                 property var point
-                                property var transform
+                                property var plotMapping
                                 property color crossColor
                                 property bool strong: false
                                 readonly property real arm: strong ? 10 : 8
                                 readonly property real stroke: strong ? 2.3 : 1.8
-                                visible: root.pointInside(point,transform)
+                                visible: root.pointInside(point,plotMapping)
                                 width: arm*2; height: arm*2
-                                x: root.pointX(point,transform)-arm
-                                y: root.pointY(point,transform)-arm
+                                x: root.pointX(point,plotMapping)-arm
+                                y: root.pointY(point,plotMapping)-arm
                                 Rectangle { anchors.centerIn:parent; width:parent.width; height:parent.stroke+2.8; radius:height/2; color:"#fff" }
                                 Rectangle { anchors.centerIn:parent; width:parent.stroke+2.8; height:parent.height; radius:width/2; color:"#fff" }
                                 Rectangle { anchors.centerIn:parent; width:parent.width; height:parent.stroke; radius:height/2; color:parent.crossColor }
                                 Rectangle { anchors.centerIn:parent; width:parent.stroke; height:parent.height; radius:width/2; color:parent.crossColor }
                             }
 
-                            CursorCross { point:parent.pointA; transform:parent.plotTransform; crossColor:"#244f9e"; strong:root.selectedLoop===parent.loopId }
-                            CursorCross { point:parent.pointB; transform:parent.plotTransform; crossColor:"#b77900"; strong:root.selectedLoop===parent.loopId }
+                            CursorCross { point:parent.pointA; plotMapping:parent.plotTransform; crossColor:"#244f9e"; strong:root.selectedLoop===parent.loopId }
+                            CursorCross { point:parent.pointB; plotMapping:parent.plotTransform; crossColor:"#b77900"; strong:root.selectedLoop===parent.loopId }
                         }
                     }
                 }
