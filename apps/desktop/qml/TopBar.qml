@@ -10,25 +10,16 @@ Rectangle {
     border.color: "#b7b7b7"
 
     property var document
+    property var actions
     property string recordTitle: "No record open"
-    property string recordMetadata: ""
     property string currentViewLabel: "TIME SIGNALS"
     property bool hasRecord: false
-    // Kept as API-compatible inputs for callers. Cursor timing is intentionally visualized
-    // in the shared ruler/Event row instead of duplicated as toolbar text.
-    property real cursorATime: 0.0
-    property real cursorBTime: 0.0
-    property real triggerOffsetSeconds: 0.0
-    property real nominalFrequency: 50.0
     property var diagnostics: document ? document.diagnostics : []
     readonly property int diagnosticCount: diagnostics ? diagnostics.length : 0
 
-    signal openRequested()
-    signal signalsRequested()
-    signal fitRequested()
-    signal triggerRequested()
-    signal zoomInRequested()
-    signal zoomOutRequested()
+    function showProperties() { if (root.hasRecord) propertiesPopup.open() }
+    function showDiagnostics() { if (root.hasRecord && root.diagnosticCount > 0) diagnosticsPopup.open() }
+    function showAbout() { aboutPopup.open() }
 
     component ToolbarIconButton: ToolButton {
         id: control
@@ -256,52 +247,54 @@ Rectangle {
 
     RowLayout {
         anchors.fill: parent
-        anchors.leftMargin: 3
+        anchors.leftMargin: 6
         anchors.rightMargin: 8
         spacing: 2
 
-        MenuBar {
-            id: menuBar
-            Layout.fillHeight: true
-            Menu {
-                title: "&File"
-                MenuItem { text: "Open COMTRADE…"; onTriggered: root.openRequested() }
-                MenuItem { text: "COMTRADE Properties…"; enabled: root.hasRecord; onTriggered: propertiesPopup.open() }
-                MenuSeparator { }
-                MenuItem { text: "Exit"; onTriggered: Qt.quit() }
-            }
-            Menu {
-                title: "&View"
-                MenuItem { text: "Fit complete record"; enabled: root.hasRecord; onTriggered: root.fitRequested() }
-                MenuItem { text: "Focus trigger"; enabled: root.hasRecord; onTriggered: root.triggerRequested() }
-                MenuSeparator { }
-                MenuItem { text: "Zoom in"; enabled: root.hasRecord; onTriggered: root.zoomInRequested() }
-                MenuItem { text: "Zoom out"; enabled: root.hasRecord; onTriggered: root.zoomOutRequested() }
-            }
-            Menu {
-                title: "&Signals"
-                MenuItem { text: "Signal Configuration…"; enabled: root.hasRecord; onTriggered: root.signalsRequested() }
-            }
-            Menu {
-                title: "&Help"
-                MenuItem { text: "About ArdIREC"; onTriggered: aboutPopup.open() }
-            }
+        ToolbarIconButton {
+            action: root.actions?.openRecord ?? null
+            iconSource: "icons/folder-open.svg"
+            tipText: "Open COMTRADE… (Ctrl+O)"
+        }
+        ToolbarIconButton {
+            action: root.actions?.signalConfiguration ?? null
+            iconSource: "icons/sliders-horizontal.svg"
+            tipText: "Signal Configuration… (Ctrl+R)"
+        }
+        ToolbarIconButton {
+            action: root.actions?.recordProperties ?? null
+            iconSource: "icons/layers-3.svg"
+            tipText: "Record Properties… (Alt+Enter)"
         }
 
-        Rectangle { width: 1; height: 22; color: "#c5c9cc"; Layout.leftMargin: 2; Layout.rightMargin: 4 }
+        Rectangle { width: 1; height: 22; color: "#c5c9cc"; Layout.leftMargin: 4; Layout.rightMargin: 4 }
 
-        ToolbarIconButton { iconSource: "icons/folder-open.svg"; tipText: "Open COMTRADE… (Ctrl+O)"; onClicked: root.openRequested() }
-        ToolbarIconButton { iconSource: "icons/sliders-horizontal.svg"; tipText: "Signal Configuration…"; enabled: root.hasRecord; onClicked: root.signalsRequested() }
-        ToolbarIconButton { iconSource: "icons/maximize-2.svg"; tipText: "Fit complete record (Ctrl+0)"; enabled: root.hasRecord; onClicked: root.fitRequested() }
-        ToolbarIconButton { iconSource: "icons/crosshair.svg"; tipText: "Focus common time view around COMTRADE trigger"; enabled: root.hasRecord; onClicked: root.triggerRequested() }
-        ToolbarIconButton { iconSource: "icons/zoom-out.svg"; tipText: "Zoom out"; enabled: root.hasRecord; onClicked: root.zoomOutRequested() }
-        ToolbarIconButton { iconSource: "icons/zoom-in.svg"; tipText: "Zoom in"; enabled: root.hasRecord; onClicked: root.zoomInRequested() }
+        ToolbarIconButton {
+            action: root.actions?.fitRecord ?? null
+            iconSource: "icons/maximize-2.svg"
+            tipText: "Fit complete record (Ctrl+0)"
+        }
+        ToolbarIconButton {
+            action: root.actions?.focusTrigger ?? null
+            iconSource: "icons/crosshair.svg"
+            tipText: "Focus common time view around COMTRADE trigger"
+        }
+        ToolbarIconButton {
+            action: root.actions?.zoomOut ?? null
+            iconSource: "icons/zoom-out.svg"
+            tipText: "Zoom out"
+        }
+        ToolbarIconButton {
+            action: root.actions?.zoomIn ?? null
+            iconSource: "icons/zoom-in.svg"
+            tipText: "Zoom in"
+        }
         ToolbarIconButton {
             visible: root.hasRecord && root.diagnosticCount > 0
+            action: root.actions?.recordDiagnostics ?? null
             iconSource: "icons/triangle-alert.svg"
             badgeText: String(root.diagnosticCount)
             tipText: "Show recoverable COMTRADE diagnostics"
-            onClicked: diagnosticsPopup.open()
         }
 
         Rectangle { width: 1; height: 22; color: "#c5c9cc"; Layout.leftMargin: 4; Layout.rightMargin: 5 }
@@ -312,13 +305,11 @@ Rectangle {
             font.pixelSize: 10
             font.weight: Font.DemiBold
             elide: Text.ElideRight
-            Layout.maximumWidth: 380
+            Layout.maximumWidth: 420
         }
 
         Item { Layout.fillWidth: true }
 
-        // Cursor timing intentionally lives in the ruler/Event row. Keeping only the active view
-        // label here makes the toolbar fast to scan and prevents duplicated numeric noise.
         Label {
             text: root.currentViewLabel
             color: "#4f5961"

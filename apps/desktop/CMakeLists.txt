@@ -30,6 +30,9 @@ qt_add_qml_module(ardirec
     VERSION 1.0
     QML_FILES
         qml/Main.qml
+        qml/AppActions.qml
+        qml/WorkstationMenuBar.qml
+        qml/WorkstationStatusBar.qml
         qml/SignalSidebar.qml
         qml/TopBar.qml
         qml/ViewModeBar.qml
