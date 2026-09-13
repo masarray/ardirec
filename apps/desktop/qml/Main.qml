@@ -125,7 +125,7 @@ ApplicationWindow {
 
     function signalLooksResidual(index) {
         const phase = documentController.channelPhase(index)
-        const name = documentController.channelName(index).trimmed().toUpperCase().replace(/[^A-Z0-9]/g, "")
+        const name = documentController.channelName(index).trim().toUpperCase().replace(/[^A-Z0-9]/g, "")
         return phase === "E" || name.indexOf("3I0") >= 0 || name.indexOf("3U0") >= 0
                 || name.indexOf("3V0") >= 0 || name === "I0" || name === "U0" || name === "V0"
                 || name.endsWith("IN") || name.endsWith("UN") || name.endsWith("VN")
