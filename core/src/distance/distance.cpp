@@ -31,6 +31,10 @@ std::pair<int, int> phase_pair(FaultLoop loop) {
     }
     return {0, -1};
 }
+
+bool finite_complex(const std::complex<double>& value) {
+    return std::isfinite(value.real()) && std::isfinite(value.imag());
+}
 } // namespace
 
 DistanceImpedance distance_impedance(FaultLoop loop,
@@ -57,18 +61,71 @@ DistanceImpedance distance_impedance(FaultLoop loop,
                             - phasors.current[static_cast<std::size_t>(second)];
     }
 
-    if (!std::isfinite(voltage.real()) || !std::isfinite(voltage.imag())
-        || !std::isfinite(measuring_current.real()) || !std::isfinite(measuring_current.imag())
+    if (!finite_complex(voltage) || !finite_complex(measuring_current)
         || std::abs(measuring_current) <= minimum_current) {
         return result;
     }
 
     const std::complex<double> impedance = voltage / measuring_current;
-    if (!std::isfinite(impedance.real()) || !std::isfinite(impedance.imag())) return result;
+    if (!finite_complex(impedance)) return result;
 
     result.valid = true;
     result.impedance = impedance;
     result.measuring_current = measuring_current;
+    return result;
+}
+
+DistanceImpedance distance_impedance_rerl_xexl(FaultLoop loop,
+                                                const ThreePhasePhasors& phasors,
+                                                std::complex<double> earth_current_ie,
+                                                double re_over_rl,
+                                                double xe_over_xl,
+                                                double minimum_current) {
+    if (!is_earth_loop(loop)) {
+        return distance_impedance(loop, phasors, {}, minimum_current);
+    }
+
+    DistanceImpedance result;
+    if (!std::isfinite(minimum_current) || minimum_current <= 0.0) minimum_current = 1.0e-9;
+    if (!std::isfinite(re_over_rl) || !std::isfinite(xe_over_xl)
+        || !finite_complex(earth_current_ie)) {
+        return result;
+    }
+
+    const auto [first, second] = phase_pair(loop);
+    (void)second;
+    const std::complex<double> voltage = phasors.voltage[static_cast<std::size_t>(first)];
+    const std::complex<double> phase_current = phasors.current[static_cast<std::size_t>(first)];
+    if (!finite_complex(voltage) || !finite_complex(phase_current)) return result;
+
+    // Siemens/SIGRA classical earth-loop equation:
+    // U = (Ip - kr*IE) R + j (Ip - kx*IE) X.
+    // R and X are real unknowns, so the two complex coefficients form a 2x2
+    // real system. Keeping kr and kx separate is essential; collapsing them to a
+    // complex kL requires a line angle and changes the result when kr != kx.
+    const std::complex<double> resistance_current = phase_current - re_over_rl * earth_current_ie;
+    const std::complex<double> reactance_current = phase_current - xe_over_xl * earth_current_ie;
+    if (!finite_complex(resistance_current) || !finite_complex(reactance_current)) return result;
+
+    const double determinant = resistance_current.real() * reactance_current.real()
+                               + resistance_current.imag() * reactance_current.imag();
+    const double conditioning_current = std::sqrt(std::abs(determinant));
+    if (!std::isfinite(determinant) || !std::isfinite(conditioning_current)
+        || conditioning_current <= minimum_current) {
+        return result;
+    }
+
+    const double resistance = (voltage.real() * reactance_current.real()
+                               + reactance_current.imag() * voltage.imag()) / determinant;
+    const double reactance = (resistance_current.real() * voltage.imag()
+                              - resistance_current.imag() * voltage.real()) / determinant;
+    if (!std::isfinite(resistance) || !std::isfinite(reactance)) return result;
+
+    result.valid = true;
+    result.impedance = {resistance, reactance};
+    // Classical kr/kx compensation has no single complex measuring current.
+    // Preserve the actual phase current for diagnostics/current-floor context.
+    result.measuring_current = phase_current;
     return result;
 }
 
