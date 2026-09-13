@@ -87,6 +87,18 @@ std::pair<std::size_t, std::size_t> one_cycle_window(const std::vector<double>& 
     return end > first ? std::pair{first, end} : std::pair<std::size_t, std::size_t>{0, 0};
 }
 
+bool window_has_status_change(const std::vector<double>& edges,
+                              const std::vector<double>& times,
+                              std::size_t first,
+                              std::size_t end) {
+    if (edges.empty() || first >= end || end > times.size()) return false;
+    constexpr double epsilon = 1.0e-10;
+    const double start = times[first] - epsilon;
+    const double finish = times[end - 1] + epsilon;
+    const auto it = std::lower_bound(edges.begin(), edges.end(), start);
+    return it != edges.end() && *it <= finish;
+}
+
 int loop_index(const QString& loopId) {
     for (std::size_t index = 0; index < kLoopIds.size(); ++index) {
         if (loopId.compare(QString::fromLatin1(kLoopIds[index]), Qt::CaseInsensitive) == 0)
@@ -249,6 +261,7 @@ std::vector<LocusNativePoint> simplify_bounded(const std::vector<LocusNativePoin
 struct LocusSnapshotSource {
     std::shared_ptr<const ardirec::comtrade::IndexedDatFile> data;
     std::shared_ptr<const std::vector<double>> times;
+    std::shared_ptr<const std::vector<double>> statusEdges;
     std::array<int, 3> voltage{{-1, -1, -1}};
     std::array<int, 3> current{{-1, -1, -1}};
     std::array<double, 3> voltageScale{{1.0, 1.0, 1.0}};
@@ -283,11 +296,16 @@ bool batch_phasors_at(const LocusSnapshotSource& source,
                       std::array<std::complex<double>, 3>& voltage,
                       std::array<std::complex<double>, 3>& current,
                       std::optional<std::complex<double>>& measuredResidual,
+                      bool& statusRejected,
                       const std::shared_ptr<std::atomic_bool>& cancel) {
     const auto& times = *source.times;
     if (sampleIndex >= times.size()) return false;
     const auto [first, end] = one_cycle_window(times, times[sampleIndex], source.nominalFrequency);
     if (first >= end || end - first < 4) return false;
+    if (source.statusEdges && window_has_status_change(*source.statusEdges, times, first, end)) {
+        statusRejected = true;
+        return false;
+    }
 
     std::array<std::complex<long double>, 7> accum{};
     std::array<std::size_t, 7> count{};
@@ -417,8 +435,10 @@ build_locus_snapshot(const std::shared_ptr<const LocusSnapshotSource>& source,
         std::array<std::complex<double>, 3> voltage{};
         std::array<std::complex<double>, 3> current{};
         std::optional<std::complex<double>> measuredResidual;
+        bool statusRejected = false;
         const bool phasorsValid = batch_phasors_at(*source, index, voltage, current,
-                                                    measuredResidual, cancel);
+                                                    measuredResidual, statusRejected, cancel);
+        if (statusRejected) ++snapshot->statusRejectedCount;
         ++snapshot->analyzedPointCount;
         ardirec::distance::ThreePhasePhasors phasors{voltage, current};
 
@@ -520,6 +540,7 @@ void LocusSnapshotController::rebuildSource() {
     auto source = std::make_shared<LocusSnapshotSource>();
     source->data = m_document->dataStoreSnapshot();
     source->times = m_document->timeIndexSnapshot();
+    source->statusEdges = std::make_shared<const std::vector<double>>(m_document->digitalEdgeTimes());
     source->classicalGrounding = ardirec::desktop::read_classical_grounding_factors(m_document->distanceZonePath());
     m_classicalGroundingValid = source->classicalGrounding.valid;
     m_reOverRl = source->classicalGrounding.re_over_rl;
@@ -596,6 +617,7 @@ QVariantMap LocusSnapshotController::snapshot() const {
             {QStringLiteral("rawMaxAbsR"), rawMaxAbsR()},
             {QStringLiteral("rawMaxAbsX"), rawMaxAbsX()},
             {QStringLiteral("analyzedPointCount"), analyzedPointCount()},
+            {QStringLiteral("statusRejectedCount"), statusRejectedCount()},
             {QStringLiteral("classicalGroundingValid"), classicalGroundingValid()},
             {QStringLiteral("reOverRl"), reOverRl()},
             {QStringLiteral("xeOverXl"), xeOverXl()},
