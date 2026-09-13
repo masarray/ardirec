@@ -121,11 +121,16 @@ if "4096" not in locus_cpp:
     FAILURES.append("apps/desktop/locus_snapshot_controller.cpp: bounded locus point budget guard is missing")
 
 # P1 first-interactive contract: heavy engineering views are demand-created, not
-# all synchronously constructed during application/record startup.
+# all synchronously constructed during application/record startup. Retained hidden
+# views must also be quiescent rather than continuing analysis in the background.
 require("apps/desktop/qml/Main.qml", "DeferredEngineeringViews", "heavy engineering views must be hosted by the deferred workspace")
 deferred = text("apps/desktop/qml/DeferredEngineeringViews.qml")
 if deferred.count("asynchronous: true") < 4:
     FAILURES.append("apps/desktop/qml/DeferredEngineeringViews.qml: all four heavy engineering loaders must be asynchronous")
+if deferred.count("visible: root.viewMode ===") < 4:
+    FAILURES.append("apps/desktop/qml/DeferredEngineeringViews.qml: retained heavy views must explicitly become locally invisible when inactive")
+if deferred.count("analysis: visible ?") < 3:
+    FAILURES.append("apps/desktop/qml/DeferredEngineeringViews.qml: hidden engineering views must detach analysis inputs")
 for warm_flag in ("phasorWarm", "locusWarm", "harmonicsWarm", "tableWarm"):
     if warm_flag not in deferred:
         FAILURES.append(f"apps/desktop/qml/DeferredEngineeringViews.qml: missing retained warm flag {warm_flag}")
