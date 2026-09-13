@@ -13,6 +13,7 @@
 #include <vector>
 
 struct RmsGeometrySnapshot;
+namespace ardirec::desktop { class RmsTileCache; }
 
 class RmsWaveformItem : public QQuickItem {
     Q_OBJECT
@@ -56,8 +57,8 @@ private:
     void clearPreparedGeometry();
 
     QPointer<DocumentController> m_document;
-    std::shared_ptr<const ardirec::comtrade::IndexedDatFile> m_data;
     std::shared_ptr<const std::vector<double>> m_times;
+    std::shared_ptr<ardirec::desktop::RmsTileCache> m_rmsCache;
     std::shared_ptr<const RmsGeometrySnapshot> m_renderSnapshot;
     std::shared_ptr<std::atomic_bool> m_activeCancel;
     QTimer m_rebuildTimer;
@@ -66,7 +67,6 @@ private:
     QColor m_traceColor{QStringLiteral("#406a9b")};
     double m_displayScale{1.0};
     double m_scalePeak{1.0};
-    double m_nominalFrequency{50.0};
     double m_zoomFactor{1.0};
     double m_panFraction{0.0};
 };
