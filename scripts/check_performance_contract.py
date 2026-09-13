@@ -104,6 +104,35 @@ elif "QVariantMap" in bulk_worker or "QVariantList" in bulk_worker:
 if "4096" not in locus_cpp:
     FAILURES.append("apps/desktop/locus_snapshot_controller.cpp: bounded locus point budget guard is missing")
 
+# P1 first-interactive contract: heavy engineering views are demand-created, not
+# all synchronously constructed during application/record startup.
+require("apps/desktop/qml/Main.qml", "DeferredEngineeringViews", "heavy engineering views must be hosted by the deferred workspace")
+deferred = text("apps/desktop/qml/DeferredEngineeringViews.qml")
+if deferred.count("asynchronous: true") < 4:
+    FAILURES.append("apps/desktop/qml/DeferredEngineeringViews.qml: all four heavy engineering loaders must be asynchronous")
+for warm_flag in ("phasorWarm", "locusWarm", "harmonicsWarm", "tableWarm"):
+    if warm_flag not in deferred:
+        FAILURES.append(f"apps/desktop/qml/DeferredEngineeringViews.qml: missing retained warm flag {warm_flag}")
+require("apps/desktop/qml/DeferredEngineeringViews.qml", "resetForRecord", "deferred view lifetime must reset at record boundaries")
+
+main_qml = text("apps/desktop/qml/Main.qml")
+for eager_type in ("PhasorView {", "LocusView {", "HarmonicsView {", "ValueTableView {"):
+    if eager_type in main_qml:
+        FAILURES.append(f"apps/desktop/qml/Main.qml: eager heavy view construction {eager_type!r} is forbidden; use DeferredEngineeringViews")
+
+# Channel semantics are classified once when the document is applied. Numeric/UI
+# interaction paths consume integer cached roles instead of regex/string discovery.
+document_cpp = text("apps/desktop/document_controller.cpp")
+for required in ("m_analogRoles", "m_phaseRoles", "ardirec::comtrade::analog_role(channel)", "ardirec::comtrade::phase_role(channel)"):
+    if required not in document_cpp:
+        FAILURES.append(f"apps/desktop/document_controller.cpp: cached semantic source missing {required!r}")
+analysis_cpp = text("apps/desktop/analysis_controller.cpp")
+channel_phase_body = function_body(analysis_cpp, "AnalysisController::channelPhase")
+if "m_document->channelPhase(channelIndex)" not in channel_phase_body:
+    FAILURES.append("apps/desktop/analysis_controller.cpp: channelPhase must reuse cached document semantics")
+if "QRegularExpression" in analysis_cpp:
+    FAILURES.append("apps/desktop/analysis_controller.cpp: regex metadata classification returned to the analysis path")
+
 # Contract documentation itself must remain discoverable from agent rules.
 require("AGENTS.md", "PERFORMANCE_CONTRACT.md", "agents must be directed to the enforceable performance contract")
 
