@@ -3,6 +3,7 @@
 
 #include <array>
 #include <complex>
+#include <optional>
 #include <string_view>
 
 namespace ardirec::distance {
@@ -27,11 +28,16 @@ struct DistanceImpedance {
     std::complex<double> measuring_current{};
 };
 
+// residual_current, when supplied, is 3I0 = IL1 + IL2 + IL3 in the phase-current
+// reference direction. This lets callers use a dedicated measured residual/earth
+// current channel without changing the protection-loop convention. If omitted,
+// the residual is reconstructed from the three phase currents.
 [[nodiscard]] DistanceImpedance distance_impedance(
     FaultLoop loop,
     const ThreePhasePhasors& phasors,
     std::complex<double> grounding_factor_kl = {},
-    double minimum_current = 1.0e-9);
+    double minimum_current = 1.0e-9,
+    std::optional<std::complex<double>> residual_current = std::nullopt);
 
 [[nodiscard]] std::complex<double> grounding_factor_from_z0z1(std::complex<double> z0_over_z1);
 [[nodiscard]] std::complex<double> grounding_factor_from_rerl_xexl(
