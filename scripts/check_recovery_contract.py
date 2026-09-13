@@ -75,16 +75,23 @@ require("apps/desktop/qml/EventStrip.qml", 'root.deltaMs.toFixed(3) + " ms"', "m
 forbid("apps/desktop/qml/EventStrip.qml", "&& span >= 18", "small cursor spans must not hide the dimension")
 forbid("apps/desktop/qml/EventStrip.qml", "visible: parent.width >= 86", "small cursor spans must not hide the millisecond label")
 
-# R1.3 Locus display policy: the production numerical trajectory stays intact.
-# Relevant Fit is an explicit display transform; Fit All must retain access to
-# every finite point for forensic inspection.
+# R1.3 Locus display policy: Earth and phase-phase panels are independent engineering
+# diagrams. Relevant Fit follows robust valid trajectory context plus zones/cursors;
+# Fit All retains each family's complete finite extent for forensic inspection.
 require("apps/desktop/qml/LocusView.qml", 'property string fitMode: "relevant"',
         "professional locus view defaults to an investigation-relevant scale")
 require("apps/desktop/qml/LocusView.qml", 'text:"Fit Relevant"', "operator must see/select the relevant-fit policy")
 require("apps/desktop/qml/LocusView.qml", 'text:"Fit All"', "operator must retain full finite-trajectory inspection")
 require("apps/desktop/qml/LocusView.qml", 'if (fitMode === "all")', "Fit All must be a distinct explicit code path")
-require("apps/desktop/qml/LocusView.qml", "locusSnapshotController.maxAbsR", "Fit All must use the complete finite native locus extent")
-require("apps/desktop/qml/LocusView.qml", "cursorExtent(loops)", "Relevant Fit must follow committed engineering cursor context")
+require("apps/desktop/qml/LocusView.qml", "locusSnapshotController.earthMaxAbsR",
+        "earth-loop Fit All must use its own complete native extent")
+require("apps/desktop/qml/LocusView.qml", "locusSnapshotController.phaseMaxAbsR",
+        "phase-loop Fit All must use its own complete native extent")
+require("apps/desktop/qml/LocusView.qml", "locusSnapshotController.earthRelevantMaxAbsR",
+        "earth Relevant Fit must include robust valid trajectory extent")
+require("apps/desktop/qml/LocusView.qml", "locusSnapshotController.phaseRelevantMaxAbsR",
+        "phase Relevant Fit must include robust valid trajectory extent")
+require("apps/desktop/qml/LocusView.qml", "cursorExtent(loops)", "Relevant Fit must retain committed engineering cursor context")
 require("apps/desktop/qml/LocusView.qml", "LocusTrajectoryItem", "locus trajectory must remain on the native retained renderer")
 
 # R1.4 SIGRA parity: production locus semantics must use COMTRADE metadata,
@@ -105,6 +112,19 @@ require("apps/desktop/locus_snapshot_controller.cpp", "simplify_bounded",
         "high-resolution numerical loci must be shape-simplified before native rendering, not time-stride aliased")
 require("core/include/ardirec/distance/distance.hpp", "residual_current",
         "distance core must accept a measured 3I0 residual with phase-sum fallback")
+
+# C1/C2 markers and numeric R/X must share exactly the same distance semantics as
+# the trajectory: phase metadata, measured residual and event-window validity.
+require("apps/desktop/cursor_snapshot_controller.cpp", "m_document->channelPhase(index)",
+        "cursor snapshots must honor cached COMTRADE phase metadata")
+require("apps/desktop/cursor_snapshot_controller.cpp", "m_document->digitalEdgeTimes()",
+        "cursor distance values must observe the same event-window validity rule")
+require("apps/desktop/cursor_snapshot_controller.cpp", "residual_to_sum_multiplier",
+        "cursor distance values must understand IE/3I0 reference direction")
+require("apps/desktop/cursor_snapshot_controller.cpp", 'QStringLiteral("statusWindowValid")',
+        "cursor snapshot must carry explicit measurement-window validity")
+require("apps/desktop/cursor_snapshot_controller.cpp", "measuredResidual",
+        "cursor earth-loop calculation must pass measured residual current to the distance core")
 
 # Production-path numerical regression fixtures: the async native locus engine,
 # not only the compatibility AnalysisController API, must be tested against both
