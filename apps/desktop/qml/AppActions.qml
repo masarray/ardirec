@@ -6,6 +6,7 @@ import QtCore
 QtObject {
     id: root
 
+    property var document: documentController
     property bool hasRecord: false
     property int diagnosticCount: 0
     property string currentView: "time"
@@ -84,6 +85,13 @@ QtObject {
         text: "&Open COMTRADE…"
         shortcut: StandardKey.Open
         onTriggered: root.openRequested()
+    }
+
+    property Action closeRecord: Action {
+        text: "&Close COMTRADE"
+        shortcut: "Ctrl+W"
+        enabled: root.hasRecord || (root.document?.loading ?? false)
+        onTriggered: root.document?.closeDocument()
     }
 
     property Action recordProperties: Action {
