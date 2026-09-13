@@ -20,6 +20,7 @@ Rectangle {
     property string selectedLoop: "L1-E"
     property string analysisMode: "distance"
     property real locusZoom: 1.0
+    property string fitMode: "relevant"
     property var loopVisibility: ({
         "L1-E": true, "L2-E": true, "L3-E": true,
         "L1-L2": true, "L2-L3": true, "L3-L1": true
@@ -161,6 +162,21 @@ Rectangle {
         return {r:r, x:x}
     }
 
+    function cursorExtent(loops) {
+        let r = 0.0, x = 0.0
+        for (let loop of loops) {
+            const a = cursorAValues[loop] || ({valid:false})
+            const b = cursorBValues[loop] || ({valid:false})
+            if (a.valid && Number.isFinite(a.r) && Number.isFinite(a.x)) {
+                r = Math.max(r, Math.abs(a.r)); x = Math.max(x, Math.abs(a.x))
+            }
+            if (b.valid && Number.isFinite(b.r) && Number.isFinite(b.x)) {
+                r = Math.max(r, Math.abs(b.r)); x = Math.max(x, Math.abs(b.x))
+            }
+        }
+        return {r:r, x:x}
+    }
+
     function niceCeil(value) {
         if (!Number.isFinite(value) || value <= 0) return 1.0
         const exponent = Math.floor(Math.log(value) / Math.LN10)
@@ -183,12 +199,28 @@ Rectangle {
         return 10 * base
     }
 
-    // Fit All is intentionally based on 100% of finite trajectory extents, never a percentile.
-    function distanceTarget(zones) {
+    // Relevant fit follows the engineering investigation context: loaded zones and
+    // the two committed cursor measurements. Extreme finite trajectory values remain
+    // in the native buffer and are available through Fit All; they never rewrite data.
+    function distanceTarget(zones, loops) {
         const zone = zoneMagnitude(zones)
+        if (fitMode === "all") {
+            return {
+                r: niceCeil(Math.max(3.0, zone.r, locusSnapshotController.maxAbsR) * 1.08),
+                x: niceCeil(Math.max(3.0, zone.x, locusSnapshotController.maxAbsX) * 1.08)
+            }
+        }
+        const cursor = cursorExtent(loops)
+        const hasReference = zone.r > 0 || zone.x > 0 || cursor.r > 0 || cursor.x > 0
+        if (!hasReference) {
+            return {
+                r: niceCeil(Math.max(3.0, locusSnapshotController.maxAbsR) * 1.08),
+                x: niceCeil(Math.max(3.0, locusSnapshotController.maxAbsX) * 1.08)
+            }
+        }
         return {
-            r: niceCeil(Math.max(3.0, zone.r, locusSnapshotController.maxAbsR) * 1.08),
-            x: niceCeil(Math.max(3.0, zone.x, locusSnapshotController.maxAbsX) * 1.08)
+            r: niceCeil(Math.max(3.0, zone.r, cursor.r) * 1.15),
+            x: niceCeil(Math.max(3.0, zone.x, cursor.x) * 1.15)
         }
     }
 
@@ -220,11 +252,11 @@ Rectangle {
     readonly property real panelHeight: Math.max(1, (graphSurface.height - panelGap) * 0.5)
     readonly property var earthTransform: distanceMode
                                           ? panelTransform(0, 0, graphSurface.width, panelHeight,
-                                                           distanceTarget(earthZones), true)
+                                                           distanceTarget(earthZones, earthLoops), true)
                                           : ({valid:false})
     readonly property var phaseTransform: distanceMode
                                           ? panelTransform(0, panelHeight + panelGap, graphSurface.width, panelHeight,
-                                                           distanceTarget(phaseZones), true)
+                                                           distanceTarget(phaseZones, phaseLoops), true)
                                           : ({valid:false})
     readonly property var rawTransform: !distanceMode
                                         ? panelTransform(0, 0, graphSurface.width, graphSurface.height,
@@ -275,6 +307,7 @@ Rectangle {
     onEarthZonesChanged: requestStaticPaint()
     onPhaseZonesChanged: requestStaticPaint()
     onLocusZoomChanged: requestStaticPaint()
+    onFitModeChanged: requestStaticPaint()
     onDistanceModeChanged: { ensureAvailableLoop(); requestStaticPaint() }
     onVisibleChanged: if (visible) { queueTrajectoryRequest(); requestCursorSnapshots(); Qt.callLater(requestStaticPaint) }
     onWidthChanged: { queueTrajectoryRequest(); requestStaticPaint() }
@@ -327,7 +360,25 @@ Rectangle {
 
                 Rectangle { width:1; height:26; color:"#cbd1d6" }
                 ToolButton { text:"−"; onClicked:root.setLocusZoom(root.locusZoom / 1.25); ToolTip.visible:hovered; ToolTip.text:"Zoom out" }
-                ToolButton { text:"Fit"; onClicked:root.setLocusZoom(1.0) }
+                ToolButton {
+                    text:"Fit Relevant"
+                    visible: root.distanceMode
+                    checkable: true
+                    checked: root.fitMode === "relevant"
+                    onClicked: { root.fitMode = "relevant"; root.setLocusZoom(1.0) }
+                    ToolTip.visible:hovered
+                    ToolTip.text:"Fit protection zones and C1/C2 measurement context; trajectory outliers remain available in Fit All"
+                }
+                ToolButton {
+                    text:"Fit All"
+                    visible: root.distanceMode
+                    checkable: true
+                    checked: root.fitMode === "all"
+                    onClicked: { root.fitMode = "all"; root.setLocusZoom(1.0) }
+                    ToolTip.visible:hovered
+                    ToolTip.text:"Fit every finite locus point for forensic inspection"
+                }
+                ToolButton { text:"Fit"; visible: !root.distanceMode; onClicked:root.setLocusZoom(1.0) }
                 ToolButton { text:"+"; onClicked:root.setLocusZoom(root.locusZoom * 1.25); ToolTip.visible:hovered; ToolTip.text:"Zoom in" }
                 Label { text:Math.round(root.locusZoom*100)+"%"; color:"#59656d"; font.pixelSize:9 }
 
@@ -341,6 +392,13 @@ Rectangle {
                     text: "Updating trajectory…"
                     color: "#6e7880"
                     font.pixelSize: 9
+                }
+                Label {
+                    visible: root.distanceMode
+                    text: root.fitMode === "all" ? "ALL FINITE LOCUS" : "RELEVANT FIT"
+                    color: root.fitMode === "all" ? "#735f43" : "#587064"
+                    font.pixelSize: 8
+                    font.weight: Font.DemiBold
                 }
                 Label {
                     text: root.valueRepresentation === "primary" ? "PRIMARY Ω" : "SECONDARY Ω"
