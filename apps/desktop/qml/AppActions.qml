@@ -11,7 +11,6 @@ QtObject {
     property string currentView: "time"
     property string timeDisplayMode: "instantaneous"
     property string valueRepresentation: "secondary"
-    property string workspaceLayout: "single"
     property bool fullScreen: false
 
     signal openRequested()
@@ -26,7 +25,6 @@ QtObject {
     signal viewRequested(string viewName)
     signal waveformModeRequested(string mode)
     signal valueRepresentationRequested(string representation)
-    signal workspaceLayoutRequested(string layoutName)
     signal fullScreenRequested()
     signal aboutRequested()
 
@@ -214,51 +212,6 @@ QtObject {
         checked: root.valueRepresentation === "primary"
         enabled: root.hasRecord
         onTriggered: root.valueRepresentationRequested("primary")
-    }
-
-    property Action workspaceSingle: Action {
-        text: "&Single Pane"
-        shortcut: "Ctrl+Alt+1"
-        checkable: true
-        checked: root.workspaceLayout === "single"
-        enabled: root.hasRecord
-        onTriggered: root.workspaceLayoutRequested("single")
-    }
-
-    property Action workspaceSplitHorizontal: Action {
-        text: "Split &Horizontal"
-        shortcut: "Ctrl+Alt+2"
-        checkable: true
-        checked: root.workspaceLayout === "split-h"
-        enabled: root.hasRecord
-        onTriggered: root.workspaceLayoutRequested("split-h")
-    }
-
-    property Action workspaceSplitVertical: Action {
-        text: "Split &Vertical"
-        shortcut: "Ctrl+Alt+3"
-        checkable: true
-        checked: root.workspaceLayout === "split-v"
-        enabled: root.hasRecord
-        onTriggered: root.workspaceLayoutRequested("split-v")
-    }
-
-    property Action workspaceGrid: Action {
-        text: "&2×2 Grid"
-        shortcut: "Ctrl+Alt+4"
-        checkable: true
-        checked: root.workspaceLayout === "grid"
-        enabled: root.hasRecord
-        onTriggered: root.workspaceLayoutRequested("grid")
-    }
-
-    property Action workspaceReport: Action {
-        text: "&Report Layout"
-        shortcut: "Ctrl+Alt+5"
-        checkable: true
-        checked: root.workspaceLayout === "report"
-        enabled: root.hasRecord
-        onTriggered: root.workspaceLayoutRequested("report")
     }
 
     property Action toggleFullScreen: Action {
