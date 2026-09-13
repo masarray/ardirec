@@ -30,7 +30,6 @@ private:
     };
 
     [[nodiscard]] std::pair<std::size_t, std::size_t> oneCycleWindow(double absoluteTimeSeconds) const;
-    [[nodiscard]] std::size_t windowEndSample(double absoluteTimeSeconds) const;
     [[nodiscard]] SampleSnapshotKey cacheKey(int channelIndex,
                                              double absoluteTimeSeconds,
                                              int maximumOrder) const;
