@@ -2,6 +2,7 @@
 #include "locus_snapshot_controller.hpp"
 
 #include "ardirec/distance/distance.hpp"
+#include "distance_compensation.hpp"
 
 #include <QFutureWatcher>
 #include <QtConcurrent/QtConcurrentRun>
@@ -48,9 +49,10 @@ QString phase_from_name(const QString& rawName) {
     return QStringLiteral("Other");
 }
 
-// Return the multiplier that converts the measured channel to phase-current-sum
-// residual Ires = IL1 + IL2 + IL3 = 3I0. SIGRA's IE reference direction is
-// IE = -3I0, hence an explicitly named IE/earth-current channel is negated.
+// Convert a dedicated residual/earth-current channel to the internal phase-current
+// sum convention Ires = IL1 + IL2 + IL3 = 3I0. SIGRA's IE channel uses the opposite
+// reference direction, so IE is negated here and converted back only in the classical
+// RE/RL-XE/XL solver.
 std::optional<double> residual_to_sum_multiplier(const QString& rawName) {
     const QString name = compact_name(rawName);
     if (name.contains(QStringLiteral("3I0")) || name.contains(QStringLiteral("RESIDUAL"))
@@ -83,18 +85,6 @@ std::pair<std::size_t, std::size_t> one_cycle_window(const std::vector<double>& 
     end = std::min(end, times.size());
     if (end > first + 2 && times[end - 1] - times[first] >= period * (1.0 - 1.0e-8)) ++first;
     return end > first ? std::pair{first, end} : std::pair<std::size_t, std::size_t>{0, 0};
-}
-
-bool window_has_status_change(const std::vector<double>& edges,
-                              const std::vector<double>& times,
-                              std::size_t first,
-                              std::size_t end) {
-    if (edges.empty() || first >= end || end > times.size()) return false;
-    constexpr double epsilon = 1.0e-10;
-    const double start = times[first] - epsilon;
-    const double finish = times[end - 1] + epsilon;
-    const auto it = std::lower_bound(edges.begin(), edges.end(), start);
-    return it != edges.end() && *it <= finish;
 }
 
 int loop_index(const QString& loopId) {
@@ -259,7 +249,6 @@ std::vector<LocusNativePoint> simplify_bounded(const std::vector<LocusNativePoin
 struct LocusSnapshotSource {
     std::shared_ptr<const ardirec::comtrade::IndexedDatFile> data;
     std::shared_ptr<const std::vector<double>> times;
-    std::shared_ptr<const std::vector<double>> statusEdges;
     std::array<int, 3> voltage{{-1, -1, -1}};
     std::array<int, 3> current{{-1, -1, -1}};
     std::array<double, 3> voltageScale{{1.0, 1.0, 1.0}};
@@ -267,6 +256,7 @@ struct LocusSnapshotSource {
     int residualCurrent{-1};
     double residualScale{1.0};
     double residualToSumMultiplier{1.0};
+    ardirec::desktop::ClassicalGroundingFactors classicalGrounding;
     double nominalFrequency{50.0};
     double referenceTime{0.0};
     double currentFloor{1.0e-6};
@@ -293,16 +283,11 @@ bool batch_phasors_at(const LocusSnapshotSource& source,
                       std::array<std::complex<double>, 3>& voltage,
                       std::array<std::complex<double>, 3>& current,
                       std::optional<std::complex<double>>& measuredResidual,
-                      bool& statusRejected,
                       const std::shared_ptr<std::atomic_bool>& cancel) {
     const auto& times = *source.times;
     if (sampleIndex >= times.size()) return false;
     const auto [first, end] = one_cycle_window(times, times[sampleIndex], source.nominalFrequency);
     if (first >= end || end - first < 4) return false;
-    if (source.statusEdges && window_has_status_change(*source.statusEdges, times, first, end)) {
-        statusRejected = true;
-        return false;
-    }
 
     std::array<std::complex<long double>, 7> accum{};
     std::array<std::size_t, 7> count{};
@@ -355,6 +340,26 @@ bool batch_phasors_at(const LocusSnapshotSource& source,
         measuredResidual.reset();
     }
     return true;
+}
+
+ardirec::distance::DistanceImpedance calculate_loop(
+    const LocusSnapshotSource& source,
+    ardirec::distance::FaultLoop loop,
+    const ardirec::distance::ThreePhasePhasors& phasors,
+    const std::complex<double>& groundingFactor,
+    const std::optional<std::complex<double>>& measuredResidual) {
+    if (ardirec::distance::is_earth_loop(loop) && source.classicalGrounding.valid) {
+        const std::complex<double> residual = measuredResidual.value_or(
+            phasors.current[0] + phasors.current[1] + phasors.current[2]);
+        const std::complex<double> earthCurrentIe = -residual;
+        return ardirec::distance::distance_impedance_rerl_xexl(
+            loop, phasors, earthCurrentIe,
+            source.classicalGrounding.re_over_rl,
+            source.classicalGrounding.xe_over_xl,
+            source.currentFloor);
+    }
+    return ardirec::distance::distance_impedance(
+        loop, phasors, groundingFactor, source.currentFloor, measuredResidual);
 }
 
 std::shared_ptr<LocusNativeSnapshot>
@@ -412,18 +417,16 @@ build_locus_snapshot(const std::shared_ptr<const LocusSnapshotSource>& source,
         std::array<std::complex<double>, 3> voltage{};
         std::array<std::complex<double>, 3> current{};
         std::optional<std::complex<double>> measuredResidual;
-        bool statusRejected = false;
         const bool phasorsValid = batch_phasors_at(*source, index, voltage, current,
-                                                    measuredResidual, statusRejected, cancel);
-        if (statusRejected) ++snapshot->statusRejectedCount;
+                                                    measuredResidual, cancel);
         ++snapshot->analyzedPointCount;
         ardirec::distance::ThreePhasePhasors phasors{voltage, current};
 
         for (std::size_t loopIndex = 0; loopIndex < kLoops.size(); ++loopIndex) {
             LocusNativePoint point;
             if (phasorsValid && loop_available(*source, kLoops[loopIndex])) {
-                const auto result = ardirec::distance::distance_impedance(
-                    kLoops[loopIndex], phasors, groundingFactor, source->currentFloor, measuredResidual);
+                const auto result = calculate_loop(*source, kLoops[loopIndex], phasors,
+                                                   groundingFactor, measuredResidual);
                 if (result.valid && std::isfinite(result.impedance.real()) && std::isfinite(result.impedance.imag())) {
                     const double r = result.impedance.real();
                     const double x = result.impedance.imag();
@@ -505,6 +508,9 @@ LocusSnapshotController::~LocusSnapshotController() { cancel(); }
 
 void LocusSnapshotController::rebuildSource() {
     cancel();
+    m_classicalGroundingValid = false;
+    m_reOverRl = 0.0;
+    m_xeOverXl = 0.0;
     if (!m_document || !m_document->dataStoreSnapshot() || !m_document->timeIndexSnapshot()
         || m_document->analogCount() <= 0) {
         m_source.reset();
@@ -514,7 +520,10 @@ void LocusSnapshotController::rebuildSource() {
     auto source = std::make_shared<LocusSnapshotSource>();
     source->data = m_document->dataStoreSnapshot();
     source->times = m_document->timeIndexSnapshot();
-    source->statusEdges = std::make_shared<const std::vector<double>>(m_document->digitalEdgeTimes());
+    source->classicalGrounding = ardirec::desktop::read_classical_grounding_factors(m_document->distanceZonePath());
+    m_classicalGroundingValid = source->classicalGrounding.valid;
+    m_reOverRl = source->classicalGrounding.re_over_rl;
+    m_xeOverXl = source->classicalGrounding.xe_over_xl;
     source->nominalFrequency = m_document->nominalFrequency() > 1.0 ? m_document->nominalFrequency() : 50.0;
     source->referenceTime = m_document->dataStartSeconds();
 
@@ -587,7 +596,9 @@ QVariantMap LocusSnapshotController::snapshot() const {
             {QStringLiteral("rawMaxAbsR"), rawMaxAbsR()},
             {QStringLiteral("rawMaxAbsX"), rawMaxAbsX()},
             {QStringLiteral("analyzedPointCount"), analyzedPointCount()},
-            {QStringLiteral("statusRejectedCount"), statusRejectedCount()},
+            {QStringLiteral("classicalGroundingValid"), classicalGroundingValid()},
+            {QStringLiteral("reOverRl"), reOverRl()},
+            {QStringLiteral("xeOverXl"), xeOverXl()},
             {QStringLiteral("pointBudget"), m_nativeSnapshot ? m_nativeSnapshot->pointBudget : 0}};
 }
 
