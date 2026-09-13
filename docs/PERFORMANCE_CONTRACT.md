@@ -52,6 +52,18 @@ Application/record startup must not synchronously instantiate every heavyweight 
 
 A retained hidden view must be quiescent: it may keep immutable UI state, but it must not continue issuing cursor/trajectory/spectrum jobs while another view is active. Record loading remains visibly non-blocking, and load-to-ready timing is telemetry rather than a cloud-runner hard wall-clock gate.
 
+### 10. Derived time-series data is multi-resolution and reusable
+
+Repeated pan/zoom must not re-scan the same full-resolution record merely to redraw a lower-resolution viewport. Instantaneous waveform extrema are represented by a bounded multi-resolution Min/Max pyramid derived from the background DAT index. The worker selects the nearest level whose block density matches the viewport, and raw samples are used only where the selected LOD cannot represent the requested detail.
+
+One-cycle RMS display data is a derived product and therefore uses a bounded shared tile cache with power-of-two resolution levels. Re-visiting the same sampled region should reuse derived RMS values rather than recomputing every one-cycle window. Engineering cursor RMS remains exact and independent from the display cache.
+
+Harmonic and Engineering Table scalar snapshots use compact sampled-window keys and bounded eviction. Exact floating-point time formatted into QString keys and clear-all overflow caches are forbidden because they turn continuous cursor motion into allocation churn and cache cliffs.
+
+### 11. Off-screen tracks are quiescent
+
+A record may contain hundreds of channels, but only visible or near-visible Time Signals lanes may own native waveform/digital render workers. Lightweight lane shells may remain for layout continuity; distant lanes must not decode data, run RMS workers, or rebuild geometry. A small prefetch margin is allowed to keep scrolling visually immediate.
+
 ## Release targets
 
 These are product targets, not promises about GitHub-hosted runner wall-clock timing:
@@ -60,7 +72,10 @@ These are product targets, not promises about GitHub-hosted runner wall-clock ti
 - normal interactive target: sustained 60 FPS on supported desktop hardware;
 - GUI-thread heavy-analysis time: zero by architecture; bounded handoff/geometry work only;
 - plot vertex count: O(viewport pixels), not O(record samples);
+- waveform overview work: nearest bounded Min/Max LOD level, not repeated full-resolution scanning;
+- RMS display work: shared bounded derived tiles across repeated viewport requests;
 - heavy engineering views: asynchronous first activation, retained/quiescent when hidden;
+- off-screen Time Signals lanes: no native render/analysis workers outside a small prefetch margin;
 - large-record design cases: 10M samples, 100+ channels, ~250 MB;
 - background work: cancellable/latest-wins with no stale publication;
 - Windows package: staged application startup smoke test must pass.
@@ -70,6 +85,9 @@ These are product targets, not promises about GitHub-hosted runner wall-clock ti
 `scripts/check_performance_contract.py` rejects known architectural regressions, including:
 
 - instantaneous/RMS source traversal reintroduced inside `updatePaintNode()`;
+- removal of the waveform Min/Max LOD pyramid or RMS derived tile cache;
+- exact floating-time QString harmonic/table cache keys or clear-all cache cliffs;
+- off-screen Time Signals lanes reactivating native render workers;
 - Phasor high-frequency Canvas rendering reintroduced;
 - synchronous full-record locus calls from QML;
 - production locus point materialization into per-point QVariant objects;
