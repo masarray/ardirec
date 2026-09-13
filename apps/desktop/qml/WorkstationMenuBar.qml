@@ -49,6 +49,7 @@ MenuBar {
             }
         }
 
+        MenuItem { action: root.actions?.closeRecord ?? null }
         MenuSeparator { }
         MenuItem { action: root.actions?.recordProperties ?? null }
         MenuItem { action: root.actions?.recordDiagnostics ?? null }
