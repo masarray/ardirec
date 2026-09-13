@@ -60,23 +60,14 @@ HarmonicSnapshotController::oneCycleWindow(double absoluteTimeSeconds) const {
     return {first, end};
 }
 
-std::size_t HarmonicSnapshotController::windowEndSample(double absoluteTimeSeconds) const {
-    if (!m_document) return 0u;
-    const auto& times = m_document->timeSeconds();
-    if (times.empty()) return 0u;
-    const double clamped = std::clamp(absoluteTimeSeconds,
-                                      m_document->dataStartSeconds(),
-                                      m_document->dataEndSeconds());
-    const auto it = std::upper_bound(times.begin(), times.end(), clamped);
-    if (it == times.begin()) return 0u;
-    return static_cast<std::size_t>(std::distance(times.begin(), it) - 1);
-}
-
 SampleSnapshotKey HarmonicSnapshotController::cacheKey(int channelIndex,
                                                         double absoluteTimeSeconds,
                                                         int maximumOrder) const {
+    const auto [first, end] = oneCycleWindow(absoluteTimeSeconds);
+    const quint64 lastSample = end > 0u ? static_cast<quint64>(end - 1u) : 0u;
     return SampleSnapshotKey{
-        static_cast<quint64>(windowEndSample(absoluteTimeSeconds)),
+        lastSample,
+        static_cast<quint64>(first),
         channelIndex,
         maximumOrder,
         m_document && m_document->valueRepresentation() == QStringLiteral("primary")};
