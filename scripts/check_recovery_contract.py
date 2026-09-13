@@ -97,6 +97,12 @@ require("apps/desktop/qml/LocusView.qml", "CLASSICAL RIO · 1-CYCLE BACKWARD",
         "the UI must identify direct classical RIO compensation instead of displaying a synthetic kL")
 require("apps/desktop/qml/LocusView.qml", "locusSnapshotController.statusRejectedCount",
         "measurement-window gaps should remain observable without per-point QML objects")
+require("apps/desktop/qml/LocusView.qml", "Math.min(plotW / (2 * target.r), plotH / (2 * target.x))",
+        "R and X must share one engineering pixels-per-ohm scale so locus angles/zones are not distorted")
+require("apps/desktop/qml/LocusView.qml", "Math.min(4096",
+        "screen-driven trajectory requests must remain bounded by the native 4096-point geometry budget")
+forbid("apps/desktop/qml/LocusView.qml", "Repeater {\n                    model: locusSnapshotController.locus",
+       "production locus rendering must not materialize one QML delegate per trajectory point")
 
 # R1.4 SIGRA parity: production locus semantics must use COMTRADE metadata,
 # measured residual current, trailing one-cycle validity, and direct classical
@@ -156,6 +162,13 @@ require("tests/test_locus_snapshot.cpp", "statusRejectedCount",
 require("tests/data/distance_sigra_parity.rio", "RE/RL", "SIGRA parity fixture must carry the resistance compensation ratio")
 require("tests/data/distance_sigra_parity.rio", "XE/XL", "SIGRA parity fixture must carry the reactance compensation ratio")
 require("tests/CMakeLists.txt", "ardirec_locus_snapshot_tests", "golden production-path locus test must run under CTest")
+
+# Global-data alignment must remain documented rather than hidden in implementation lore.
+require("docs/LOCUS_ENGINE.md", "full-cycle DFT", "calculation window convention must stay explicit")
+require("docs/LOCUS_ENGINE.md", "prefault positive-sequence", "frequency-source policy must stay explicit")
+require("docs/LOCUS_ENGINE.md", "different sample-rate sections", "COMTRADE multi-rate qualification must stay explicit")
+require("docs/LOCUS_ENGINE.md", "Correct impedance plane", "distance-loop and positive-sequence planes must not be conflated")
+require("docs/LOCUS_ENGINE.md", "retained Qt Quick scene-graph geometry", "lightweight retained rendering is an architectural invariant")
 
 if FAILURES:
     print("ArdIREC recovery correctness contract: FAIL", file=sys.stderr)
