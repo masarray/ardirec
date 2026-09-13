@@ -90,7 +90,7 @@ using SnapshotPtr = std::shared_ptr<const DigitalGeometrySnapshot>;
         if (inRun && (!nextHigh || i + 1u >= end)) {
             double runEnd = viewEnd;
             if (i + 1u < count) runEnd = std::clamp((*times)[i + 1u], viewStart, viewEnd);
-            if (runEnd <= runStart) runEnd = std::min(viewEnd, runStart + minimumVisibleRun);
+            runEnd = std::min(viewEnd, std::max(runEnd, runStart + minimumVisibleRun));
 
             // At overview zoom, multiple transitions can map into the same pixel.
             // Merge those runs rather than producing geometry proportional to the
