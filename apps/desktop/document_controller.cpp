@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "document_controller.hpp"
 
+#include "analog_lod_pyramid.hpp"
 #include "document_loader.hpp"
+#include "rms_tile_cache.hpp"
 #include "ardirec/comtrade/value_representation.hpp"
 
 #include <QDate>
@@ -256,6 +258,9 @@ void DocumentController::applyLoadedDocument(const std::shared_ptr<LoadedDocumen
     const auto& bundle = loaded->bundle;
     m_datStore = loaded->dat;
     m_timeSeconds = loaded->time_seconds;
+    m_analogLodPyramid = loaded->analog_lod_pyramid;
+    m_rmsTileCache = std::make_shared<ardirec::desktop::RmsTileCache>(
+        m_datStore, m_timeSeconds, cfg.nominal_frequency);
     m_channelPeaks = loaded->channel_peaks;
     m_statusActive = loaded->status_active;
     m_digitalEdgeTimes = loaded->digital_edge_times;
