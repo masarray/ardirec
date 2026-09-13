@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "document_loader.hpp"
 
+#include "calculation_frequency.hpp"
 #include "ardirec/comtrade/bundle.hpp"
 #include "ardirec/comtrade/channel_semantics.hpp"
 #include "ardirec/comtrade/parser.hpp"
@@ -13,6 +14,7 @@
 #include <fstream>
 #include <iterator>
 #include <limits>
+#include <mutex>
 #include <optional>
 #include <sstream>
 #include <utility>
@@ -25,6 +27,32 @@ constexpr std::uintmax_t kMaximumHeaderPreviewBytes = 4u * 1024u * 1024u;
 constexpr std::string_view kNormalMmapDiagnostic = "DAT access: read-only memory map.";
 constexpr std::size_t kMaximumFrequencySamples = 8192u;
 constexpr double kPi = 3.141592653589793238462643383279502884;
+
+struct FrequencyCacheEntry final {
+    std::weak_ptr<const ardirec::comtrade::IndexedDatFile> data;
+    CalculationFrequencySelection selection;
+};
+
+std::mutex gFrequencyCacheMutex;
+std::vector<FrequencyCacheEntry> gFrequencyCache;
+
+void publish_calculation_frequency(
+    const std::shared_ptr<const ardirec::comtrade::IndexedDatFile>& data,
+    CalculationFrequencySelection selection) {
+    if (!data) return;
+    std::scoped_lock lock(gFrequencyCacheMutex);
+    gFrequencyCache.erase(
+        std::remove_if(gFrequencyCache.begin(), gFrequencyCache.end(),
+                       [](const FrequencyCacheEntry& entry) { return entry.data.expired(); }),
+        gFrequencyCache.end());
+    for (auto& entry : gFrequencyCache) {
+        if (const auto existing = entry.data.lock(); existing && existing.get() == data.get()) {
+            entry.selection = std::move(selection);
+            return;
+        }
+    }
+    gFrequencyCache.push_back({data, std::move(selection)});
+}
 
 std::string join_diagnostics(const std::vector<std::string>& diagnostics) {
     std::ostringstream out;
@@ -137,8 +165,7 @@ std::optional<double> time_of_day_seconds(const std::string& raw) {
     int hour = 0;
     int minute = 0;
     double second = 0.0;
-    if (std::sscanf(raw.c_str() + static_cast<std::ptrdiff_t>(comma + 1u), "%d:%d:%lf",
-                    &hour, &minute, &second) != 3) {
+    if (std::sscanf(raw.c_str() + comma + 1u, "%d:%d:%lf", &hour, &minute, &second) != 3) {
         return std::nullopt;
     }
     if (hour < 0 || hour > 23 || minute < 0 || minute > 59
@@ -334,6 +361,22 @@ FrequencyEstimate estimate_prefault_frequency(
 
 } // namespace
 
+CalculationFrequencySelection calculationFrequencySelectionFor(
+    const std::shared_ptr<const ardirec::comtrade::IndexedDatFile>& data) {
+    if (!data) return {};
+    std::scoped_lock lock(gFrequencyCacheMutex);
+    for (auto it = gFrequencyCache.begin(); it != gFrequencyCache.end();) {
+        const auto existing = it->data.lock();
+        if (!existing) {
+            it = gFrequencyCache.erase(it);
+            continue;
+        }
+        if (existing.get() == data.get()) return it->selection;
+        ++it;
+    }
+    return {};
+}
+
 std::shared_ptr<LoadedDocumentData>
 loadDocumentData(const std::filesystem::path& cfgPath,
                  const std::shared_ptr<std::atomic_bool>& cancel) {
@@ -415,14 +458,9 @@ loadDocumentData(const std::filesystem::path& cfgPath,
             result->calculation_frequency_hz = estimated.hz;
             result->calculation_frequency_provenance = estimated.provenance;
         }
-        {
-            std::ostringstream diagnostic;
-            diagnostic.setf(std::ios::fixed);
-            diagnostic.precision(4);
-            diagnostic << "Calculation frequency: " << result->calculation_frequency_hz
-                       << " Hz (" << result->calculation_frequency_provenance << ").";
-            result->diagnostics.push_back(diagnostic.str());
-        }
+        publish_calculation_frequency(
+            result->dat,
+            {result->calculation_frequency_hz, result->calculation_frequency_provenance});
 
         if (cancel && cancel->load(std::memory_order_relaxed)) {
             result->cancelled = true;
