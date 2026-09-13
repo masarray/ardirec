@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Guard ArdIREC investigation-correctness regressions found during R0/R1 recovery.
+"""Guard ArdIREC investigation-correctness regressions found during recovery.
 
 This complements the performance contract. These checks are intentionally structural:
 if an implementation changes, the replacement must preserve an equivalent or stronger
@@ -87,12 +87,35 @@ require("apps/desktop/qml/LocusView.qml", "locusSnapshotController.maxAbsR", "Fi
 require("apps/desktop/qml/LocusView.qml", "cursorExtent(loops)", "Relevant Fit must follow committed engineering cursor context")
 require("apps/desktop/qml/LocusView.qml", "LocusTrajectoryItem", "locus trajectory must remain on the native retained renderer")
 
-# Production-path numerical regression fixture: the async native locus engine,
-# not only the compatibility AnalysisController API, must be tested against the
-# known 100-ohm synthetic record and its near-zero-current post-open gap.
-require("tests/test_locus_snapshot.cpp", "distance_p1.cfg", "async locus production path requires a deterministic COMTRADE fixture")
+# R1.4 SIGRA parity: production locus semantics must use COMTRADE metadata,
+# measured residual current when trustworthy, and explicit event-window gaps.
+require("apps/desktop/locus_snapshot_controller.cpp", "m_document->channelPhase(index)",
+        "Locus channel binding must honor cached COMTRADE phase metadata before name fallback")
+require("apps/desktop/locus_snapshot_controller.cpp", "residual_to_sum_multiplier",
+        "dedicated IE/3I0 channels require an explicit reference-direction conversion")
+require("apps/desktop/locus_snapshot_controller.cpp", "source->residualCurrent",
+        "earth loops must be able to use a measured residual/earth-current channel")
+require("apps/desktop/locus_snapshot_controller.cpp", "window_has_status_change",
+        "a fault/trip/status change inside the one-cycle window must create an invalid gap")
+require("apps/desktop/locus_snapshot_controller.cpp", "m_document->digitalEdgeTimes()",
+        "Locus worker must consume immutable document event timing rather than infer events visually")
+require("apps/desktop/locus_snapshot_controller.cpp", "kMaximumAnalysisPoints = 65536u",
+        "analysis fidelity must be separated from the bounded native render budget")
+require("apps/desktop/locus_snapshot_controller.cpp", "simplify_bounded",
+        "high-resolution numerical loci must be shape-simplified before native rendering, not time-stride aliased")
+require("core/include/ardirec/distance/distance.hpp", "residual_current",
+        "distance core must accept a measured 3I0 residual with phase-sum fallback")
+
+# Production-path numerical regression fixtures: the async native locus engine,
+# not only the compatibility AnalysisController API, must be tested against both
+# the 100-ohm opening case and SIGRA-specific measured-IE/status-window semantics.
+require("tests/test_locus_snapshot.cpp", "distance_p1.cfg", "async locus production path requires the original deterministic fixture")
 require("tests/test_locus_snapshot.cpp", "100.0", "golden energized impedance must stay locked")
 require("tests/test_locus_snapshot.cpp", "post-open", "low-current invalid/gap semantics must stay locked")
+require("tests/test_locus_snapshot.cpp", "distance_sigra_parity.cfg",
+        "SIGRA parity fixture must exercise metadata, measured IE, and event-window validity")
+require("tests/test_locus_snapshot.cpp", "statusRejectedCount",
+        "SIGRA status-window rejection must remain observable in the native snapshot")
 require("tests/CMakeLists.txt", "ardirec_locus_snapshot_tests", "golden production-path locus test must run under CTest")
 
 if FAILURES:
