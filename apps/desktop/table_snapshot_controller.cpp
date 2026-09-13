@@ -4,8 +4,6 @@
 #include "ardirec/power/harmonics.hpp"
 #include "ardirec/power/waveform_metrics.hpp"
 
-#include <QRegularExpression>
-
 #include <algorithm>
 #include <cmath>
 #include <iterator>
@@ -18,12 +16,6 @@ constexpr double kMinimumMagnitude = 1.0e-12;
 constexpr double kAbnormalThdPercent = 5.0;
 constexpr double kAbnormalDcPercent = 5.0;
 constexpr double kAbnormalCrestFactor = 2.0;
-
-QString compact_name(QString value) {
-    value = value.trimmed().toUpper();
-    value.remove(QRegularExpression(QStringLiteral("[^A-Z0-9]")));
-    return value;
-}
 
 double wrap_degrees(double angle) {
     while (angle <= -180.0) angle += 360.0;
@@ -44,6 +36,7 @@ TableSnapshotController::TableSnapshotController(DocumentController* document, Q
 
 void TableSnapshotController::clearCache() {
     m_cache.clear();
+    m_touchCounter = 0;
 }
 
 std::pair<std::size_t, std::size_t>
@@ -72,37 +65,54 @@ TableSnapshotController::oneCycleWindow(double absoluteTimeSeconds) const {
     return {first, end};
 }
 
-QString TableSnapshotController::cacheKey(int channelIndex, double absoluteTimeSeconds) const {
-    return QStringLiteral("%1|%2|%3")
-        .arg(channelIndex)
-        .arg(QString::number(absoluteTimeSeconds, 'f', 12))
-        .arg(m_document ? m_document->valueRepresentation() : QStringLiteral("secondary"));
+SampleSnapshotKey TableSnapshotController::cacheKey(int channelIndex,
+                                                     double absoluteTimeSeconds) const {
+    const auto [first, end] = oneCycleWindow(absoluteTimeSeconds);
+    const quint64 lastSample = end > 0u ? static_cast<quint64>(end - 1u) : 0u;
+    return SampleSnapshotKey{
+        lastSample,
+        static_cast<quint64>(first),
+        channelIndex,
+        0,
+        m_document && m_document->valueRepresentation() == QStringLiteral("primary")};
 }
 
 QString TableSnapshotController::channelPhase(int channelIndex) const {
     if (!m_document || channelIndex < 0 || channelIndex >= m_document->analogCount()) {
         return QStringLiteral("Other");
     }
-    const QString name = compact_name(m_document->channelName(channelIndex));
-    if (name.contains(QStringLiteral("L1")) || name.endsWith(QStringLiteral("IA"))
-        || name.endsWith(QStringLiteral("VA")) || name.endsWith(QStringLiteral("UA"))) {
-        return QStringLiteral("L1");
+    return m_document->channelPhase(channelIndex);
+}
+
+QVariantMap TableSnapshotController::adjustedForReference(const CacheEntry& entry,
+                                                           int channelIndex,
+                                                           double absoluteTimeSeconds) const {
+    QVariantMap result = entry.value;
+    if (!m_document || !std::isfinite(absoluteTimeSeconds)) return result;
+
+    const double instantaneous = m_document->sampleValue(channelIndex, absoluteTimeSeconds);
+    result.insert(QStringLiteral("instant"), std::isfinite(instantaneous) ? instantaneous : 0.0);
+
+    if (std::isfinite(entry.referenceTime)) {
+        const double frequency = m_document->nominalFrequency() > 1.0
+                                     ? m_document->nominalFrequency()
+                                     : 50.0;
+        const double delta = absoluteTimeSeconds - entry.referenceTime;
+        const double baseAngle = result.value(QStringLiteral("angle")).toDouble();
+        result.insert(QStringLiteral("angle"), wrap_degrees(baseAngle + 360.0 * frequency * delta));
     }
-    if (name.contains(QStringLiteral("L2")) || name.endsWith(QStringLiteral("IB"))
-        || name.endsWith(QStringLiteral("VB")) || name.endsWith(QStringLiteral("UB"))) {
-        return QStringLiteral("L2");
+    return result;
+}
+
+void TableSnapshotController::trimCache() {
+    while (m_cache.size() > m_maxCacheEntries) {
+        auto victim = m_cache.end();
+        for (auto it = m_cache.begin(); it != m_cache.end(); ++it) {
+            if (victim == m_cache.end() || it.value().touch < victim.value().touch) victim = it;
+        }
+        if (victim == m_cache.end()) break;
+        m_cache.erase(victim);
     }
-    if (name.contains(QStringLiteral("L3")) || name.endsWith(QStringLiteral("IC"))
-        || name.endsWith(QStringLiteral("VC")) || name.endsWith(QStringLiteral("UC"))) {
-        return QStringLiteral("L3");
-    }
-    if (name.contains(QStringLiteral("3I0")) || name.contains(QStringLiteral("3V0"))
-        || name.contains(QStringLiteral("3U0")) || name.contains(QStringLiteral("RES"))
-        || name.contains(QStringLiteral("NEUTRAL")) || name.contains(QStringLiteral("EARTH"))
-        || name.contains(QStringLiteral("GROUND"))) {
-        return QStringLiteral("E");
-    }
-    return QStringLiteral("Other");
 }
 
 QVariantMap TableSnapshotController::snapshotAt(int channelIndex, double absoluteTimeSeconds) {
@@ -111,8 +121,11 @@ QVariantMap TableSnapshotController::snapshotAt(int channelIndex, double absolut
         return {{QStringLiteral("valid"), false}};
     }
 
-    const QString key = cacheKey(channelIndex, absoluteTimeSeconds);
-    if (const auto it = m_cache.constFind(key); it != m_cache.constEnd()) return it.value();
+    const SampleSnapshotKey key = cacheKey(channelIndex, absoluteTimeSeconds);
+    if (auto it = m_cache.find(key); it != m_cache.end()) {
+        it.value().touch = ++m_touchCounter;
+        return adjustedForReference(it.value(), channelIndex, absoluteTimeSeconds);
+    }
 
     const auto& times = m_document->timeSeconds();
     const auto [first, end] = oneCycleWindow(absoluteTimeSeconds);
@@ -140,14 +153,15 @@ QVariantMap TableSnapshotController::snapshotAt(int channelIndex, double absolut
     const double recordedRms = std::sqrt(static_cast<double>(sumSquares / static_cast<long double>(finiteCount)));
     const double frequency = m_document->nominalFrequency() > 1.0 ? m_document->nominalFrequency() : 50.0;
     const auto timeWindow = std::span<const double>(times.data() + first, count);
+    const double referenceTime = times[std::min(cappedEnd - 1u, times.size() - 1u)];
     const auto spectrum = ardirec::power::harmonic_spectrum(
         std::span<const double>(samples.data(), count),
         timeWindow,
         frequency,
         25,
-        absoluteTimeSeconds);
+        referenceTime);
 
-    const double instantaneous = m_document->sampleValue(channelIndex, absoluteTimeSeconds);
+    const double instantaneous = m_document->sampleValue(channelIndex, referenceTime);
     const double safeInstantaneous = std::isfinite(instantaneous) ? instantaneous : 0.0;
 
     const double absScale = std::abs(scale);
@@ -159,7 +173,7 @@ QVariantMap TableSnapshotController::snapshotAt(int channelIndex, double absolut
     const double dcPercent = h1Recorded > kMinimumMagnitude ? std::abs(dcRecorded) / h1Recorded * 100.0 : 0.0;
     const double displayedRms = recordedRms * absScale;
     const auto lastExtremeRecorded = ardirec::power::last_extreme_value(
-        std::span<const double>(samples.data(), count), timeWindow, absoluteTimeSeconds);
+        std::span<const double>(samples.data(), count), timeWindow, referenceTime);
     const double displayedExtremum = lastExtremeRecorded.value_or(0.0) * scale;
     const double displayedCyclePeak = cyclePeakAbs * absScale;
     const double crestFactor = displayedRms > kMinimumMagnitude ? displayedCyclePeak / displayedRms : 0.0;
@@ -199,9 +213,10 @@ QVariantMap TableSnapshotController::snapshotAt(int channelIndex, double absolut
                        {QStringLiteral("h5"), harmonicPercent(5)},
                        {QStringLiteral("abnormal"), abnormal}};
 
-    if (m_cache.size() >= 512) m_cache.clear();
-    m_cache.insert(key, result);
-    return result;
+    CacheEntry entry{result, referenceTime, ++m_touchCounter};
+    m_cache.insert(key, entry);
+    trimCache();
+    return adjustedForReference(entry, channelIndex, absoluteTimeSeconds);
 }
 
 QVariantList TableSnapshotController::sortedChannels(const QVariantList& channelIndexes,
