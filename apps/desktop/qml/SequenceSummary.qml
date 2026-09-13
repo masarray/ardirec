@@ -10,21 +10,44 @@ Rectangle {
     radius: 2
 
     property var document
+    property var analysis
     property var snapshot: ({valid:false})
+    property real cursorTime: NaN
     property string cursorLabel: "C1"
     property color cursorAccent: "#244f9e"
     property real angleOffsetDegrees: 0.0
     property string valueRepresentation: document ? document.valueRepresentation : "secondary"
 
-    readonly property var voltageSnapshot: snapshot && snapshot.valid
-                                           ? (snapshot.voltageSequence || ({valid:false}))
+    readonly property var effectiveSnapshot: {
+        if (snapshot && snapshot.valid) return snapshot
+        const candidate = cursorSnapshotController ? cursorSnapshotController.cursorA : null
+        if (!candidate || !candidate.valid) return ({valid:false})
+        if (Number.isFinite(cursorTime)
+                && (!Number.isFinite(candidate.time)
+                    || Math.abs(Number(candidate.time) - Number(cursorTime)) > 1.0e-10)) {
+            return ({valid:false})
+        }
+        return candidate
+    }
+    readonly property var voltageSnapshot: effectiveSnapshot && effectiveSnapshot.valid
+                                           ? (effectiveSnapshot.voltageSequence || ({valid:false}))
                                            : ({valid:false})
-    readonly property var currentSnapshot: snapshot && snapshot.valid
-                                           ? (snapshot.currentSequence || ({valid:false}))
+    readonly property var currentSnapshot: effectiveSnapshot && effectiveSnapshot.valid
+                                           ? (effectiveSnapshot.currentSequence || ({valid:false}))
                                            : ({valid:false})
     readonly property bool hasVoltage: voltageSnapshot && voltageSnapshot.valid
     readonly property bool hasCurrent: currentSnapshot && currentSnapshot.valid
     readonly property bool hasData: hasVoltage || hasCurrent
+
+    function requestSharedSnapshot() {
+        if (!root.visible || !Number.isFinite(root.cursorTime)) return
+        if (root.snapshot && root.snapshot.valid) return
+        cursorSnapshotController.requestCursorA(root.cursorTime)
+    }
+
+    onCursorTimeChanged: requestSharedSnapshot()
+    onVisibleChanged: if (visible) Qt.callLater(requestSharedSnapshot)
+    Component.onCompleted: if (visible) Qt.callLater(requestSharedSnapshot)
 
     function wrapDegrees(value) {
         let angle = value
