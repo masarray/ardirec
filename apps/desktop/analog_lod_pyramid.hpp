@@ -3,6 +3,7 @@
 
 #include "ardirec/comtrade/indexed_dat.hpp"
 
+#include <atomic>
 #include <cstddef>
 #include <memory>
 #include <vector>
@@ -38,7 +39,8 @@ public:
 
 private:
     friend std::shared_ptr<const AnalogLodPyramid>
-    buildAnalogLodPyramid(std::shared_ptr<const ardirec::comtrade::AnalogLodIndex> base);
+    buildAnalogLodPyramid(std::shared_ptr<const ardirec::comtrade::AnalogLodIndex> base,
+                          const std::atomic_bool* cancel);
 
     std::shared_ptr<const ardirec::comtrade::AnalogLodIndex> m_base;
     std::vector<Level> m_coarseLevels;
@@ -46,6 +48,7 @@ private:
 };
 
 [[nodiscard]] std::shared_ptr<const AnalogLodPyramid>
-buildAnalogLodPyramid(std::shared_ptr<const ardirec::comtrade::AnalogLodIndex> base);
+buildAnalogLodPyramid(std::shared_ptr<const ardirec::comtrade::AnalogLodIndex> base,
+                      const std::atomic_bool* cancel = nullptr);
 
 } // namespace ardirec::desktop
