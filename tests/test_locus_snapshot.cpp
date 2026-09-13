@@ -47,32 +47,35 @@ void wait_for_locus(LocusSnapshotController& locus, int previousRevision, int ti
     require(!locus.busy(), "async locus calculation completes before timeout");
     require(locus.revision() != previousRevision, "async locus publishes a new revision");
 }
+
+void load_and_wait(DocumentController& document, const std::filesystem::path& cfgPath) {
+    document.openCfg(QUrl::fromLocalFile(QString::fromStdString(cfgPath.string())));
+    wait_for_document(document);
+    require(document.error().isEmpty(), "COMTRADE fixture opens without error");
+}
 } // namespace
 
 int main(int argc, char* argv[]) {
     QCoreApplication app(argc, argv);
     try {
-        const std::filesystem::path cfgPath = std::filesystem::path(ARDIREC_TEST_DATA_DIR) / "distance_p1.cfg";
-
         DocumentController document;
         LocusSnapshotController locus(&document);
 
-        document.openCfg(QUrl::fromLocalFile(QString::fromStdString(cfgPath.string())));
-        wait_for_document(document);
-        require(document.error().isEmpty(), "distance P1 fixture opens without error");
+        // Existing production-path golden: energized 100+j0 ohm followed by a
+        // near-zero-current opening. The opening must remain a gap, not an outlier.
+        const std::filesystem::path cfgPath = std::filesystem::path(ARDIREC_TEST_DATA_DIR) / "distance_p1.cfg";
+        load_and_wait(document, cfgPath);
         require(document.sampleCount() == 48, "distance P1 fixture sample count");
 
-        const int before = locus.revision();
+        int before = locus.revision();
         locus.request(document.dataStartSeconds(), document.durationSeconds(), 4000, 0.0, 0.0);
         require(locus.busy(), "production locus request starts asynchronously");
         wait_for_locus(locus, before);
 
-        const auto snapshot = locus.nativeSnapshot();
+        auto snapshot = locus.nativeSnapshot();
         require(snapshot != nullptr, "production async locus publishes a native snapshot");
         require(snapshot->loops[0].size() == 48, "native L1-E locus retains each fixture timestamp below the point budget");
 
-        // Index 22 is t=22 ms. The synthetic voltage/current pair is constructed so
-        // the L1-E apparent impedance is 100+j0 ohm while the circuit is energized.
         const LocusNativePoint& energized = snapshot->loops[0].at(22);
         require(energized.valid != 0, "energized production-path locus point is valid");
         require_near(static_cast<double>(energized.r), 100.0, 0.2,
@@ -80,18 +83,55 @@ int main(int argc, char* argv[]) {
         require(std::abs(static_cast<double>(energized.x)) < 0.2,
                 "production async locus golden reactance remains near zero");
 
-        // The fixture current collapses to microamp scale after opening. The final
-        // full-cycle window is therefore below the explicit measurement-current floor
-        // and must be represented as a gap, not an invented impedance value.
         const LocusNativePoint& postOpen = snapshot->loops[0].back();
         require(postOpen.valid == 0,
                 "near-zero post-open measuring current remains an explicit locus gap");
-
-        // Transitional finite values are deliberately not clipped here. They remain
-        // available to the operator through Fit All; R1 only changes the default view
-        // transform via the explicit Fit Relevant policy.
         require(std::isfinite(locus.maxAbsR()) && std::isfinite(locus.maxAbsX()),
                 "native finite locus extents remain available for forensic Fit All");
+
+        // SIGRA parity fixture:
+        // - analog names deliberately do not encode L1/L2/L3, so explicit COMTRADE
+        //   phase metadata must drive the production worker;
+        // - the three phase currents sum to zero, while a dedicated IE channel is
+        //   present. With kL=0.5, using measured IE (IE=-3I0 convention) yields
+        //   100 ohm; reconstructing residual from phases would incorrectly yield 200;
+        // - TRIP changes at 30 ms. SIGRA defines calculated values as invalid when a
+        //   fault/trip/status change is inside the backward one-cycle measuring window.
+        const std::filesystem::path sigraPath = std::filesystem::path(ARDIREC_TEST_DATA_DIR) / "distance_sigra_parity.cfg";
+        load_and_wait(document, sigraPath);
+        require(document.sampleCount() == 80, "SIGRA parity fixture sample count");
+        require(document.channelPhase(0) == QStringLiteral("L1")
+                    && document.channelPhase(1) == QStringLiteral("L2")
+                    && document.channelPhase(2) == QStringLiteral("L3"),
+                "explicit COMTRADE phase metadata is classified before name heuristics");
+        require(document.digitalEdgeTimes().size() == 1,
+                "SIGRA parity fixture exposes the TRIP status transition");
+
+        before = locus.revision();
+        locus.request(document.dataStartSeconds(), document.durationSeconds(), 4000, 0.5, 0.0);
+        wait_for_locus(locus, before);
+        snapshot = locus.nativeSnapshot();
+        require(snapshot != nullptr, "SIGRA parity locus publishes a native snapshot");
+        require(snapshot->loops[0].size() == 80,
+                "SIGRA parity fixture remains unsimplified below the render budget");
+
+        const LocusNativePoint& beforeTrip = snapshot->loops[0].at(25); // 25 ms, window 5..25 ms
+        require(beforeTrip.valid != 0, "pre-trip one-cycle window remains valid");
+        require_near(static_cast<double>(beforeTrip.r), 100.0, 0.25,
+                     "measured IE channel is preferred over reconstructed phase-current residual");
+        require(std::abs(static_cast<double>(beforeTrip.x)) < 0.25,
+                "measured IE parity point keeps expected reactance");
+
+        const LocusNativePoint& spanningTrip = snapshot->loops[0].at(40); // 40 ms, window spans 30 ms edge
+        require(spanningTrip.valid == 0,
+                "status change inside the SIGRA measuring window creates a locus gap");
+        require(snapshot->statusRejectedCount > 0,
+                "native snapshot records status-window validity rejections");
+
+        const LocusNativePoint& afterTrip = snapshot->loops[0].at(55); // 55 ms, window is fully post-trip
+        require(afterTrip.valid != 0, "post-trip steady one-cycle window becomes valid again");
+        require_near(static_cast<double>(afterTrip.r), 100.0, 0.25,
+                     "post-trip measured-IE impedance returns to the golden value");
 
         std::cout << "ardirec locus snapshot tests: PASS\n";
         return 0;
