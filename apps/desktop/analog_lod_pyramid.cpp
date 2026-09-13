@@ -12,6 +12,10 @@ constexpr std::size_t kMaximumAdditionalLodCells = 2'000'000u;
 [[nodiscard]] bool finite_pair(float low, float high) noexcept {
     return std::isfinite(low) && std::isfinite(high) && low <= high;
 }
+
+[[nodiscard]] bool cancelled(const std::atomic_bool* cancel) noexcept {
+    return cancel && cancel->load(std::memory_order_relaxed);
+}
 } // namespace
 
 std::size_t AnalogLodPyramid::levelCount() const noexcept {
@@ -70,8 +74,12 @@ bool AnalogLodPyramid::blockExtrema(std::size_t level,
 }
 
 std::shared_ptr<const AnalogLodPyramid>
-buildAnalogLodPyramid(std::shared_ptr<const ardirec::comtrade::AnalogLodIndex> base) {
-    if (!base || base->channel_count == 0u || base->block_size == 0u || base->block_count == 0u) return {};
+buildAnalogLodPyramid(std::shared_ptr<const ardirec::comtrade::AnalogLodIndex> base,
+                      const std::atomic_bool* cancel) {
+    if (!base || base->channel_count == 0u || base->block_size == 0u || base->block_count == 0u
+        || cancelled(cancel)) {
+        return {};
+    }
 
     auto pyramid = std::make_shared<AnalogLodPyramid>();
     pyramid->m_base = std::move(base);
@@ -81,7 +89,7 @@ buildAnalogLodPyramid(std::shared_ptr<const ardirec::comtrade::AnalogLodIndex> b
     std::size_t previousBlockCount = pyramid->m_base->block_count;
     std::size_t additionalCells = 0u;
 
-    while (previousBlockCount > 1u) {
+    while (previousBlockCount > 1u && !cancelled(cancel)) {
         const std::size_t nextBlockCount = (previousBlockCount + 1u) / 2u;
         if (nextBlockCount > std::numeric_limits<std::size_t>::max() / pyramid->m_channelCount) break;
         const std::size_t cells = nextBlockCount * pyramid->m_channelCount;
@@ -96,7 +104,9 @@ buildAnalogLodPyramid(std::shared_ptr<const ardirec::comtrade::AnalogLodIndex> b
         level.maxima.assign(cells, -std::numeric_limits<float>::infinity());
 
         const std::size_t sourceLevel = pyramid->levelCount() - 1u;
+        std::size_t checkedBlocks = 0u;
         for (std::size_t block = 0u; block < nextBlockCount; ++block) {
+            if ((checkedBlocks++ & 0xFFu) == 0u && cancelled(cancel)) return {};
             for (std::size_t channel = 0u; channel < pyramid->m_channelCount; ++channel) {
                 double low = std::numeric_limits<double>::infinity();
                 double high = -std::numeric_limits<double>::infinity();
@@ -124,7 +134,7 @@ buildAnalogLodPyramid(std::shared_ptr<const ardirec::comtrade::AnalogLodIndex> b
         pyramid->m_coarseLevels.push_back(std::move(level));
     }
 
-    return pyramid;
+    return cancelled(cancel) ? std::shared_ptr<const AnalogLodPyramid>{} : pyramid;
 }
 
 } // namespace ardirec::desktop
