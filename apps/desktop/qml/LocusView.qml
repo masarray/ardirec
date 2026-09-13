@@ -29,6 +29,15 @@ Rectangle {
     readonly property bool distanceMode: analysisMode === "distance"
     readonly property real kLMagnitude: zoneController ? zoneController.groundingFactorMagnitude : 0.0
     readonly property real kLAngle: zoneController ? zoneController.groundingFactorAngle : 0.0
+    readonly property bool classicalCompensation: locusSnapshotController.classicalGroundingValid
+    readonly property string compensationSummary: classicalCompensation
+                                                  ? "RE/RL " + Number(locusSnapshotController.reOverRl).toFixed(3)
+                                                    + " · XE/XL " + Number(locusSnapshotController.xeOverXl).toFixed(3)
+                                                  : "kL " + Number(kLMagnitude).toFixed(4)
+                                                    + " ∠ " + Number(kLAngle).toFixed(2) + "°"
+    readonly property string calculationSummary: classicalCompensation
+                                                 ? "CLASSICAL RIO · 1-CYCLE BACKWARD"
+                                                 : "FUNDAMENTAL · 1-CYCLE BACKWARD"
     readonly property var earthLoops: ["L1-E", "L2-E", "L3-E"]
     readonly property var phaseLoops: ["L1-L2", "L2-L3", "L3-L1"]
     readonly property var allLoops: earthLoops.concat(phaseLoops)
@@ -369,7 +378,7 @@ Rectangle {
                     checked: root.fitMode === "relevant"
                     onClicked: { root.fitMode = "relevant"; root.setLocusZoom(1.0) }
                     ToolTip.visible:hovered
-                    ToolTip.text:"Family-local fit of valid trajectory, protection zones and C1/C2; rare outliers remain available in Fit All"
+                    ToolTip.text:"Family-local fit of valid trajectory, protection zones and C1/C2; every finite point remains available in Fit All"
                 }
                 ToolButton {
                     text:"Fit All"
@@ -385,8 +394,13 @@ Rectangle {
                 Label { text:Math.round(root.locusZoom*100)+"%"; color:"#59656d"; font.pixelSize:9 }
 
                 Rectangle { visible:root.distanceMode; width:1; height:26; color:"#cbd1d6" }
-                Label { visible:root.distanceMode; text:"kL"; color:"#56626b"; font.pixelSize:9; font.weight:Font.DemiBold }
-                Label { visible:root.distanceMode; text:Number(root.kLMagnitude).toFixed(4)+" ∠ "+Number(root.kLAngle).toFixed(2)+"°"; color:"#48545d"; font.pixelSize:9 }
+                Label {
+                    visible: root.distanceMode
+                    text: root.compensationSummary
+                    color: "#48545d"
+                    font.pixelSize: 9
+                    font.weight: Font.DemiBold
+                }
 
                 Item { Layout.fillWidth:true }
                 Label {
@@ -394,6 +408,13 @@ Rectangle {
                     text: "Updating trajectory…"
                     color: "#6e7880"
                     font.pixelSize: 9
+                }
+                Label {
+                    visible: root.distanceMode
+                    text: root.calculationSummary
+                    color: root.classicalCompensation ? "#3f6757" : "#68737b"
+                    font.pixelSize: 8
+                    font.weight: Font.DemiBold
                 }
                 Label {
                     visible: root.distanceMode
@@ -456,6 +477,12 @@ Rectangle {
                 Label { text:"C2"; color:"#b77900"; font.pixelSize:9; font.weight:Font.Bold }
                 Label { text:root.compactImpedance(root.cursorBValue); color:"#354049"; font.pixelSize:9; font.family:"Consolas" }
                 Item { Layout.fillWidth:true }
+                Label {
+                    visible: locusSnapshotController.statusRejectedCount > 0
+                    text: "window gaps " + locusSnapshotController.statusRejectedCount
+                    color: "#8a6b3c"
+                    font.pixelSize: 8
+                }
                 Label {
                     text: root.analysis ? "I floor " + (root.analysis.distanceCurrentFloor()*1000).toFixed(2) + " mA" : ""
                     color: "#6f7980"
