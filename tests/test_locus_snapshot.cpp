@@ -89,14 +89,15 @@ int main(int argc, char* argv[]) {
         require(std::isfinite(locus.maxAbsR()) && std::isfinite(locus.maxAbsX()),
                 "native finite locus extents remain available for forensic Fit All");
 
-        // SIGRA parity fixture:
+        // SIGRA classical-method parity fixture:
         // - analog names deliberately do not encode L1/L2/L3, so explicit COMTRADE
         //   phase metadata must drive the production worker;
-        // - the three phase currents sum to zero, while a dedicated IE channel is
-        //   present. With kL=0.5, using measured IE (IE=-3I0 convention) yields
-        //   100 ohm; reconstructing residual from phases would incorrectly yield 200;
-        // - TRIP changes at 30 ms. SIGRA defines calculated values as invalid when a
-        //   fault/trip/status change is inside the backward one-cycle measuring window.
+        // - a dedicated IE channel follows SIGRA's IE = -(IL1+IL2+IL3) convention;
+        // - the sidecar RIO supplies RE/RL=1.0 and XE/XL=0.6 with no line angle,
+        //   proving the ratios must remain independent rather than being collapsed
+        //   into a synthetic complex kL;
+        // - TRIP changes at 30 ms. SIGRA's trailing one-cycle calculated values are
+        //   invalid while the 20 ms measuring window contains that status transition.
         const std::filesystem::path sigraPath = std::filesystem::path(ARDIREC_TEST_DATA_DIR) / "distance_sigra_parity.cfg";
         load_and_wait(document, sigraPath);
         require(document.sampleCount() == 80, "SIGRA parity fixture sample count");
@@ -106,9 +107,14 @@ int main(int argc, char* argv[]) {
                 "explicit COMTRADE phase metadata is classified before name heuristics");
         require(document.digitalEdgeTimes().size() == 1,
                 "SIGRA parity fixture exposes the TRIP status transition");
+        require(locus.classicalGroundingValid(), "matching RIO sidecar selects classical earth compensation");
+        require_near(locus.reOverRl(), 1.0, 1.0e-12, "RIO RE/RL is preserved directly");
+        require_near(locus.xeOverXl(), 0.6, 1.0e-12, "RIO XE/XL is preserved directly");
 
         before = locus.revision();
-        locus.request(document.dataStartSeconds(), document.durationSeconds(), 4000, 0.5, 0.0);
+        // kL arguments are intentionally zero. The earth-loop golden must come from
+        // the sidecar's classical RE/RL-XE/XL model, not a line-angle conversion.
+        locus.request(document.dataStartSeconds(), document.durationSeconds(), 4000, 0.0, 0.0);
         wait_for_locus(locus, before);
         snapshot = locus.nativeSnapshot();
         require(snapshot != nullptr, "SIGRA parity locus publishes a native snapshot");
@@ -118,9 +124,9 @@ int main(int argc, char* argv[]) {
         const LocusNativePoint& beforeTrip = snapshot->loops[0].at(25); // 25 ms, window 5..25 ms
         require(beforeTrip.valid != 0, "pre-trip one-cycle window remains valid");
         require_near(static_cast<double>(beforeTrip.r), 100.0, 0.25,
-                     "measured IE channel is preferred over reconstructed phase-current residual");
+                     "classical RE/RL-XE/XL plus measured IE recovers the golden resistance");
         require(std::abs(static_cast<double>(beforeTrip.x)) < 0.25,
-                "measured IE parity point keeps expected reactance");
+                "classical parity point keeps expected reactance");
 
         const LocusNativePoint& spanningTrip = snapshot->loops[0].at(40); // 40 ms, window spans 30 ms edge
         require(spanningTrip.valid == 0,
@@ -131,7 +137,9 @@ int main(int argc, char* argv[]) {
         const LocusNativePoint& afterTrip = snapshot->loops[0].at(55); // 55 ms, window is fully post-trip
         require(afterTrip.valid != 0, "post-trip steady one-cycle window becomes valid again");
         require_near(static_cast<double>(afterTrip.r), 100.0, 0.25,
-                     "post-trip measured-IE impedance returns to the golden value");
+                     "post-trip classical impedance returns to the golden value");
+        require(std::abs(static_cast<double>(afterTrip.x)) < 0.25,
+                "post-trip classical reactance returns to the golden value");
 
         std::cout << "ardirec locus snapshot tests: PASS\n";
         return 0;
