@@ -80,17 +80,18 @@ int main(int argc, char* argv[]) {
         require(std::abs(static_cast<double>(energized.x)) < 0.2,
                 "production async locus golden reactance remains near zero");
 
-        // The fixture current collapses to microamp scale after opening. A finite V/I
-        // quotient here would be mathematically possible but is not a valid distance
-        // measurement and would create the huge R-X excursions that destroyed the UI fit.
+        // The fixture current collapses to microamp scale after opening. The final
+        // full-cycle window is therefore below the explicit measurement-current floor
+        // and must be represented as a gap, not an invented impedance value.
         const LocusNativePoint& postOpen = snapshot->loops[0].back();
         require(postOpen.valid == 0,
                 "near-zero post-open measuring current remains an explicit locus gap");
 
-        require(locus.maxAbsR() < 1000.0,
-                "invalid post-open current does not dominate the native trajectory R extent");
-        require(locus.maxAbsX() < 1000.0,
-                "invalid post-open current does not dominate the native trajectory X extent");
+        // Transitional finite values are deliberately not clipped here. They remain
+        // available to the operator through Fit All; R1 only changes the default view
+        // transform via the explicit Fit Relevant policy.
+        require(std::isfinite(locus.maxAbsR()) && std::isfinite(locus.maxAbsX()),
+                "native finite locus extents remain available for forensic Fit All");
 
         std::cout << "ardirec locus snapshot tests: PASS\n";
         return 0;
