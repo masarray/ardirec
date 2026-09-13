@@ -10,6 +10,8 @@ qt_add_executable(ardirec WIN32 MACOSX_BUNDLE
     analysis_controller.hpp
     analysis_cursor_batch.cpp
     analysis_sequence.cpp
+    cursor_snapshot_controller.cpp
+    cursor_snapshot_controller.hpp
     harmonic_snapshot_controller.cpp
     harmonic_snapshot_controller.hpp
     table_snapshot_controller.cpp
@@ -21,6 +23,8 @@ qt_add_executable(ardirec WIN32 MACOSX_BUNDLE
     rms_cycle_window.hpp
     rms_waveform_item.cpp
     rms_waveform_item.hpp
+    phasor_vector_item.cpp
+    phasor_vector_item.hpp
     digital_item.cpp
     digital_item.hpp
 )

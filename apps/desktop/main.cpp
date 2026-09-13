@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "analysis_controller.hpp"
+#include "cursor_snapshot_controller.hpp"
 #include "digital_item.hpp"
 #include "distance_zone_controller.hpp"
 #include "document_controller.hpp"
 #include "harmonic_snapshot_controller.hpp"
+#include "phasor_vector_item.hpp"
 #include "rms_waveform_item.hpp"
 #include "table_snapshot_controller.hpp"
 #include "waveform_item.hpp"
@@ -53,10 +55,12 @@ int main(int argc, char* argv[]) {
 
     qmlRegisterType<WaveformItem>("Ardirec.Render", 1, 0, "WaveformItem");
     qmlRegisterType<RmsWaveformItem>("Ardirec.Render", 1, 0, "RmsWaveformItem");
+    qmlRegisterType<PhasorVectorItem>("Ardirec.Render", 1, 0, "PhasorVectorItem");
     qmlRegisterType<DigitalItem>("Ardirec.Render", 1, 0, "DigitalItem");
 
     DocumentController document;
     AnalysisController analysis(&document);
+    CursorSnapshotController cursorSnapshots(&document);
     HarmonicSnapshotController harmonicSnapshots(&document);
     TableSnapshotController tableSnapshots(&document);
     DistanceZoneController distanceZones;
@@ -73,6 +77,7 @@ int main(int argc, char* argv[]) {
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty(QStringLiteral("documentController"), &document);
     engine.rootContext()->setContextProperty(QStringLiteral("analysisController"), &analysis);
+    engine.rootContext()->setContextProperty(QStringLiteral("cursorSnapshotController"), &cursorSnapshots);
     engine.rootContext()->setContextProperty(QStringLiteral("harmonicSnapshotController"), &harmonicSnapshots);
     engine.rootContext()->setContextProperty(QStringLiteral("tableSnapshotController"), &tableSnapshots);
     engine.rootContext()->setContextProperty(QStringLiteral("distanceZoneController"), &distanceZones);

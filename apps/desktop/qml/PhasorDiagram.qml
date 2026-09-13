@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import QtQuick
 import QtQuick.Controls
+import Ardirec.Render 1.0
 
 Rectangle {
     id: root
@@ -9,14 +10,13 @@ Rectangle {
 
     property var document
     property var analysis
+    property var snapshot: ({valid:false})
     property var channels: []
     property string role: "Voltage"
     property string title: "PHASORS"
-    property real cursorTime: 0.0
     property real scaleMagnitude: 0.0
     property color cursorAccent: "#244f9e"
     property string valueRepresentation: document ? document.valueRepresentation : "secondary"
-    readonly property bool analysisActive: analysis !== null && analysis !== undefined
 
     function wrapDegrees(value) {
         let angle = value
@@ -40,17 +40,36 @@ Rectangle {
         return root.channels && root.channels.length ? root.channels : root.fallbackChannels()
     }
 
-    function phasorForChannel(index) {
-        const representationDependency = root.valueRepresentation
-        if (index < 0 || !root.analysis) return ({valid:false})
-        const row = root.analysis.phasorAt(index, root.cursorTime)
-        if (!row || !row.valid || !Number.isFinite(row.magnitude) || !Number.isFinite(row.angle))
-            return ({valid:false})
-        return ({valid:true,
-                 magnitude: row.magnitude,
-                 angle: root.wrapDegrees(row.angle + 90.0),
-                 unit: row.unit || (root.document ? root.document.channelUnit(index) : "")})
+    function snapshotRow(index) {
+        if (!root.snapshot || !root.snapshot.valid || !root.snapshot.channels) return ({valid:false})
+        if (index < 0 || index >= root.snapshot.channels.length) return ({valid:false})
+        return root.snapshot.channels[index] || ({valid:false})
     }
+
+    function buildVectors() {
+        let vectors = []
+        for (let index of root.effectiveChannels()) {
+            const row = root.snapshotRow(index)
+            if (!row.valid || !Number.isFinite(row.magnitude) || !Number.isFinite(row.angle)) continue
+            vectors.push({
+                valid: true,
+                index: index,
+                magnitude: row.magnitude,
+                angle: root.wrapDegrees(row.angle + 90.0),
+                phase: row.phase || (root.analysis ? root.analysis.channelPhase(index) : "Other"),
+                color: root.analysis ? root.analysis.phaseColor(index) : "#6f7780"
+            })
+        }
+        return vectors
+    }
+
+    readonly property var vectorRows: buildVectors()
+    readonly property real localMaximum: {
+        let maximum = 0.0
+        for (let row of vectorRows) maximum = Math.max(maximum, Number(row.magnitude) || 0.0)
+        return maximum
+    }
+    readonly property real effectiveScale: scaleMagnitude > 0.0 ? scaleMagnitude : localMaximum
 
     function displayScale(index) {
         if (!root.document || index < 0 || root.valueRepresentation !== "primary") return 1.0
@@ -83,31 +102,8 @@ Rectangle {
 
     function scaleText() {
         const list = root.effectiveChannels()
-        if (!list.length || !(root.scaleMagnitude > 0)) return "AUTO SCALE"
-        return "RMAX " + root.formatMagnitude(list[0], root.scaleMagnitude)
-    }
-
-    function requestRepaint() {
-        if (!root.analysisActive) return
-        phasorCanvas.requestPaint()
-    }
-
-    onCursorTimeChanged: requestRepaint()
-    onRoleChanged: requestRepaint()
-    onChannelsChanged: requestRepaint()
-    onAnalysisChanged: if (root.analysisActive) Qt.callLater(requestRepaint)
-    onDocumentChanged: requestRepaint()
-    onScaleMagnitudeChanged: requestRepaint()
-    onValueRepresentationChanged: requestRepaint()
-    onVisibleChanged: if (visible && root.analysisActive) Qt.callLater(requestRepaint)
-    onWidthChanged: requestRepaint()
-    onHeightChanged: requestRepaint()
-    Component.onCompleted: if (root.analysisActive) Qt.callLater(requestRepaint)
-
-    Connections {
-        target: root.document
-        function onDocumentChanged() { if (root.analysisActive) Qt.callLater(root.requestRepaint) }
-        function onRepresentationChanged() { root.requestRepaint() }
+        if (!list.length || !(root.effectiveScale > 0)) return "AUTO SCALE"
+        return "RMAX " + root.formatMagnitude(list[0], root.effectiveScale)
     }
 
     Rectangle {
@@ -142,139 +138,108 @@ Rectangle {
         font.pixelSize: 9
     }
 
-    Canvas {
-        id: phasorCanvas
+    Item {
+        id: plot
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: header.bottom
         anchors.bottom: legendScroll.top
         anchors.margins: 8
-        antialiasing: true
-        renderStrategy: Canvas.Cooperative
+        clip: true
 
-        onWidthChanged: root.requestRepaint()
-        onHeightChanged: root.requestRepaint()
+        readonly property real cx: width * 0.5
+        readonly property real cy: height * 0.5
+        readonly property real radius: Math.max(20, Math.min(width, height) * 0.40)
 
-        onPaint: {
-            const ctx = getContext("2d")
-            ctx.clearRect(0, 0, width, height)
-            if (!root.analysisActive || width < 80 || height < 80) return
-
-            const labelMargin = 32
-            const diameter = Math.max(40, Math.min(width, height) - labelMargin * 2)
-            const radius = diameter * 0.5
-            const cx = width * 0.5
-            const cy = height * 0.5
-
-            ctx.save()
-            ctx.lineCap = "round"
-
-            ctx.lineWidth = 0.8
-            ctx.strokeStyle = "#d5dbe0"
-            ctx.setLineDash([3, 4])
-            for (let degree = 0; degree < 360; degree += 30) {
-                if (degree % 90 === 0) continue
-                const a = degree * Math.PI / 180.0
-                ctx.beginPath()
-                ctx.moveTo(cx, cy)
-                ctx.lineTo(cx + Math.cos(a) * radius, cy - Math.sin(a) * radius)
-                ctx.stroke()
+        Repeater {
+            model: 4
+            Rectangle {
+                required property int index
+                width: plot.radius * 2 * (index + 1) / 4
+                height: width
+                radius: width * 0.5
+                x: plot.cx - width * 0.5
+                y: plot.cy - height * 0.5
+                color: "transparent"
+                border.width: index === 3 ? 1.1 : 1
+                border.color: index === 3 ? "#aeb7be" : "#dde3e7"
             }
+        }
 
-            ctx.setLineDash([])
-            for (let ring = 1; ring <= 4; ++ring) {
-                ctx.strokeStyle = ring === 4 ? "#aeb7be" : "#dde3e7"
-                ctx.lineWidth = ring === 4 ? 1.1 : 0.8
-                ctx.beginPath()
-                ctx.arc(cx, cy, radius * ring / 4.0, 0, Math.PI * 2)
-                ctx.stroke()
+        Repeater {
+            model: 12
+            Rectangle {
+                required property int index
+                width: plot.radius
+                height: index % 3 === 0 ? 1.2 : 1
+                x: plot.cx
+                y: plot.cy - height * 0.5
+                transformOrigin: Item.Left
+                rotation: -index * 30
+                color: index % 3 === 0 ? "#717d86" : "#d5dbe0"
+                opacity: index % 3 === 0 ? 0.95 : 0.75
             }
+        }
 
-            ctx.strokeStyle = "#717d86"
-            ctx.lineWidth = 1.1
-            ctx.beginPath(); ctx.moveTo(cx - radius, cy); ctx.lineTo(cx + radius, cy); ctx.stroke()
-            ctx.beginPath(); ctx.moveTo(cx, cy - radius); ctx.lineTo(cx, cy + radius); ctx.stroke()
-
-            ctx.font = "9px sans-serif"
-            ctx.fillStyle = "#4f5b64"
-            ctx.textAlign = "center"
-            ctx.textBaseline = "middle"
-            for (let degree = 0; degree < 360; degree += 30) {
-                const signedDegree = degree <= 180 ? degree : degree - 360
-                const a = degree * Math.PI / 180.0
-                const labelRadius = radius + 17
-                ctx.fillText(signedDegree + "°",
-                             cx + Math.cos(a) * labelRadius,
-                             cy - Math.sin(a) * labelRadius)
+        Repeater {
+            model: 12
+            Label {
+                required property int index
+                readonly property int degree: index * 30
+                readonly property int signedDegree: degree <= 180 ? degree : degree - 360
+                readonly property real radians: degree * Math.PI / 180.0
+                x: plot.cx + Math.cos(radians) * (plot.radius + 17) - width * 0.5
+                y: plot.cy - Math.sin(radians) * (plot.radius + 17) - height * 0.5
+                text: signedDegree + "°"
+                color: "#4f5b64"
+                font.pixelSize: 8
             }
+        }
 
-            ctx.textAlign = "left"
-            ctx.textBaseline = "bottom"
-            ctx.fillStyle = "#7d878e"
-            ctx.font = "8px sans-serif"
-            for (let ring = 1; ring <= 4; ++ring)
-                ctx.fillText((ring * 25) + "%", cx + 5, cy - radius * ring / 4.0 + 1)
-
-            const list = root.effectiveChannels()
-            let vectors = []
-            let localMax = 0.0
-            for (let index of list) {
-                const p = root.phasorForChannel(index)
-                if (!p.valid) continue
-                const phase = root.analysis ? root.analysis.channelPhase(index) : "Other"
-                vectors.push({phase: phase, index: index, p: p})
-                localMax = Math.max(localMax, p.magnitude)
+        Repeater {
+            model: 4
+            Label {
+                required property int index
+                x: plot.cx + 5
+                y: plot.cy - plot.radius * (index + 1) / 4 - height * 0.5
+                text: ((index + 1) * 25) + "%"
+                color: "#7d878e"
+                font.pixelSize: 7
             }
-            const maxMag = root.scaleMagnitude > 0 ? root.scaleMagnitude : localMax
+        }
 
-            if (!root.analysis || vectors.length === 0 || !(maxMag > 0.0)) {
-                ctx.fillStyle = "#66727a"
-                ctx.font = "600 11px sans-serif"
-                ctx.textAlign = "center"
-                ctx.textBaseline = "middle"
-                ctx.fillText(list.length ? "No valid full-cycle phasor at this cursor" : "No signals assigned to this vector group", cx, cy - 5)
-                ctx.font = "9px sans-serif"
-                ctx.fillStyle = "#8a9298"
-                ctx.fillText(list.length ? "Move the cursor to a window containing at least four valid samples" : "Open Signals → Signal Configuration…", cx, cy + 13)
-                ctx.fillStyle = "#5f6870"
-                ctx.beginPath(); ctx.arc(cx, cy, 2.2, 0, Math.PI * 2); ctx.fill()
-                ctx.restore()
-                return
+        PhasorVectorItem {
+            anchors.fill: parent
+            vectors: root.vectorRows
+            scaleMagnitude: root.effectiveScale
+        }
+
+        Repeater {
+            model: root.vectorRows
+            Label {
+                required property var modelData
+                readonly property real radians: Number(modelData.angle) * Math.PI / 180.0
+                readonly property real fraction: root.effectiveScale > 0 ? Math.min(1.0, Number(modelData.magnitude) / root.effectiveScale) : 0.0
+                readonly property real tagRadius: Math.max(22, plot.radius * 0.94 * fraction - 18)
+                x: plot.cx + Math.cos(radians) * tagRadius + (Math.cos(radians) >= 0 ? 4 : -width - 4)
+                y: plot.cy - Math.sin(radians) * tagRadius + (Math.sin(radians) >= 0 ? -height - 2 : 2)
+                text: modelData.phase !== "Other" ? modelData.phase
+                                                   : (root.document ? root.document.channelName(modelData.index) : "")
+                color: modelData.color
+                font.pixelSize: 9
+                font.weight: Font.DemiBold
             }
+        }
 
-            for (let v of vectors) {
-                const a = v.p.angle * Math.PI / 180.0
-                const length = radius * 0.94 * Math.min(1.0, v.p.magnitude / maxMag)
-                const ex = cx + Math.cos(a) * length
-                const ey = cy - Math.sin(a) * length
-                const color = root.analysis.phaseColor(v.index)
-
-                ctx.strokeStyle = color
-                ctx.fillStyle = color
-                ctx.lineWidth = v.phase === "E" ? 1.8 : 2.4
-                ctx.setLineDash([])
-                ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(ex, ey); ctx.stroke()
-
-                const head = 9
-                ctx.beginPath()
-                ctx.moveTo(ex, ey)
-                ctx.lineTo(ex - Math.cos(a - 0.45) * head, ey + Math.sin(a - 0.45) * head)
-                ctx.lineTo(ex - Math.cos(a + 0.45) * head, ey + Math.sin(a + 0.45) * head)
-                ctx.closePath(); ctx.fill()
-
-                const tag = v.phase !== "Other" ? v.phase : root.document.channelName(v.index)
-                const tagRadius = Math.max(22, length - 18)
-                ctx.font = "600 10px sans-serif"
-                ctx.textAlign = Math.cos(a) >= 0 ? "left" : "right"
-                ctx.textBaseline = Math.sin(a) >= 0 ? "bottom" : "top"
-                ctx.fillText(tag,
-                             cx + Math.cos(a) * tagRadius + (Math.cos(a) >= 0 ? 4 : -4),
-                             cy - Math.sin(a) * tagRadius + (Math.sin(a) >= 0 ? -3 : 3))
-            }
-
-            ctx.fillStyle = "#5f6870"
-            ctx.beginPath(); ctx.arc(cx, cy, 2.5, 0, Math.PI * 2); ctx.fill()
-            ctx.restore()
+        Label {
+            anchors.centerIn: parent
+            visible: root.effectiveChannels().length > 0 && root.vectorRows.length === 0
+            text: cursorSnapshotController.busyA || cursorSnapshotController.busyB
+                  ? "Updating fundamental phasors…"
+                  : "No valid full-cycle phasor at this cursor"
+            color: "#66727a"
+            font.pixelSize: 10
+            font.weight: Font.DemiBold
         }
     }
 
@@ -296,25 +261,22 @@ Rectangle {
             id: legend
             spacing: 18
             height: parent.height
-
             Repeater {
                 model: root.effectiveChannels()
                 Row {
                     required property int modelData
+                    readonly property var row: root.snapshotRow(modelData)
                     spacing: 5
-                    visible: root.analysis && modelData >= 0
                     Rectangle {
-                        width: 14
-                        height: 3
+                        width: 14; height: 3
                         anchors.verticalCenter: parent.verticalCenter
                         color: root.analysis ? root.analysis.phaseColor(modelData) : "#777"
                     }
                     Label {
-                        readonly property var phasor: root.phasorForChannel(modelData)
                         text: (root.document ? root.document.channelName(modelData) : "—")
-                              + (phasor.valid
-                                 ? "  " + root.formatMagnitude(modelData, phasor.magnitude)
-                                   + "  ∠" + phasor.angle.toFixed(1) + "°"
+                              + (row && row.valid
+                                 ? "  " + root.formatMagnitude(modelData, row.magnitude)
+                                   + "  ∠" + root.wrapDegrees(row.angle + 90.0).toFixed(1) + "°"
                                  : "  —")
                         color: "#3f494f"
                         font.pixelSize: 10
