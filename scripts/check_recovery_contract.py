@@ -66,7 +66,7 @@ else:
                 f"apps/desktop/qml/PhasorView.qml: {token!r} inside stableScale() — radial transform must be cursor-independent"
             )
 
-# R1.2 Cursor dimension: delta-time is engineering information. It must remain
+# R1 cursor dimension: delta-time is engineering information. It must remain
 # visible even when the two cursor lines are closer than the label width.
 require("apps/desktop/qml/EventStrip.qml", "readonly property bool labelInside", "narrow-span dimension needs inside/outside placement")
 require("apps/desktop/qml/EventStrip.qml", "readonly property bool outsideRight", "narrow-span label must choose a free side")
@@ -75,7 +75,7 @@ require("apps/desktop/qml/EventStrip.qml", 'root.deltaMs.toFixed(3) + " ms"', "m
 forbid("apps/desktop/qml/EventStrip.qml", "&& span >= 18", "small cursor spans must not hide the dimension")
 forbid("apps/desktop/qml/EventStrip.qml", "visible: parent.width >= 86", "small cursor spans must not hide the millisecond label")
 
-# R1.3 Locus display policy: Earth and phase-phase panels are independent engineering
+# R1 Locus display policy: Earth and phase-phase panels are independent engineering
 # diagrams. Relevant Fit follows robust valid trajectory context plus zones/cursors;
 # Fit All retains each family's complete finite extent for forensic inspection.
 require("apps/desktop/qml/LocusView.qml", 'property string fitMode: "relevant"',
@@ -104,7 +104,7 @@ require("apps/desktop/qml/LocusView.qml", "Math.min(4096",
 forbid("apps/desktop/qml/LocusView.qml", "Repeater {\n                    model: locusSnapshotController.locus",
        "production locus rendering must not materialize one QML delegate per trajectory point")
 
-# R1.4 SIGRA parity: production locus semantics must use COMTRADE metadata,
+# R1.1 SIGRA parity: production locus semantics must use COMTRADE metadata,
 # measured residual current, trailing one-cycle validity, and direct classical
 # RE/RL-XE/XL compensation when that is what the RIO file supplies.
 require("apps/desktop/locus_snapshot_controller.cpp", "m_document->channelPhase(index)",
@@ -147,9 +147,7 @@ require("apps/desktop/cursor_snapshot_controller.cpp", "distance_impedance_rerl_
 forbid("apps/desktop/cursor_snapshot_controller.cpp", "grounding_factor_from_rerl_xexl",
        "cursor distance must not synthesize kL from classical RIO ratios")
 
-# Production-path numerical regression fixtures: the async native locus engine,
-# not only the compatibility AnalysisController API, must be tested against both
-# the 100-ohm opening case and SIGRA-specific classical/status-window semantics.
+# Production-path numerical regression fixtures keep both prior and new contracts locked.
 require("tests/test_locus_snapshot.cpp", "distance_p1.cfg", "async locus production path requires the original deterministic fixture")
 require("tests/test_locus_snapshot.cpp", "100.0", "golden energized impedance must stay locked")
 require("tests/test_locus_snapshot.cpp", "post-open", "low-current invalid/gap semantics must stay locked")
@@ -163,10 +161,55 @@ require("tests/data/distance_sigra_parity.rio", "RE/RL", "SIGRA parity fixture m
 require("tests/data/distance_sigra_parity.rio", "XE/XL", "SIGRA parity fixture must carry the reactance compensation ratio")
 require("tests/CMakeLists.txt", "ardirec_locus_snapshot_tests", "golden production-path locus test must run under CTest")
 
+# R1.2 frequency + multi-rate DFT: the calculation frequency is estimated once in
+# the background loader, then shared by Cursor and Locus. Full-cycle integration is
+# weighted by actual COMTRADE timestamps, not by sample count.
+require("core/include/ardirec/power/timestamped_dft.hpp", "trailing_cycle_window",
+        "cursor and Locus require one shared causal timestamp-window definition")
+require("core/include/ardirec/power/timestamped_dft.hpp", "timestamp_cell_weight",
+        "multi-rate full-cycle DFT requires actual-time quadrature weights")
+require("apps/desktop/document_loader.cpp", "kMaximumFrequencySamples = 8192u",
+        "prefault frequency estimation must stay bounded during background load")
+require("apps/desktop/document_loader.cpp", "PREFault estimated · voltage V1",
+        "voltage positive-sequence must be the preferred prefault frequency source")
+require("apps/desktop/document_loader.cpp", "PREFault estimated · current I1",
+        "current positive-sequence must remain the fallback estimate source")
+require("apps/desktop/document_loader.cpp", 'calculation_frequency_provenance = "COMTRADE nominal"',
+        "frequency estimation must have an explicit COMTRADE nominal fallback")
+require("apps/desktop/document_controller.hpp", "calculationFrequencyProvenance",
+        "frequency provenance must be exposed once from the shared document state")
+require("apps/desktop/cursor_snapshot_controller.cpp", "timestamp_cell_weight",
+        "C1/C2 DFT must use timestamp weights across sample-rate boundaries")
+require("apps/desktop/locus_snapshot_controller.cpp", "timestamp_cell_weight",
+        "native Locus DFT must use the same timestamp weighting as C1/C2")
+require("apps/desktop/cursor_snapshot_controller.cpp", "m_document->calculationFrequency()",
+        "cursor snapshots must consume the shared document calculation frequency")
+require("apps/desktop/locus_snapshot_controller.cpp", "m_document->calculationFrequency()",
+        "Locus trajectories must consume the shared document calculation frequency")
+forbid("apps/desktop/cursor_snapshot_controller.cpp", "std::sqrt(2.0L) / static_cast<long double>(counts",
+       "cursor phasor normalization must use accumulated time weight, not sample count")
+forbid("apps/desktop/locus_snapshot_controller.cpp", "std::sqrt(2.0L) / static_cast<long double>(count",
+       "Locus phasor normalization must use accumulated time weight, not sample count")
+require("apps/desktop/qml/WorkstationStatusBar.qml", '"fcalc " + root.document.calculationFrequency.toFixed(3)',
+        "compact UX must expose active calculation frequency without adding a heavy panel")
+require("apps/desktop/qml/WorkstationStatusBar.qml", "calculationFrequencyProvenance",
+        "operator must be able to tell prefault estimate from nominal fallback")
+require("tests/test_locus_snapshot.cpp", '"1000,91\\n"',
+        "deterministic production test must declare the first COMTRADE sampling section")
+require("tests/test_locus_snapshot.cpp", '"2000,271\\n"',
+        "deterministic production test must cross into a second sampling section")
+require("tests/test_locus_snapshot.cpp", "actualFrequency = 50.4",
+        "fixture must distinguish estimated calculation frequency from 50 Hz nominal")
+require("tests/test_locus_snapshot.cpp", "cursor.requestCursorA(0.100)",
+        "cursor production path must be tested on a window crossing the rate boundary")
+require("tests/test_locus_snapshot.cpp", "crossingRateBoundary",
+        "native Locus production path must be tested on the same rate-boundary window")
+
 # Global-data alignment must remain documented rather than hidden in implementation lore.
 require("docs/LOCUS_ENGINE.md", "full-cycle DFT", "calculation window convention must stay explicit")
 require("docs/LOCUS_ENGINE.md", "prefault positive-sequence", "frequency-source policy must stay explicit")
 require("docs/LOCUS_ENGINE.md", "different sample-rate sections", "COMTRADE multi-rate qualification must stay explicit")
+require("docs/LOCUS_ENGINE.md", "causal timestamp-cell quadrature", "multi-rate DFT weighting policy must stay explicit")
 require("docs/LOCUS_ENGINE.md", "Correct impedance plane", "distance-loop and positive-sequence planes must not be conflated")
 require("docs/LOCUS_ENGINE.md", "retained Qt Quick scene-graph geometry", "lightweight retained rendering is an architectural invariant")
 
