@@ -50,6 +50,9 @@ qt_add_qml_module(ardirec
         qml/ViewModeBar.qml
         qml/CursorNavigator.qml
         qml/HarmonicCursorNavigator.qml
+        qml/MdiWorkspace.qml
+        qml/MdiChildWindow.qml
+        qml/AnalysisViewHost.qml
         qml/TimeRuler.qml
         qml/TimeSignalsView.qml
         qml/TrackView.qml
