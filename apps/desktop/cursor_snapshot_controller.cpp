@@ -14,6 +14,7 @@
 #include <complex>
 #include <cstddef>
 #include <limits>
+#include <optional>
 #include <vector>
 
 namespace {
@@ -58,6 +59,16 @@ QString phase_from_name(const QString& rawName) {
         || name.endsWith(QStringLiteral("UE")) || name == QStringLiteral("N")
         || name == QStringLiteral("E")) return QStringLiteral("E");
     return QStringLiteral("Other");
+}
+
+std::optional<double> residual_to_sum_multiplier(const QString& rawName) {
+    const QString name = compact_name(rawName);
+    if (name.contains(QStringLiteral("3I0")) || name.contains(QStringLiteral("RESIDUAL"))
+        || name == QStringLiteral("IRES") || name == QStringLiteral("RES")) return 1.0;
+    if (name == QStringLiteral("I0") || name.endsWith(QStringLiteral("I0"))) return 3.0;
+    if (name == QStringLiteral("IE") || name.endsWith(QStringLiteral("IE"))
+        || name.contains(QStringLiteral("EARTH")) || name.contains(QStringLiteral("GROUND"))) return -1.0;
+    return std::nullopt;
 }
 
 double unit_scale_to_si(QString unit) {
@@ -149,6 +160,18 @@ std::pair<std::size_t, std::size_t> one_cycle_window(const std::vector<double>& 
     return {first, end};
 }
 
+bool window_has_status_change(const std::vector<double>& edges,
+                              const std::vector<double>& times,
+                              std::size_t first,
+                              std::size_t end) {
+    if (edges.empty() || first >= end || end > times.size()) return false;
+    constexpr double epsilon = 1.0e-10;
+    const double start = times[first] - epsilon;
+    const double finish = times[end - 1] + epsilon;
+    const auto it = std::lower_bound(edges.begin(), edges.end(), start);
+    return it != edges.end() && *it <= finish;
+}
+
 QVariantMap invalid_distance(const QString& loop, double minimumCurrent) {
     return {{QStringLiteral("valid"), false},
             {QStringLiteral("r"), 0.0},
@@ -164,9 +187,12 @@ QVariantMap invalid_distance(const QString& loop, double minimumCurrent) {
 struct CursorSnapshotSource {
     std::shared_ptr<const ardirec::comtrade::IndexedDatFile> data;
     std::shared_ptr<const std::vector<double>> times;
+    std::shared_ptr<const std::vector<double>> statusEdges;
     std::vector<CursorChannelInfo> channels;
     std::array<int, 3> voltage{{-1, -1, -1}};
     std::array<int, 3> current{{-1, -1, -1}};
+    int residualCurrent{-1};
+    double residualToSumMultiplier{1.0};
     double nominalFrequency{50.0};
     double referenceTime{0.0};
     double currentFloor{1.0e-6};
@@ -185,6 +211,8 @@ QVariantMap build_cursor_snapshot(const std::shared_ptr<const CursorSnapshotSour
     const double frequency = source->nominalFrequency > 1.0 ? source->nominalFrequency : 50.0;
     const auto [first, end] = one_cycle_window(times, absoluteTimeSeconds, frequency);
     if (first >= end || end - first < 4) return {{QStringLiteral("valid"), false}};
+    const bool statusWindowValid = !source->statusEdges
+                                   || !window_has_status_change(*source->statusEdges, times, first, end);
 
     const std::size_t channelCount = source->channels.size();
     std::vector<std::complex<long double>> accumulators(channelCount, {0.0L, 0.0L});
@@ -247,12 +275,15 @@ QVariantMap build_cursor_snapshot(const std::shared_ptr<const CursorSnapshotSour
                           {QStringLiteral("vL3"), source->voltage[2]},
                           {QStringLiteral("iL1"), source->current[0]},
                           {QStringLiteral("iL2"), source->current[1]},
-                          {QStringLiteral("iL3"), source->current[2]}};
+                          {QStringLiteral("iL3"), source->current[2]},
+                          {QStringLiteral("iResidual"), source->residualCurrent},
+                          {QStringLiteral("residualToSumMultiplier"), source->residualToSumMultiplier}};
 
     return {{QStringLiteral("valid"), true},
             {QStringLiteral("time"), std::clamp(absoluteTimeSeconds, times.front(), times.back())},
             {QStringLiteral("windowFirst"), static_cast<qulonglong>(first)},
             {QStringLiteral("windowEnd"), static_cast<qulonglong>(end)},
+            {QStringLiteral("statusWindowValid"), statusWindowValid},
             {QStringLiteral("channels"), rows},
             {QStringLiteral("semantics"), semantics},
             {QStringLiteral("currentFloor"), source->currentFloor},
@@ -297,6 +328,7 @@ void CursorSnapshotController::rebuildSource() {
     auto source = std::make_shared<CursorSnapshotSource>();
     source->data = m_document->dataStoreSnapshot();
     source->times = m_document->timeIndexSnapshot();
+    source->statusEdges = std::make_shared<const std::vector<double>>(m_document->digitalEdgeTimes());
     source->nominalFrequency = m_document->nominalFrequency() > 1.0 ? m_document->nominalFrequency() : 50.0;
     source->referenceTime = m_document->dataStartSeconds();
     source->channels.reserve(static_cast<std::size_t>(m_document->analogCount()));
@@ -306,7 +338,8 @@ void CursorSnapshotController::rebuildSource() {
         CursorChannelInfo info;
         info.name = m_document->channelName(index);
         info.unit = m_document->channelUnit(index);
-        info.phase = phase_from_name(info.name);
+        info.phase = m_document->channelPhase(index);
+        if (info.phase == QStringLiteral("Other")) info.phase = phase_from_name(info.name);
         info.displayScale = m_document->channelDisplayScale(index);
         info.siScale = unit_scale_to_si(info.unit);
         source->channels.push_back(info);
@@ -321,6 +354,12 @@ void CursorSnapshotController::rebuildSource() {
                 source->voltage[static_cast<std::size_t>(phaseSlot)] = index;
             if (role == QStringLiteral("Current") && source->current[static_cast<std::size_t>(phaseSlot)] < 0)
                 source->current[static_cast<std::size_t>(phaseSlot)] = index;
+        } else if (role == QStringLiteral("Current") && info.phase == QStringLiteral("E") && source->residualCurrent < 0) {
+            const auto multiplier = residual_to_sum_multiplier(info.name);
+            if (multiplier) {
+                source->residualCurrent = index;
+                source->residualToSumMultiplier = *multiplier;
+            }
         }
         if (role == QStringLiteral("Current") && phaseSlot >= 0) {
             const double peak = std::abs(m_document->channelPeak(index) * info.siScale);
@@ -411,19 +450,35 @@ QVariantMap CursorSnapshotController::distanceLoopsForSnapshot(const QVariantMap
     const std::array<int, 3> current{{semantics.value(QStringLiteral("iL1"), -1).toInt(),
                                       semantics.value(QStringLiteral("iL2"), -1).toInt(),
                                       semantics.value(QStringLiteral("iL3"), -1).toInt()}};
+    const int residualIndex = semantics.value(QStringLiteral("iResidual"), -1).toInt();
+    const double residualMultiplier = semantics.value(QStringLiteral("residualToSumMultiplier"), 1.0).toDouble();
 
-    auto rowPhasor = [&rows](int index) -> std::complex<double> {
-        if (index < 0 || index >= rows.size()) return {};
+    auto rowPhasor = [&rows](int index) -> std::optional<std::complex<double>> {
+        if (index < 0 || index >= rows.size()) return std::nullopt;
         const QVariantMap row = rows.at(index).toMap();
-        if (!row.value(QStringLiteral("valid")).toBool()) return {};
-        return {row.value(QStringLiteral("realSI")).toDouble(), row.value(QStringLiteral("imagSI")).toDouble()};
+        if (!row.value(QStringLiteral("valid")).toBool()) return std::nullopt;
+        const std::complex<double> value{row.value(QStringLiteral("realSI")).toDouble(),
+                                         row.value(QStringLiteral("imagSI")).toDouble()};
+        if (!std::isfinite(value.real()) || !std::isfinite(value.imag())) return std::nullopt;
+        return value;
     };
 
     ardirec::distance::ThreePhasePhasors phasors;
+    std::array<bool, 3> voltageValid{};
+    std::array<bool, 3> currentValid{};
     for (std::size_t phase = 0; phase < 3; ++phase) {
-        phasors.voltage[phase] = rowPhasor(voltage[phase]);
-        phasors.current[phase] = rowPhasor(current[phase]);
+        if (const auto value = rowPhasor(voltage[phase])) {
+            phasors.voltage[phase] = *value;
+            voltageValid[phase] = true;
+        }
+        if (const auto value = rowPhasor(current[phase])) {
+            phasors.current[phase] = *value;
+            currentValid[phase] = true;
+        }
     }
+
+    std::optional<std::complex<double>> measuredResidual;
+    if (const auto value = rowPhasor(residualIndex)) measuredResidual = *value * residualMultiplier;
 
     const double minimumCurrent = snapshot.value(QStringLiteral("currentFloor"), 1.0e-6).toDouble();
     const double angleRadians = groundingFactorAngleDegrees * kPi / 180.0;
@@ -436,26 +491,30 @@ QVariantMap CursorSnapshotController::distanceLoopsForSnapshot(const QVariantMap
         {"L2-L3", ardirec::distance::FaultLoop::L2L3}, {"L3-L1", ardirec::distance::FaultLoop::L3L1},
     }};
 
-    auto available = [&voltage, &current](ardirec::distance::FaultLoop loop) {
+    const bool statusWindowValid = snapshot.value(QStringLiteral("statusWindowValid"), true).toBool();
+    auto available = [&voltageValid, &currentValid, &measuredResidual](ardirec::distance::FaultLoop loop) {
+        const bool residualAvailable = measuredResidual.has_value()
+                                       || (currentValid[0] && currentValid[1] && currentValid[2]);
         switch (loop) {
-        case ardirec::distance::FaultLoop::L1E: return voltage[0] >= 0 && current[0] >= 0 && current[1] >= 0 && current[2] >= 0;
-        case ardirec::distance::FaultLoop::L2E: return voltage[1] >= 0 && current[0] >= 0 && current[1] >= 0 && current[2] >= 0;
-        case ardirec::distance::FaultLoop::L3E: return voltage[2] >= 0 && current[0] >= 0 && current[1] >= 0 && current[2] >= 0;
-        case ardirec::distance::FaultLoop::L1L2: return voltage[0] >= 0 && voltage[1] >= 0 && current[0] >= 0 && current[1] >= 0;
-        case ardirec::distance::FaultLoop::L2L3: return voltage[1] >= 0 && voltage[2] >= 0 && current[1] >= 0 && current[2] >= 0;
-        case ardirec::distance::FaultLoop::L3L1: return voltage[2] >= 0 && voltage[0] >= 0 && current[2] >= 0 && current[0] >= 0;
+        case ardirec::distance::FaultLoop::L1E: return voltageValid[0] && currentValid[0] && residualAvailable;
+        case ardirec::distance::FaultLoop::L2E: return voltageValid[1] && currentValid[1] && residualAvailable;
+        case ardirec::distance::FaultLoop::L3E: return voltageValid[2] && currentValid[2] && residualAvailable;
+        case ardirec::distance::FaultLoop::L1L2: return voltageValid[0] && voltageValid[1] && currentValid[0] && currentValid[1];
+        case ardirec::distance::FaultLoop::L2L3: return voltageValid[1] && voltageValid[2] && currentValid[1] && currentValid[2];
+        case ardirec::distance::FaultLoop::L3L1: return voltageValid[2] && voltageValid[0] && currentValid[2] && currentValid[0];
         }
         return false;
     };
 
     for (const auto& definition : loops) {
         const QString loopId = QString::fromLatin1(definition.id);
-        if (!available(definition.loop)) {
+        if (!statusWindowValid || !available(definition.loop)) {
             values.insert(loopId, invalid_distance(loopId, minimumCurrent));
             continue;
         }
         const auto result = ardirec::distance::distance_impedance(definition.loop, phasors,
-                                                                   groundingFactor, minimumCurrent);
+                                                                   groundingFactor, minimumCurrent,
+                                                                   measuredResidual);
         if (!result.valid) {
             values.insert(loopId, invalid_distance(loopId, minimumCurrent));
             continue;
