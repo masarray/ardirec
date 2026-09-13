@@ -4,7 +4,7 @@
 #include <QQuickItem>
 #include <QVariantList>
 
-class PhasorVectorItem final : public QQuickItem {
+class PhasorVectorItem : public QQuickItem {
     Q_OBJECT
     Q_PROPERTY(QVariantList vectors READ vectors WRITE setVectors NOTIFY vectorsChanged)
     Q_PROPERTY(double scaleMagnitude READ scaleMagnitude WRITE setScaleMagnitude NOTIFY scaleMagnitudeChanged)
