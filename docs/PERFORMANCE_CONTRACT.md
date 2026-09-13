@@ -8,9 +8,9 @@ This contract supplements `AGENTS.md` and is enforced by CI where a deterministi
 
 ### 1. Render code consumes prepared data only
 
-`QQuickItem::updatePaintNode()` and QML paint handlers must not perform RMS, DFT/FFT, full-record traversal, DAT decoding loops, or other engineering analysis.
+`QQuickItem::updatePaintNode()` and QML paint handlers must not perform RMS, DFT/FFT, full-record traversal, DAT decoding loops, source-sample scans, or other engineering analysis.
 
-Allowed work in a render callback is bounded scene-graph preparation: map an immutable prepared snapshot to viewport coordinates, update a bounded number of vertices/material properties, and return.
+Allowed work in a render callback is bounded scene-graph preparation: map an immutable prepared snapshot to viewport coordinates, update a bounded number of vertices/material properties, and return. Instantaneous and RMS waveform renderers must both obey this rule.
 
 ### 2. Interaction and analysis are separate pipelines
 
@@ -46,6 +46,12 @@ Dynamic waveform, phasor and locus trajectories use Qt Quick Scene Graph / nativ
 
 Channel role/phase/unit classification belongs at document-load or snapshot-source construction. Repeated DFT/RMS/locus loops operate on integer indices/scales and contiguous numeric storage, not regex, QString normalization or channel scans.
 
+### 9. First-interactive work is demand-driven
+
+Application/record startup must not synchronously instantiate every heavyweight engineering workspace. Time Signals is the immediate primary workspace; Phasor, Locus, Harmonics and Engineering Table are created asynchronously on first explicit use and retained for fast return switching.
+
+A retained hidden view must be quiescent: it may keep immutable UI state, but it must not continue issuing cursor/trajectory/spectrum jobs while another view is active. Record loading remains visibly non-blocking, and load-to-ready timing is telemetry rather than a cloud-runner hard wall-clock gate.
+
 ## Release targets
 
 These are product targets, not promises about GitHub-hosted runner wall-clock timing:
@@ -54,6 +60,7 @@ These are product targets, not promises about GitHub-hosted runner wall-clock ti
 - normal interactive target: sustained 60 FPS on supported desktop hardware;
 - GUI-thread heavy-analysis time: zero by architecture; bounded handoff/geometry work only;
 - plot vertex count: O(viewport pixels), not O(record samples);
+- heavy engineering views: asynchronous first activation, retained/quiescent when hidden;
 - large-record design cases: 10M samples, 100+ channels, ~250 MB;
 - background work: cancellable/latest-wins with no stale publication;
 - Windows package: staged application startup smoke test must pass.
@@ -62,11 +69,13 @@ These are product targets, not promises about GitHub-hosted runner wall-clock ti
 
 `scripts/check_performance_contract.py` rejects known architectural regressions, including:
 
-- RMS/sample traversal reintroduced inside `updatePaintNode()`;
+- instantaneous/RMS source traversal reintroduced inside `updatePaintNode()`;
 - Phasor high-frequency Canvas rendering reintroduced;
 - synchronous full-record locus calls from QML;
 - production locus point materialization into per-point QVariant objects;
 - direct raw pointer-rate cursor commits bypassing coalescing;
+- eager construction of all heavyweight engineering views at startup;
+- regex/string phase discovery reintroduced into analysis interaction paths;
 - removal of cancellable background snapshot engines or native retained trajectory renderers.
 
 The existing `large-record-contract` benchmark remains mandatory. Measured analysis/frame-time benchmarks should be added where runner variance can be controlled or compared against stable regression baselines.
