@@ -99,15 +99,23 @@ Item {
 
     function touchHistory(windowId) {
         let next = []
-        for (let id of activationHistory) if (id !== windowId && findIndexById(id) >= 0) next.push(id)
+        for (let id of activationHistory)
+            if (id !== windowId && findIndexById(id) >= 0) next.push(id)
         next.push(windowId)
         activationHistory = next
     }
 
     function removeHistory(windowId) {
         let next = []
-        for (let id of activationHistory) if (id !== windowId && findIndexById(id) >= 0) next.push(id)
+        for (let id of activationHistory)
+            if (id !== windowId && findIndexById(id) >= 0) next.push(id)
         activationHistory = next
+    }
+
+    function setNoActiveWindow() {
+        activeWindowId = -1
+        recomputeRequestOwners()
+        activeWindowChanged(-1, "time")
     }
 
     function chooseTopmostWindow() {
@@ -116,14 +124,13 @@ Item {
         for (let i = 0; i < windowsModel.count; ++i) {
             const row = windowsModel.get(i)
             if (row.windowState === "minimized") continue
-            if (row.zOrder > bestZ) { bestZ = row.zOrder; bestId = row.windowId }
+            if (row.zOrder > bestZ) {
+                bestZ = row.zOrder
+                bestId = row.windowId
+            }
         }
-        if (bestId < 0 && windowsModel.count > 0) bestId = windowsModel.get(windowsModel.count - 1).windowId
         if (bestId >= 0) activateWindow(bestId)
-        else {
-            activeWindowId = -1
-            activeWindowChanged(-1, "time")
-        }
+        else setNoActiveWindow()
     }
 
     function recomputeRequestOwners() {
@@ -133,7 +140,8 @@ Item {
             const activeIndex = findIndexById(activeWindowId)
             if (activeIndex >= 0) {
                 const active = windowsModel.get(activeIndex)
-                if (active.viewType === type && active.windowState !== "minimized") ownerId = active.windowId
+                if (active.viewType === type && active.windowState !== "minimized")
+                    ownerId = active.windowId
             }
             if (ownerId < 0) {
                 for (let i = 0; i < windowsModel.count; ++i) {
@@ -154,10 +162,10 @@ Item {
 
     function defaultGeometry(sequence) {
         const offset = 28
-        const w = Math.max(420, Math.min(width * 0.78, width - 24))
-        const h = Math.max(300, Math.min(height * 0.76, height - 24))
-        const maxX = Math.max(0, width - w - 8)
-        const maxY = Math.max(0, height - h - 8)
+        const w = Math.max(420, Math.min(root.width * 0.78, root.width - 24))
+        const h = Math.max(300, Math.min(root.height * 0.76, root.height - 24))
+        const maxX = Math.max(0, root.width - w - 8)
+        const maxY = Math.max(0, root.height - h - 8)
         return {
             x: Math.min(maxX, 12 + (sequence % 7) * offset),
             y: Math.min(maxY, 12 + (sequence % 7) * offset),
@@ -182,7 +190,6 @@ Item {
         const geometry = defaultGeometry(windowsModel.count)
         const id = nextWindowId++
         const title = baseTitle(viewType) + (serial > 1 ? " " + serial : "")
-        const z = ++nextZOrder
         windowsModel.append({
             windowId: id,
             viewType: viewType,
@@ -196,7 +203,7 @@ Item {
             restoreY: geometry.y,
             restoreWidth: geometry.width,
             restoreHeight: geometry.height,
-            zOrder: z,
+            zOrder: ++nextZOrder,
             requestOwner: false
         })
         activeWindowId = id
@@ -259,7 +266,7 @@ Item {
         }
         windowsModel.setProperty(index, "windowState", "minimized")
         if (activeWindowId === windowId) chooseTopmostWindow()
-        recomputeRequestOwners()
+        else recomputeRequestOwners()
         layoutMinimized()
     }
 
@@ -267,11 +274,13 @@ Item {
         const index = findIndexById(windowId)
         if (index < 0) return
         const row = windowsModel.get(index)
+        const w = Math.min(Math.max(360, row.restoreWidth), Math.max(360, root.width))
+        const h = Math.min(Math.max(240, row.restoreHeight), Math.max(240, root.height))
         windowsModel.setProperty(index, "windowState", "normal")
-        windowsModel.setProperty(index, "windowX", clamp(row.restoreX, 0, Math.max(0, width - row.restoreWidth)))
-        windowsModel.setProperty(index, "windowY", clamp(row.restoreY, 0, Math.max(0, height - row.restoreHeight)))
-        windowsModel.setProperty(index, "windowWidth", Math.min(Math.max(360, row.restoreWidth), Math.max(360, width)))
-        windowsModel.setProperty(index, "windowHeight", Math.min(Math.max(240, row.restoreHeight), Math.max(240, height)))
+        windowsModel.setProperty(index, "windowWidth", w)
+        windowsModel.setProperty(index, "windowHeight", h)
+        windowsModel.setProperty(index, "windowX", clamp(row.restoreX, 0, Math.max(0, root.width - w)))
+        windowsModel.setProperty(index, "windowY", clamp(row.restoreY, 0, Math.max(0, root.height - h)))
         activateWindow(windowId)
         layoutMinimized()
     }
@@ -299,8 +308,8 @@ Item {
         windowsModel.setProperty(index, "windowState", "maximized")
         windowsModel.setProperty(index, "windowX", 0)
         windowsModel.setProperty(index, "windowY", 0)
-        windowsModel.setProperty(index, "windowWidth", width)
-        windowsModel.setProperty(index, "windowHeight", height)
+        windowsModel.setProperty(index, "windowWidth", root.width)
+        windowsModel.setProperty(index, "windowHeight", root.height)
         activateWindow(windowId)
     }
 
@@ -311,77 +320,60 @@ Item {
         else maximizeWindow(windowId)
     }
 
-    function arrangeIndices() {
-        let indices = []
+    function arrangementIndices() {
+        let result = []
         for (let i = 0; i < windowsModel.count; ++i)
-            if (windowsModel.get(i).windowState !== "minimized") indices.push(i)
-        return indices
+            if (windowsModel.get(i).windowState !== "minimized") result.push(i)
+        return result
     }
 
-    function prepareArrangement(indices) {
+    function normalizeForArrangement(indices) {
         for (let index of indices) windowsModel.setProperty(index, "windowState", "normal")
     }
 
+    function setArrangedGeometry(index, x, y, widthValue, heightValue) {
+        windowsModel.setProperty(index, "windowX", x)
+        windowsModel.setProperty(index, "windowY", y)
+        windowsModel.setProperty(index, "windowWidth", widthValue)
+        windowsModel.setProperty(index, "windowHeight", heightValue)
+        windowsModel.setProperty(index, "restoreX", x)
+        windowsModel.setProperty(index, "restoreY", y)
+        windowsModel.setProperty(index, "restoreWidth", widthValue)
+        windowsModel.setProperty(index, "restoreHeight", heightValue)
+    }
+
     function cascade() {
-        const indices = arrangeIndices()
+        const indices = arrangementIndices()
         if (!indices.length) return
-        prepareArrangement(indices)
+        normalizeForArrangement(indices)
         const offset = 28
-        const w = Math.max(360, Math.min(width * 0.78, width - 16))
-        const h = Math.max(240, Math.min(height * 0.76, height - 16))
+        const w = Math.max(360, Math.min(root.width * 0.78, root.width - 16))
+        const h = Math.max(240, Math.min(root.height * 0.76, root.height - 16))
         for (let slot = 0; slot < indices.length; ++slot) {
-            const index = indices[slot]
-            const x = Math.min(Math.max(0, width - w), 8 + (slot % 8) * offset)
-            const y = Math.min(Math.max(0, height - h), 8 + (slot % 8) * offset)
-            windowsModel.setProperty(index, "windowX", x)
-            windowsModel.setProperty(index, "windowY", y)
-            windowsModel.setProperty(index, "windowWidth", w)
-            windowsModel.setProperty(index, "windowHeight", h)
-            windowsModel.setProperty(index, "restoreX", x)
-            windowsModel.setProperty(index, "restoreY", y)
-            windowsModel.setProperty(index, "restoreWidth", w)
-            windowsModel.setProperty(index, "restoreHeight", h)
+            const x = Math.min(Math.max(0, root.width - w), 8 + (slot % 8) * offset)
+            const y = Math.min(Math.max(0, root.height - h), 8 + (slot % 8) * offset)
+            setArrangedGeometry(indices[slot], x, y, w, h)
         }
         recomputeRequestOwners()
     }
 
     function tileHorizontal() {
-        const indices = arrangeIndices()
+        const indices = arrangementIndices()
         if (!indices.length) return
-        prepareArrangement(indices)
-        const eachHeight = height / indices.length
-        for (let slot = 0; slot < indices.length; ++slot) {
-            const index = indices[slot]
-            const y = slot * eachHeight
-            windowsModel.setProperty(index, "windowX", 0)
-            windowsModel.setProperty(index, "windowY", y)
-            windowsModel.setProperty(index, "windowWidth", width)
-            windowsModel.setProperty(index, "windowHeight", eachHeight)
-            windowsModel.setProperty(index, "restoreX", 0)
-            windowsModel.setProperty(index, "restoreY", y)
-            windowsModel.setProperty(index, "restoreWidth", width)
-            windowsModel.setProperty(index, "restoreHeight", eachHeight)
-        }
+        normalizeForArrangement(indices)
+        const eachHeight = root.height / indices.length
+        for (let slot = 0; slot < indices.length; ++slot)
+            setArrangedGeometry(indices[slot], 0, slot * eachHeight, root.width, eachHeight)
         recomputeRequestOwners()
     }
 
     function tileVertical() {
-        const indices = arrangeIndices()
+        const indices = arrangementIndices()
         if (!indices.length) return
-        prepareArrangement(indices)
-        const eachWidth = width / indices.length
-        for (let slot = 0; slot < indices.length; ++slot) {
-            const index = indices[slot]
-            const x = slot * eachWidth
-            windowsModel.setProperty(index, "windowX", x)
-            windowsModel.setProperty(index, "windowY", 0)
-            windowsModel.setProperty(index, "windowWidth", eachWidth)
-            windowsModel.setProperty(index, "windowHeight", height)
-            windowsModel.setProperty(index, "restoreX", x)
-            windowsModel.setProperty(index, "restoreY", 0)
-            windowsModel.setProperty(index, "restoreWidth", eachWidth)
-            windowsModel.setProperty(index, "restoreHeight", height)
-        }
+        normalizeForArrangement(indices)
+        const eachWidth = root.width / indices.length
+        for (let slot = 0; slot < indices.length; ++slot)
+            setArrangedGeometry(indices[slot], slot * eachWidth, 0, eachWidth, root.height)
         recomputeRequestOwners()
     }
 
@@ -389,7 +381,7 @@ Item {
         if (!windowsModel.count) return
         const current = findIndexById(activeWindowId)
         for (let step = 1; step <= windowsModel.count; ++step) {
-            const index = (Math.max(0, current) + step) % windowsModel.count
+            const index = ((current < 0 ? -1 : current) + step + windowsModel.count) % windowsModel.count
             if (windowsModel.get(index).windowState !== "minimized") {
                 activateWindow(windowsModel.get(index).windowId)
                 return
@@ -401,14 +393,15 @@ Item {
         if (!windowsModel.count) return
         if (activationHistory.length > 1) {
             const previous = activationHistory[activationHistory.length - 2]
-            if (findIndexById(previous) >= 0) {
+            const previousIndex = findIndexById(previous)
+            if (previousIndex >= 0 && windowsModel.get(previousIndex).windowState !== "minimized") {
                 activateWindow(previous)
                 return
             }
         }
         const current = findIndexById(activeWindowId)
         for (let step = 1; step <= windowsModel.count; ++step) {
-            const index = (current - step + windowsModel.count * 2) % windowsModel.count
+            const index = ((current < 0 ? 0 : current) - step + windowsModel.count * 2) % windowsModel.count
             if (windowsModel.get(index).windowState !== "minimized") {
                 activateWindow(windowsModel.get(index).windowId)
                 return
@@ -421,14 +414,15 @@ Item {
         for (let i = 0; i < windowsModel.count; ++i)
             if (windowsModel.get(i).windowState === "minimized") minimized.push(i)
         if (!minimized.length) return
-        const shelfWidth = Math.max(170, Math.min(230, (width - 18) / Math.max(1, Math.min(4, minimized.length))))
-        const columns = Math.max(1, Math.floor((width - 12) / (shelfWidth + 6)))
+        const shelfWidth = Math.max(170, Math.min(230,
+                              (root.width - 18) / Math.max(1, Math.min(4, minimized.length))))
+        const columns = Math.max(1, Math.floor((root.width - 12) / (shelfWidth + 6)))
         for (let slot = 0; slot < minimized.length; ++slot) {
             const index = minimized[slot]
             const column = slot % columns
             const row = Math.floor(slot / columns)
             windowsModel.setProperty(index, "windowX", 6 + column * (shelfWidth + 6))
-            windowsModel.setProperty(index, "windowY", Math.max(0, height - 34 * (row + 1)))
+            windowsModel.setProperty(index, "windowY", Math.max(0, root.height - 34 * (row + 1)))
             windowsModel.setProperty(index, "windowWidth", shelfWidth)
             windowsModel.setProperty(index, "windowHeight", 30)
         }
@@ -440,15 +434,15 @@ Item {
             if (row.windowState === "maximized") {
                 windowsModel.setProperty(i, "windowX", 0)
                 windowsModel.setProperty(i, "windowY", 0)
-                windowsModel.setProperty(i, "windowWidth", width)
-                windowsModel.setProperty(i, "windowHeight", height)
+                windowsModel.setProperty(i, "windowWidth", root.width)
+                windowsModel.setProperty(i, "windowHeight", root.height)
             } else if (row.windowState === "normal") {
-                const w = Math.min(row.windowWidth, Math.max(360, width))
-                const h = Math.min(row.windowHeight, Math.max(240, height))
+                const w = Math.min(row.windowWidth, Math.max(360, root.width))
+                const h = Math.min(row.windowHeight, Math.max(240, root.height))
                 windowsModel.setProperty(i, "windowWidth", w)
                 windowsModel.setProperty(i, "windowHeight", h)
-                windowsModel.setProperty(i, "windowX", clamp(row.windowX, 0, Math.max(0, width - w)))
-                windowsModel.setProperty(i, "windowY", clamp(row.windowY, 0, Math.max(0, height - h)))
+                windowsModel.setProperty(i, "windowX", clamp(row.windowX, 0, Math.max(0, root.width - w)))
+                windowsModel.setProperty(i, "windowY", clamp(row.windowY, 0, Math.max(0, root.height - h)))
             }
         }
         layoutMinimized()
@@ -485,22 +479,6 @@ Item {
 
         delegate: MdiChildWindow {
             id: childWindow
-            required property int windowId
-            required property string viewType
-            required property string windowTitle
-            required property real windowX
-            required property real windowY
-            required property real windowWidth
-            required property real windowHeight
-            required property string windowState
-            required property int zOrder
-            required property bool requestOwner
-
-            x: windowX
-            y: windowY
-            width: windowWidth
-            height: windowHeight
-            z: zOrder
             workspaceWidth: root.width
             workspaceHeight: root.height
             activeWindow: root.activeWindowId === windowId
