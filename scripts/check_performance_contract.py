@@ -48,7 +48,23 @@ def function_body(source: str, signature_fragment: str) -> str:
     return ""
 
 
-# RMS render path: scene-graph synchronization must never traverse source samples.
+# Both instantaneous and RMS render paths consume prepared bounded snapshots;
+# DAT decoding/sample traversal belongs in cancellable workers, never scene-graph
+# synchronization where it can create a visible frame stall.
+waveform = text("apps/desktop/waveform_item.cpp")
+waveform_paint = function_body(waveform, "WaveformItem::updatePaintNode")
+if not waveform_paint:
+    FAILURES.append("apps/desktop/waveform_item.cpp: updatePaintNode() not found")
+else:
+    for token in ("analogValue(", "blockExtrema(", "lower_bound(", "upper_bound("):
+        if token in waveform_paint:
+            FAILURES.append(
+                f"apps/desktop/waveform_item.cpp: {token!r} inside updatePaintNode() — instantaneous source traversal belongs in background preparation"
+            )
+require("apps/desktop/waveform_item.cpp", "QtConcurrent::run", "instantaneous viewport preparation must stay asynchronous")
+require("apps/desktop/waveform_item.cpp", "m_rebuildGeneration", "instantaneous waveform work must remain latest-wins")
+require("apps/desktop/waveform_item.cpp", "cancel", "instantaneous background preparation must remain cancellable")
+
 rms = text("apps/desktop/rms_waveform_item.cpp")
 rms_paint = function_body(rms, "RmsWaveformItem::updatePaintNode")
 if not rms_paint:
