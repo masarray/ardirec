@@ -6,9 +6,13 @@
 #include <QColor>
 #include <QPointer>
 #include <QQuickItem>
+#include <QTimer>
 
+#include <atomic>
 #include <memory>
 #include <vector>
+
+struct DigitalGeometrySnapshot;
 
 class DigitalItem : public QQuickItem {
     Q_OBJECT
@@ -19,6 +23,7 @@ class DigitalItem : public QQuickItem {
     Q_PROPERTY(QColor activeColor READ activeColor WRITE setActiveColor NOTIFY activeColorChanged)
 public:
     explicit DigitalItem(QQuickItem* parent = nullptr);
+    ~DigitalItem() override;
 
     QObject* document() const { return m_document.data(); }
     void setDocument(QObject* document);
@@ -42,13 +47,21 @@ signals:
 
 protected:
     QSGNode* updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*) override;
+    void geometryChange(const QRectF& newGeometry, const QRectF& oldGeometry) override;
 
 private:
     void reloadData();
+    void scheduleRebuild();
+    void startRebuild();
+    void clearPreparedGeometry();
 
     QPointer<DocumentController> m_document;
     std::shared_ptr<const ardirec::comtrade::IndexedDatFile> m_data;
     std::shared_ptr<const std::vector<double>> m_times;
+    std::shared_ptr<const DigitalGeometrySnapshot> m_renderSnapshot;
+    std::shared_ptr<std::atomic_bool> m_activeCancel;
+    QTimer m_rebuildTimer;
+    quint64 m_rebuildGeneration{0};
     int m_channelIndex{-1};
     double m_zoomFactor{1.0};
     double m_panFraction{0.0};
