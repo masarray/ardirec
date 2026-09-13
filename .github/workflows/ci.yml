@@ -8,6 +8,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   performance-contract:
     runs-on: ubuntu-latest
@@ -15,6 +19,13 @@ jobs:
       - uses: actions/checkout@v4
       - name: Enforce performance architecture
         run: python3 scripts/check_performance_contract.py
+
+  recovery-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enforce recovery correctness guards
+        run: python3 scripts/check_recovery_contract.py
 
   core:
     strategy:

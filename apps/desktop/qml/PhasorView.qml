@@ -22,11 +22,11 @@ Rectangle {
     readonly property var residualVoltageChannels: filterRole(residualChannels, "Voltage")
     readonly property var residualCurrentChannels: filterRole(residualChannels, "Current")
     readonly property var residualOtherChannels: filterRole(residualChannels, "Other")
-    readonly property real voltageScale: sharedScale(voltageChannels)
-    readonly property real currentScale: sharedScale(currentChannels)
-    readonly property real residualVoltageScale: sharedScale(residualVoltageChannels)
-    readonly property real residualCurrentScale: sharedScale(residualCurrentChannels)
-    readonly property real residualOtherScale: sharedScale(residualOtherChannels)
+    readonly property real voltageScale: stableScale(voltageChannels)
+    readonly property real currentScale: stableScale(currentChannels)
+    readonly property real residualVoltageScale: stableScale(residualVoltageChannels)
+    readonly property real residualCurrentScale: stableScale(residualCurrentChannels)
+    readonly property real residualOtherScale: stableScale(residualOtherChannels)
     readonly property bool sequenceAvailable: hasThreePhase("Voltage") || hasThreePhase("Current")
     readonly property var groupModel: [
         { title: "VOLTAGE", subtitle: "phase / neutral voltage vectors", channels: voltageChannels, scale: voltageScale },
@@ -65,16 +65,17 @@ Rectangle {
             && root.analysis.phaseChannel(role, "L3") >= 0
     }
 
-    function sharedScale(channels) {
-        if (!channels || !channels.length) return 0.0
+    // Radial scaling is deliberately independent of C1/C2. The whole-record
+    // channel peak is stable while either cursor moves, so moving only C2 can
+    // never rescale C1 and create the false impression that C1 changed.
+    function stableScale(channels) {
+        if (!root.document || !channels || !channels.length) return 0.0
         let maximum = 0.0
         for (let index of channels) {
-            const a = root.snapshotRow(root.displaySnapshotA, index)
-            const b = root.snapshotRow(root.displaySnapshotB, index)
-            if (a.valid && Number.isFinite(a.magnitude)) maximum = Math.max(maximum, a.magnitude)
-            if (b.valid && Number.isFinite(b.magnitude)) maximum = Math.max(maximum, b.magnitude)
+            const peak = Math.abs(Number(root.document.channelPeak(index)))
+            if (Number.isFinite(peak)) maximum = Math.max(maximum, peak)
         }
-        return maximum > 0.0 ? maximum * 1.06 : 0.0
+        return maximum > 0.0 ? maximum * 1.02 : 0.0
     }
 
     function requestSnapshots() {
@@ -115,7 +116,7 @@ Rectangle {
                         font.weight: Font.DemiBold
                     }
                     Label {
-                        text: "Shared async one-cycle DFT snapshot · C1/C2 share the same radial scale within each engineering quantity"
+                        text: "Shared async one-cycle DFT snapshot · stable record-based radial scale keeps C1/C2 visually independent"
                         color: "#778087"
                         font.pixelSize: 8
                     }
