@@ -116,7 +116,7 @@ struct TemporaryFixture final {
         out.setf(std::ios::fixed);
         out.precision(9);
         int sample = 1;
-        auto emit = [&](double t) {
+        auto emitSample = [&](double t) {
             out << sample++ << ',' << static_cast<long long>(std::llround(t * 1.0e6));
             for (const double phase : phases) {
                 const double value = voltageRms * sqrt2 * std::cos(2.0 * kPi * actualFrequency * t + phase)
@@ -134,8 +134,8 @@ struct TemporaryFixture final {
             out << '\n';
         };
 
-        for (int index = 0; index <= 90; ++index) emit(static_cast<double>(index) * 0.001);
-        for (int index = 1; index <= 180; ++index) emit(0.090 + static_cast<double>(index) * 0.0005);
+        for (int index = 0; index <= 90; ++index) emitSample(static_cast<double>(index) * 0.001);
+        for (int index = 1; index <= 180; ++index) emitSample(0.090 + static_cast<double>(index) * 0.0005);
         require(sample == 272, "temporary multi-rate fixture contains 271 samples");
     }
 
