@@ -2,6 +2,8 @@
 
 These rules apply to every AI/code agent working in this repository. ArdIREC is a professional COMTRADE disturbance-analysis workstation; correctness, field robustness, deterministic behavior, and interactive performance are product requirements, not later polish.
 
+**Mandatory performance gate:** every agent must read and obey [`docs/PERFORMANCE_CONTRACT.md`](docs/PERFORMANCE_CONTRACT.md) before changing rendering, interaction, numerical analysis, record loading, caching, or large-data code. The performance contract is an architectural invariant enforced by CI, not advisory guidance. A change that reintroduces synchronous heavy analysis, record-sized render geometry, stale publication, or high-frequency Canvas rendering is incomplete even when its numerical output and screenshots look correct.
+
 ## 1. Production-ready from the first implementation
 
 Do not ship a deliberately naive or throwaway implementation first when the production architecture is already known. Prefer the scalable path immediately. Avoid temporary shortcuts that force a later rewrite of file I/O, rendering, threading, or analysis pipelines.
@@ -65,6 +67,13 @@ Interactive rules:
 - never rebuild a full-record locus, FFT/DFT, or waveform merely because a cursor moved;
 - static data and dynamic overlays must be separate render/update paths.
 
+Hard prohibitions for production hot paths:
+- no RMS/DFT/FFT/DAT traversal in `updatePaintNode()` or high-frequency QML paint callbacks;
+- no synchronous full-record numerical analysis from QML bindings or pointer handlers;
+- no one-`QVariantMap`/QObject/JavaScript-object-per-point transport for bulk plots;
+- no raw pointer-event stream directly launching expensive analysis;
+- no publication of an asynchronous result after its document/cursor/view generation is stale.
+
 ## 5. SIMD, vectorization, and parallel compute
 
 Profile first, then optimize proven hotspots. Use compiler auto-vectorization and contiguous data layouts by default. For heavy numeric loops that remain dominant, use SIMD/vector techniques (for example SSE/AVX2 on x86-64 with a portable fallback) when they preserve numerical correctness and platform support.
@@ -96,6 +105,8 @@ Render only what is visible:
 - avoid full-scene invalidation for local changes.
 
 Maintain hardware acceleration through Qt's supported graphics backend; do not force a software renderer as a performance workaround.
+
+For high-volume trajectories, retain contiguous C++ numeric buffers across the analysis/render boundary. QML may control transforms, visibility and labels, but it must not become the storage/transport layer for thousands of trajectory samples.
 
 ## 8. Reuse allocations; no hot-path heap churn
 
@@ -135,6 +146,8 @@ Treat performance as a testable contract:
 
 Add repeatable benchmarks for parsing throughput, memory use, waveform LOD, cursor latency, and bulk analysis as these paths evolve. A performance-sensitive PR should state the before/after behavior or measurement when practical.
 
+`scripts/check_performance_contract.py` is a required CI gate. Do not weaken, bypass, delete, or special-case the gate merely to make a PR green. If a valid new architecture conflicts with a check, update the contract and gate together with an explicit engineering rationale and equivalent-or-stronger invariant.
+
 ## 11. Packaging/startup regression protection
 
 A successful compile and unit test are not sufficient proof that the desktop application starts. Windows packaging CI must continue to launch the staged `ardirec.exe` as a smoke test after Qt/runtime deployment and fail if the process exits during startup unexpectedly.
@@ -162,12 +175,13 @@ Do not create multiple incompatible result/error abstractions across parser, ana
 ## 13. Required implementation workflow
 
 Before modifying a performance-critical path:
-1. identify the actual hot path and its data lifetime;
-2. preserve engineering/numerical behavior with tests;
-3. choose the production architecture, not a disposable prototype;
-4. keep GUI-thread work bounded and minimal;
-5. avoid unnecessary copies and allocations;
-6. add corruption/boundary tests when touching parsers;
-7. run core tests, desktop build, CodeQL, Windows packaged-startup smoke test, and relevant benchmarks before declaring the work complete.
+1. read `docs/PERFORMANCE_CONTRACT.md` and identify which invariant applies;
+2. identify the actual hot path and its data lifetime;
+3. preserve engineering/numerical behavior with tests;
+4. choose the production architecture, not a disposable prototype;
+5. keep GUI-thread work bounded and minimal;
+6. avoid unnecessary copies and allocations;
+7. add corruption/boundary tests when touching parsers;
+8. run the performance-contract gate, core tests, desktop build, CodeQL, Windows packaged-startup smoke test, and relevant benchmarks before declaring the work complete.
 
 When trade-offs arise, prefer deterministic, measurable engineering behavior over cosmetic similarity or speculative micro-optimization.

@@ -14,6 +14,8 @@ qt_add_executable(ardirec WIN32 MACOSX_BUNDLE
     cursor_snapshot_controller.hpp
     locus_snapshot_controller.cpp
     locus_snapshot_controller.hpp
+    locus_trajectory_item.cpp
+    locus_trajectory_item.hpp
     harmonic_snapshot_controller.cpp
     harmonic_snapshot_controller.hpp
     table_snapshot_controller.cpp

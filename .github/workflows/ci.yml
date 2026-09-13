@@ -9,6 +9,13 @@ permissions:
   contents: read
 
 jobs:
+  performance-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enforce performance architecture
+        run: python3 scripts/check_performance_contract.py
+
   core:
     strategy:
       matrix:
