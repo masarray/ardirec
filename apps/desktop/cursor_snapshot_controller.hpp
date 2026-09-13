@@ -10,6 +10,8 @@
 #include <atomic>
 #include <memory>
 
+struct CursorSnapshotSource;
+
 class CursorSnapshotController final : public QObject {
     Q_OBJECT
     Q_PROPERTY(QVariantMap cursorA READ cursorA NOTIFY cursorAChanged)
@@ -42,15 +44,13 @@ signals:
     void busyBChanged();
 
 private:
-    struct Source;
-
     void rebuildSource();
     void request(int cursor, double absoluteTimeSeconds);
     void cancel(int cursor) noexcept;
     void publish(int cursor, quint64 generation, const QVariantMap& snapshot);
 
     QPointer<DocumentController> m_document;
-    std::shared_ptr<const Source> m_source;
+    std::shared_ptr<const CursorSnapshotSource> m_source;
     std::shared_ptr<std::atomic_bool> m_cancelA;
     std::shared_ptr<std::atomic_bool> m_cancelB;
     QVariantMap m_cursorA;
