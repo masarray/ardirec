@@ -70,7 +70,12 @@ require("tests/test_document_lifecycle.cpp", "dataStoreSnapshot() == nullptr", "
 require("tests/test_document_lifecycle.cpp", "rmsTileCacheSnapshot() == nullptr", "test must prove RMS cache ownership is released")
 require("tests/test_document_lifecycle.cpp", "pump_events(250)", "test must give the cancelled loader callback a chance to publish stale data")
 require("tests/CMakeLists.txt", "ardirec_document_lifecycle_tests", "close lifecycle regression must run under CTest")
+
+# Build identity must stay aligned across the executable and the downloadable
+# Windows artifact so operators never test an alpha.20 binary labelled alpha.17.
 require("apps/desktop/main.cpp", "0.2.0-alpha.20", "R2 candidate must be distinguishable from frozen R1.2 builds")
+require(".github/workflows/windows-build.yml", "ardirec-v0.2.0-alpha.20-windows-x64", "Windows staging folder must match the R2 candidate version")
+require(".github/workflows/windows-build.yml", "ardirec-v0.2.0-alpha.20-windows-x64-portable.zip", "portable ZIP name must match the R2 candidate version")
 
 if FAILURES:
     print("ArdIREC R2 workstation contract: FAIL", file=sys.stderr)
