@@ -23,6 +23,8 @@ qt_add_executable(ardirec WIN32 MACOSX_BUNDLE
     rms_cycle_window.hpp
     rms_waveform_item.cpp
     rms_waveform_item.hpp
+    phasor_vector_item.cpp
+    phasor_vector_item.hpp
     digital_item.cpp
     digital_item.hpp
 )
