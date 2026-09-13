@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "rms_waveform_item.hpp"
-#include "rms_cycle_window.hpp"
+
+#include "rms_tile_cache.hpp"
 
 #include <QFutureWatcher>
 #include <QSGFlatColorMaterial>
@@ -30,24 +31,23 @@ using SnapshotPtr = std::shared_ptr<const RmsGeometrySnapshot>;
 }
 
 [[nodiscard]] SnapshotPtr build_rms_geometry(
-    const std::shared_ptr<const ardirec::comtrade::IndexedDatFile>& data,
+    const std::shared_ptr<ardirec::desktop::RmsTileCache>& cache,
     const std::shared_ptr<const std::vector<double>>& times,
     int channelIndex,
     double displayScale,
     double scalePeak,
-    double nominalFrequency,
     double zoomFactor,
     double panFraction,
     int requestedPixelWidth,
     const std::shared_ptr<std::atomic_bool>& cancel) {
-    if (!data || !times || channelIndex < 0 || requestedPixelWidth <= 1 || cancelled(cancel)) return {};
+    if (!cache || !times || times->size() < 2u || channelIndex < 0
+        || requestedPixelWidth <= 1 || cancelled(cancel)) {
+        return {};
+    }
 
-    const std::size_t count = std::min(data->frameCount(), times->size());
-    const std::size_t channel = static_cast<std::size_t>(channelIndex);
-    if (count < 2 || channel >= data->analogCount()) return {};
-
+    const std::size_t count = times->size();
     const double dataStart = times->front();
-    const double dataEnd = (*times)[count - 1];
+    const double dataEnd = times->back();
     const double fullDuration = std::max(0.0, dataEnd - dataStart);
     if (!(fullDuration > 0.0) || !std::isfinite(fullDuration)) return {};
 
@@ -58,14 +58,14 @@ using SnapshotPtr = std::shared_ptr<const RmsGeometrySnapshot>;
     const double startTime = dataStart + panFraction * movable;
     const double endTime = startTime + visibleDuration;
 
-    const auto logicalEnd = times->begin() + static_cast<std::ptrdiff_t>(count);
+    const auto logicalEnd = times->end();
     auto first = std::lower_bound(times->begin(), logicalEnd, startTime);
     auto last = std::upper_bound(times->begin(), logicalEnd, endTime);
     std::size_t start = static_cast<std::size_t>(std::distance(times->begin(), first));
     std::size_t end = static_cast<std::size_t>(std::distance(times->begin(), last));
     start = std::min(start, count - 1u);
     end = std::min(end, count);
-    if (start > 0) --start;
+    if (start > 0u) --start;
     if (end < count) ++end;
     if (end <= start + 1u) end = std::min(count, start + 2u);
     if (end <= start + 1u) return {};
@@ -75,65 +75,61 @@ using SnapshotPtr = std::shared_ptr<const RmsGeometrySnapshot>;
         static_cast<std::size_t>(requestedPixelWidth), 64u, 4096u);
     const std::size_t targetPoints = std::min(
         visibleCount, std::max<std::size_t>(64u, pixelWidth * 2u));
-    const std::size_t stride = std::max<std::size_t>(
-        1u, (visibleCount + targetPoints - 1u) / targetPoints);
+
+    std::size_t level = ardirec::desktop::RmsTileCache::levelFor(visibleCount, targetPoints);
+    std::size_t stride = ardirec::desktop::RmsTileCache::strideForLevel(level);
+    if (stride == 0u) return {};
+
+    std::size_t firstPoint = (start + stride - 1u) / stride;
+    std::size_t lastPoint = (end - 1u) / stride;
+    if (lastPoint <= firstPoint && level > 0u) {
+        level = 0u;
+        stride = 1u;
+        firstPoint = start;
+        lastPoint = end - 1u;
+    }
 
     if (!std::isfinite(scalePeak) || scalePeak < 1.0e-12) scalePeak = 1.0;
     if (!std::isfinite(displayScale)) displayScale = 1.0;
-    if (!std::isfinite(nominalFrequency) || nominalFrequency <= 1.0) nominalFrequency = 50.0;
     const double magnitudeScale = std::abs(displayScale);
 
     auto snapshot = std::make_shared<RmsGeometrySnapshot>();
-    snapshot->points.reserve(targetPoints + 1u);
+    const std::size_t pointBudget = lastPoint >= firstPoint ? lastPoint - firstPoint + 1u : 0u;
+    snapshot->points.reserve(std::min<std::size_t>(pointBudget, targetPoints + 4u));
 
-    const auto appendPoint = [&](std::size_t index) -> bool {
-        if (cancelled(cancel) || index >= count) return false;
-        const auto window = ardirec::desktop::rms_cycle_window_for_sample(
-            *times, index, nominalFrequency);
-        if (!window.valid()) return true;
+    std::size_t currentTileIndex = std::numeric_limits<std::size_t>::max();
+    std::shared_ptr<const ardirec::desktop::RmsTileCache::Tile> currentTile;
+    const std::size_t tilePoints = ardirec::desktop::RmsTileCache::kTilePoints;
 
-        long double sumSquares = 0.0L;
-        std::size_t finiteCount = 0;
-        std::size_t checked = 0;
-        for (std::size_t sample = window.first; sample < window.end; ++sample) {
-            if ((checked++ & 0xFFu) == 0u && cancelled(cancel)) return false;
-            const double value = data->analogValue(sample, channel);
-            if (!std::isfinite(value)) continue;
-            sumSquares += static_cast<long double>(value) * static_cast<long double>(value);
-            ++finiteCount;
-        }
+    for (std::size_t pointIndex = firstPoint; pointIndex <= lastPoint; ++pointIndex) {
+        if ((pointIndex & 0x3Fu) == 0u && cancelled(cancel)) return {};
+        if (pointIndex > std::numeric_limits<std::size_t>::max() / stride) break;
+        const std::size_t sampleIndex = pointIndex * stride;
+        if (sampleIndex >= count || sampleIndex >= end) break;
 
-        double rms = 0.0;
-        if (finiteCount > 0) {
-            const std::size_t presentCount = window.presentSamples();
-            const std::size_t invalidPresent = presentCount > finiteCount
-                                                   ? presentCount - finiteCount
-                                                   : 0u;
-            const std::size_t denominator = window.normalizationSamples > invalidPresent
-                                                ? window.normalizationSamples - invalidPresent
-                                                : finiteCount;
-            if (denominator > 0) {
-                rms = std::sqrt(static_cast<double>(
-                          sumSquares / static_cast<long double>(denominator)))
-                      * magnitudeScale;
+        const std::size_t tileIndex = pointIndex / tilePoints;
+        if (!currentTile || tileIndex != currentTileIndex) {
+            currentTile = cache->tile(static_cast<std::size_t>(channelIndex), level, tileIndex, cancel.get());
+            currentTileIndex = tileIndex;
+            if (!currentTile) {
+                if (cancelled(cancel)) return {};
+                continue;
             }
         }
-        if (!std::isfinite(rms)) rms = 0.0;
 
+        if (sampleIndex < currentTile->firstSample || currentTile->stride != stride) continue;
+        const std::size_t delta = sampleIndex - currentTile->firstSample;
+        if (delta % stride != 0u) continue;
+        const std::size_t local = delta / stride;
+        if (local >= currentTile->values.size()) continue;
+
+        double rms = static_cast<double>(currentTile->values[local]) * magnitudeScale;
+        if (!std::isfinite(rms) || rms < 0.0) rms = 0.0;
         const double xFraction = std::clamp(
-            ((*times)[index] - startTime) / visibleDuration, 0.0, 1.0);
+            ((*times)[sampleIndex] - startTime) / visibleDuration, 0.0, 1.0);
         const double normalized = std::clamp(rms / scalePeak, 0.0, 1.0);
-        snapshot->points.push_back({static_cast<float>(xFraction),
-                                    static_cast<float>(normalized)});
-        return true;
-    };
-
-    std::size_t lastIndex = start;
-    for (std::size_t i = start; i < end; i += stride) {
-        if (!appendPoint(i)) return {};
-        lastIndex = i;
+        snapshot->points.push_back({static_cast<float>(xFraction), static_cast<float>(normalized)});
     }
-    if (lastIndex != end - 1u && !appendPoint(end - 1u)) return {};
 
     if (cancelled(cancel) || snapshot->points.size() < 2u) return {};
     return snapshot;
@@ -210,19 +206,15 @@ void RmsWaveformItem::clearPreparedGeometry() {
 void RmsWaveformItem::reloadData() {
     clearPreparedGeometry();
     if (!m_document) {
-        m_data.reset();
         m_times.reset();
+        m_rmsCache.reset();
         m_displayScale = 1.0;
         m_scalePeak = 1.0;
-        m_nominalFrequency = 50.0;
     } else {
-        m_data = m_document->dataStoreSnapshot();
         m_times = m_document->timeIndexSnapshot();
+        m_rmsCache = m_document->rmsTileCacheSnapshot();
         m_displayScale = m_document->channelDisplayScale(m_channelIndex);
         m_scalePeak = m_document->channelPeak(m_channelIndex) / std::sqrt(2.0);
-        m_nominalFrequency = m_document->nominalFrequency() > 1.0
-                                 ? m_document->nominalFrequency()
-                                 : 50.0;
     }
     if (!std::isfinite(m_scalePeak) || m_scalePeak < 1.0e-12) m_scalePeak = 1.0;
     scheduleRebuild();
@@ -249,17 +241,16 @@ void RmsWaveformItem::scheduleRebuild() {
 
 void RmsWaveformItem::startRebuild() {
     const quint64 generation = m_rebuildGeneration;
-    const auto data = m_data;
+    const auto cache = m_rmsCache;
     const auto times = m_times;
     const int channelIndex = m_channelIndex;
     const double displayScale = m_displayScale;
     const double scalePeak = m_scalePeak;
-    const double nominalFrequency = m_nominalFrequency;
     const double zoomFactor = m_zoomFactor;
     const double panFraction = m_panFraction;
     const int pixelWidth = static_cast<int>(std::clamp(width(), 0.0, 4096.0));
 
-    if (!data || !times || channelIndex < 0 || pixelWidth <= 1) {
+    if (!cache || !times || channelIndex < 0 || pixelWidth <= 1) {
         clearPreparedGeometry();
         return;
     }
@@ -283,11 +274,10 @@ void RmsWaveformItem::startRebuild() {
     });
 
     watcher->setFuture(QtConcurrent::run(
-        [data, times, channelIndex, displayScale, scalePeak, nominalFrequency,
+        [cache, times, channelIndex, displayScale, scalePeak,
          zoomFactor, panFraction, pixelWidth, cancel]() {
-            return build_rms_geometry(data, times, channelIndex, displayScale, scalePeak,
-                                      nominalFrequency, zoomFactor, panFraction,
-                                      pixelWidth, cancel);
+            return build_rms_geometry(cache, times, channelIndex, displayScale, scalePeak,
+                                      zoomFactor, panFraction, pixelWidth, cancel);
         }));
 }
 
