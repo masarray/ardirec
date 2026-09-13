@@ -74,6 +74,8 @@ require("apps/desktop/qml/MdiWorkspace.qml", 'windowState === "minimized"',
         "minimized children must be a first-class state")
 require("apps/desktop/qml/MdiWorkspace.qml", 'live: childWindow.windowState !== "minimized"',
         "minimized analysis hosts must receive quiescent/frozen inputs")
+require("apps/desktop/qml/MdiWorkspace.qml", "recomputeRequestOwners",
+        "duplicate views need shared snapshot request ownership rather than duplicate producer work")
 forbid("apps/desktop/qml/MdiWorkspace.qml", 'setProperty(index, "viewType"',
        "Cascade/Tile/resize must never mutate a child analysis type")
 forbid("apps/desktop/qml/MdiWorkspace.qml", 'setProperty(i, "viewType"',
@@ -82,7 +84,7 @@ forbid("apps/desktop/qml/MdiWorkspace.qml", 'setProperty(i, "viewType"',
 # Child chrome supports professional window manipulation without native QWidget embedding.
 for role in ("windowId", "windowTitle", "viewType", "windowX", "windowY",
              "windowWidth", "windowHeight", "windowState", "zOrder"):
-    require("apps/desktop/qml/MdiChildWindow.qml", f"required property", "MDI model roles must bind explicitly")
+    require("apps/desktop/qml/MdiChildWindow.qml", "required property", "MDI model roles must bind explicitly")
     require("apps/desktop/qml/MdiChildWindow.qml", role, f"child window must carry the {role} role")
 for signal in ("activateRequested", "closeRequested", "minimizeRequested",
                "restoreRequested", "toggleMaximizeRequested", "geometryRequested"):
@@ -111,6 +113,12 @@ require("apps/desktop/qml/AnalysisViewHost.qml", "snapshot: root.live ? root.tab
         "minimized Engineering Table must not issue snapshot work")
 require("apps/desktop/qml/AnalysisViewHost.qml", "voltageChannels: root.live ? root.voltageChannels : []",
         "minimized Time Signals must release lane render delegates")
+require("apps/desktop/qml/AnalysisViewHost.qml", "requestOwner: root.requestOwner && root.live",
+        "duplicate Phasor children must share one snapshot producer")
+require("apps/desktop/qml/PhasorView.qml", "property bool requestOwner: true",
+        "Phasor view must expose shared request ownership")
+require("apps/desktop/qml/PhasorView.qml", "if (!root.requestOwner || !root.document || !root.visible) return",
+        "non-owner duplicate Phasor children must consume shared snapshots without launching DFT work")
 
 # User-facing workstation actions and Window menu semantics.
 for shortcut in ('shortcut: "Shift+1"', 'shortcut: "Shift+2"', 'shortcut: "Shift+3"',
