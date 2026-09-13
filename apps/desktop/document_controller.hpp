@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #pragma once
 
+#include "calculation_frequency.hpp"
 #include "ardirec/comtrade/channel_semantics.hpp"
 #include "ardirec/comtrade/indexed_dat.hpp"
 #include "ardirec/comtrade/parser.hpp"
@@ -87,26 +88,14 @@ public:
     QString dataFormatText() const { return m_dataFormatText; }
     double nominalFrequency() const { return m_nominalFrequency; }
     double calculationFrequency() const {
-        static const QString prefix = QStringLiteral("Calculation frequency: ");
-        for (const QString& diagnostic : m_diagnostics) {
-            if (!diagnostic.startsWith(prefix)) continue;
-            const int hz = diagnostic.indexOf(QStringLiteral(" Hz"), prefix.size());
-            if (hz <= prefix.size()) break;
-            bool ok = false;
-            const double value = diagnostic.mid(prefix.size(), hz - prefix.size()).toDouble(&ok);
-            if (ok && value > 1.0) return value;
-            break;
-        }
+        const auto selection = calculationFrequencySelectionFor(m_datStore);
+        if (std::isfinite(selection.hz) && selection.hz > 1.0) return selection.hz;
         return m_nominalFrequency > 1.0 ? m_nominalFrequency : 50.0;
     }
     QString calculationFrequencyProvenance() const {
-        static const QString prefix = QStringLiteral("Calculation frequency: ");
-        for (const QString& diagnostic : m_diagnostics) {
-            if (!diagnostic.startsWith(prefix)) continue;
-            const int open = diagnostic.indexOf(QStringLiteral(" ("));
-            const int close = diagnostic.lastIndexOf(QStringLiteral(")."));
-            if (open >= 0 && close > open + 2) return diagnostic.mid(open + 2, close - open - 2);
-            break;
+        const auto selection = calculationFrequencySelectionFor(m_datStore);
+        if (std::isfinite(selection.hz) && selection.hz > 1.0 && !selection.provenance.empty()) {
+            return QString::fromStdString(selection.provenance);
         }
         return QStringLiteral("COMTRADE nominal");
     }
@@ -114,7 +103,7 @@ public:
     QString triggerTimeText() const { return m_triggerTimeText; }
     QString recordHealth() const { return m_recordHealth; }
     QStringList diagnostics() const { return m_diagnostics; }
-    int diagnosticCount() const { return m_diagnostics.size(); }
+    int diagnosticCount() const { return static_cast<int>(m_diagnostics.size()); }
     QString valueRepresentation() const { return m_valueRepresentation; }
     bool transformerRatiosAvailable() const { return m_transformerRatiosAvailable; }
     QString transformerRatioSummary() const { return m_transformerRatioSummary; }
