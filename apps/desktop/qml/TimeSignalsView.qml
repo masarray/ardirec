@@ -26,6 +26,10 @@ Rectangle {
     property real digitalTrackHeight: 28
     property real cursorHoverRadius: 16
     property real cursorSnapRadius: 12
+    property real pendingATime: 0.0
+    property real pendingBTime: 0.0
+    property bool pendingAValid: false
+    property bool pendingBValid: false
     readonly property bool digitalFilterUseful: document
                                                         && document.digitalCount > 1
                                                         && document.activeDigitalCount > 0
@@ -48,6 +52,39 @@ Rectangle {
         if (root.document.digitalCount <= 0 || root.visibleDuration <= 0) return clamped
         const threshold = root.visibleDuration * root.cursorSnapRadius / Math.max(1, plotWidth)
         return root.document.snapToDigitalEdge(clamped, threshold)
+    }
+    function queueCursorA(timeSeconds) {
+        pendingATime = timeSeconds
+        pendingAValid = true
+        if (!cursorCommitTimer.running) cursorCommitTimer.start()
+    }
+    function queueCursorB(timeSeconds) {
+        pendingBTime = timeSeconds
+        pendingBValid = true
+        if (!cursorCommitTimer.running) cursorCommitTimer.start()
+    }
+    function flushPendingCursors() {
+        if (cursorCommitTimer.running) cursorCommitTimer.stop()
+        if (pendingAValid) {
+            const value = pendingATime
+            pendingAValid = false
+            cursorARequested(value)
+        }
+        if (pendingBValid) {
+            const value = pendingBTime
+            pendingBValid = false
+            cursorBRequested(value)
+        }
+    }
+
+    // Pointer hardware can deliver hundreds of events per second. Coalesce engineering cursor
+    // state to display-frame cadence so lane RMS/phasor consumers cannot be driven at raw input
+    // rate. Release still flushes the exact final snapped position synchronously.
+    Timer {
+        id: cursorCommitTimer
+        interval: 16
+        repeat: false
+        onTriggered: root.flushPendingCursors()
     }
 
     Flickable {
@@ -279,6 +316,11 @@ Rectangle {
             const fraction = root.clamp(mouseX / Math.max(1, width), 0, 1)
             return root.viewStart + fraction * root.visibleDuration
         }
+        function updateActiveCursor(mouseX) {
+            const snapped = root.snapCursorTime(targetTime(mouseX), width)
+            if (movingCursorA) root.queueCursorA(snapped)
+            else if (movingCursorB) root.queueCursorB(snapped)
+        }
 
         onPressed: mouse => {
             updateCursorHover(mouse.x)
@@ -287,7 +329,7 @@ Rectangle {
             panning = false
             if (mouse.button === Qt.RightButton) {
                 movingCursorB = true
-                root.cursorBRequested(root.snapCursorTime(targetTime(mouse.x), width))
+                updateActiveCursor(mouse.x)
                 return
             }
             const da = Math.abs(mouse.x - root.cursorPixel(root.cursorATime, width))
@@ -305,16 +347,29 @@ Rectangle {
         onPositionChanged: mouse => {
             updateCursorHover(mouse.x)
             if (!(mouse.buttons & (Qt.LeftButton | Qt.RightButton))) return
-            if (movingCursorA) root.cursorARequested(root.snapCursorTime(targetTime(mouse.x), width))
-            else if (movingCursorB) root.cursorBRequested(root.snapCursorTime(targetTime(mouse.x), width))
+            if (movingCursorA || movingCursorB) updateActiveCursor(mouse.x)
             else if (panning && root.zoomFactor > 1.0) {
                 const deltaFraction = (mouse.x - pressX) / Math.max(1, width)
                 root.panRequested(root.clamp(panStart - deltaFraction / Math.max(1.0, root.zoomFactor - 1.0), 0, 1))
             }
         }
 
-        onReleased: mouse => { movingCursorA = false; movingCursorB = false; panning = false; updateCursorHover(mouse.x) }
-        onCanceled: { movingCursorA = false; movingCursorB = false; panning = false; hoverCursorA = false; hoverCursorB = false }
+        onReleased: mouse => {
+            if (movingCursorA || movingCursorB) updateActiveCursor(mouse.x)
+            root.flushPendingCursors()
+            movingCursorA = false
+            movingCursorB = false
+            panning = false
+            updateCursorHover(mouse.x)
+        }
+        onCanceled: {
+            root.flushPendingCursors()
+            movingCursorA = false
+            movingCursorB = false
+            panning = false
+            hoverCursorA = false
+            hoverCursorB = false
+        }
         onExited: { if (!movingCursorA && !movingCursorB) { hoverCursorA = false; hoverCursorB = false } }
 
         onWheel: wheel => {
