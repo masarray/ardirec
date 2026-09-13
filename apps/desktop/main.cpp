@@ -5,6 +5,7 @@
 #include "distance_zone_controller.hpp"
 #include "document_controller.hpp"
 #include "harmonic_snapshot_controller.hpp"
+#include "phasor_vector_item.hpp"
 #include "rms_waveform_item.hpp"
 #include "table_snapshot_controller.hpp"
 #include "waveform_item.hpp"
@@ -54,6 +55,7 @@ int main(int argc, char* argv[]) {
 
     qmlRegisterType<WaveformItem>("Ardirec.Render", 1, 0, "WaveformItem");
     qmlRegisterType<RmsWaveformItem>("Ardirec.Render", 1, 0, "RmsWaveformItem");
+    qmlRegisterType<PhasorVectorItem>("Ardirec.Render", 1, 0, "PhasorVectorItem");
     qmlRegisterType<DigitalItem>("Ardirec.Render", 1, 0, "DigitalItem");
 
     DocumentController document;
