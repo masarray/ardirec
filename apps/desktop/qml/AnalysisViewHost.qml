@@ -94,6 +94,7 @@ Item {
         id: phasorComponent
         PhasorView {
             visible: root.live
+            requestOwner: root.requestOwner && root.live
             document: root.document
             analysis: root.live ? root.analysis : null
             cursorATime: root.live ? root.cursorATime : 0.0
