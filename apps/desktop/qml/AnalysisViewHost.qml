@@ -44,6 +44,9 @@ Item {
     signal digitalDisplayModeRequested(string mode)
     signal signalActivated(int channelIndex)
 
+    // Retain the QML view instance so child-local visual state survives minimize,
+    // but freeze/remove expensive inputs while the child is minimized. Closing a
+    // child destroys this host through the workspace delegate lifetime.
     Loader {
         id: viewLoader
         anchors.fill: parent
@@ -61,22 +64,21 @@ Item {
         id: timeComponent
         TimeSignalsView {
             visible: root.live
-            renderEnabled: root.live
             document: root.document
             analysis: root.live ? root.analysis : null
-            voltageChannels: root.voltageChannels
-            currentChannels: root.currentChannels
-            otherChannels: root.otherChannels
-            displayedDigitalChannels: root.displayedDigitalChannels
+            voltageChannels: root.live ? root.voltageChannels : []
+            currentChannels: root.live ? root.currentChannels : []
+            otherChannels: root.live ? root.otherChannels : []
+            displayedDigitalChannels: root.live ? root.displayedDigitalChannels : []
             digitalDisplayMode: root.digitalDisplayMode
             displayMode: root.timeDisplayMode
             valueRepresentation: root.valueRepresentation
             zoomFactor: root.zoomFactor
             panFraction: root.panFraction
-            viewStart: root.viewStart
-            visibleDuration: root.visibleDuration
-            cursorATime: root.cursorATime
-            cursorBTime: root.cursorBTime
+            viewStart: root.live ? root.viewStart : 0.0
+            visibleDuration: root.live ? root.visibleDuration : 0.0
+            cursorATime: root.live ? root.cursorATime : 0.0
+            cursorBTime: root.live ? root.cursorBTime : 0.0
             axisWidth: root.axisWidth
             analogTrackHeight: root.analogTrackHeight
             digitalTrackHeight: root.digitalTrackHeight
@@ -92,7 +94,6 @@ Item {
         id: phasorComponent
         PhasorView {
             visible: root.live
-            requestOwner: root.requestOwner && root.live
             document: root.document
             analysis: root.live ? root.analysis : null
             cursorATime: root.live ? root.cursorATime : 0.0
@@ -107,7 +108,6 @@ Item {
         id: locusComponent
         LocusView {
             visible: root.live
-            requestOwner: root.requestOwner && root.live
             document: root.document
             analysis: root.live ? root.locusAnalysis : null
             viewStart: root.live ? root.viewStart : 0.0
@@ -124,7 +124,7 @@ Item {
             document: root.document
             analysis: root.live ? root.analysis : null
             snapshot: root.live ? root.harmonicSnapshot : null
-            visibleChannels: root.harmonicChannels
+            visibleChannels: root.live ? root.harmonicChannels : []
             cursorTime: root.live ? root.cursorATime : 0.0
         }
     }
@@ -136,7 +136,7 @@ Item {
             document: root.document
             analysis: root.live ? root.analysis : null
             snapshot: root.live ? root.tableSnapshot : null
-            visibleChannels: root.tableChannels
+            visibleChannels: root.live ? root.tableChannels : []
             cursorTime: root.live ? root.cursorATime : 0.0
             valueRepresentation: root.valueRepresentation
             selectedChannel: root.selectedChannel
