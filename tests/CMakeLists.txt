@@ -131,4 +131,22 @@ if(TARGET Qt6::Core)
     ardirec_set_warnings(ardirec_analysis_sequence_tests)
     ardirec_enable_sanitizers(ardirec_analysis_sequence_tests)
     add_test(NAME ardirec_analysis_sequence_tests COMMAND ardirec_analysis_sequence_tests)
+
+    qt_add_executable(ardirec_locus_snapshot_tests
+        test_locus_snapshot.cpp
+        ../apps/desktop/locus_snapshot_controller.cpp
+        ../apps/desktop/locus_snapshot_controller.hpp
+        ../apps/desktop/document_loader.cpp
+        ../apps/desktop/document_loader.hpp
+        ../apps/desktop/document_controller.cpp
+        ../apps/desktop/document_controller.hpp
+        ${ARDIREC_DOCUMENT_DERIVED_SOURCES}
+    )
+    set_target_properties(ardirec_locus_snapshot_tests PROPERTIES AUTOMOC ON)
+    target_include_directories(ardirec_locus_snapshot_tests PRIVATE ../apps/desktop)
+    target_link_libraries(ardirec_locus_snapshot_tests PRIVATE ardirec::core Qt6::Core Qt6::Concurrent)
+    target_compile_definitions(ardirec_locus_snapshot_tests PRIVATE ARDIREC_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
+    ardirec_set_warnings(ardirec_locus_snapshot_tests)
+    ardirec_enable_sanitizers(ardirec_locus_snapshot_tests)
+    add_test(NAME ardirec_locus_snapshot_tests COMMAND ardirec_locus_snapshot_tests)
 endif()
