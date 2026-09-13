@@ -65,10 +65,24 @@ double nice_peak(double peak) {
     return step * base;
 }
 
-QString normalized_unit(QString unit) {
-    unit = unit.trimmed().toUpper();
-    unit.remove(' ');
-    return unit;
+QString analog_role_text(ardirec::comtrade::AnalogRole role) {
+    switch (role) {
+    case ardirec::comtrade::AnalogRole::Voltage: return QStringLiteral("Voltage");
+    case ardirec::comtrade::AnalogRole::Current: return QStringLiteral("Current");
+    case ardirec::comtrade::AnalogRole::Other: break;
+    }
+    return QStringLiteral("Other");
+}
+
+QString phase_role_text(ardirec::comtrade::PhaseRole role) {
+    switch (role) {
+    case ardirec::comtrade::PhaseRole::L1: return QStringLiteral("L1");
+    case ardirec::comtrade::PhaseRole::L2: return QStringLiteral("L2");
+    case ardirec::comtrade::PhaseRole::L3: return QStringLiteral("L3");
+    case ardirec::comtrade::PhaseRole::Neutral: return QStringLiteral("E");
+    case ardirec::comtrade::PhaseRole::Other: break;
+    }
+    return QStringLiteral("Other");
 }
 
 QString compact_ratio_value(double value) {
@@ -195,6 +209,8 @@ void DocumentController::openCfg(const QUrl& url) {
     const quint64 generation = ++m_loadGeneration;
     auto cancel = std::make_shared<std::atomic_bool>(false);
     m_activeLoadCancel = cancel;
+    m_loadTimer.restart();
+    m_lastLoadMilliseconds = 0;
     m_loading = true;
     m_loadingStatus = QStringLiteral("Indexing COMTRADE in background · %1")
                           .arg(QFileInfo(url.toLocalFile()).fileName());
@@ -220,6 +236,7 @@ void DocumentController::openCfg(const QUrl& url) {
 void DocumentController::applyLoadedDocument(const std::shared_ptr<LoadedDocumentData>& loaded,
                                              quint64 generation) {
     if (generation != m_loadGeneration) return;
+    m_lastLoadMilliseconds = m_loadTimer.isValid() ? m_loadTimer.elapsed() : 0;
     m_loading = false;
     m_loadingStatus.clear();
 
@@ -279,6 +296,10 @@ void DocumentController::applyLoadedDocument(const std::shared_ptr<LoadedDocumen
     m_channelUnits.clear();
     m_statusNames.clear();
     m_channelConfigs = cfg.analog_channels;
+    m_analogRoles.clear();
+    m_phaseRoles.clear();
+    m_analogRoles.reserve(cfg.analog_channels.size());
+    m_phaseRoles.reserve(cfg.analog_channels.size());
     m_valueRepresentation = QStringLiteral("secondary");
     m_analogCount = static_cast<int>(cfg.analog_channels.size());
     m_digitalCount = static_cast<int>(cfg.status_channels.size());
@@ -288,6 +309,8 @@ void DocumentController::applyLoadedDocument(const std::shared_ptr<LoadedDocumen
                           .arg(QString::fromStdString(channel.id), QString::fromStdString(unit));
         m_channelNames << QString::fromStdString(channel.id);
         m_channelUnits << QString::fromStdString(channel.units);
+        m_analogRoles.push_back(ardirec::comtrade::analog_role(channel));
+        m_phaseRoles.push_back(ardirec::comtrade::phase_role(channel));
     }
     for (const auto& channel : cfg.status_channels) {
         const QString name = QString::fromStdString(channel.id);
@@ -321,12 +344,13 @@ void DocumentController::applyLoadedDocument(const std::shared_ptr<LoadedDocumen
     const QString accessMode = m_datStore->memoryMapped()
                                    ? QStringLiteral("mmap lazy")
                                    : QStringLiteral("stream-indexed lazy");
-    m_recordHealth = QStringLiteral("Loaded · %1 samples · %2 · %3 analog · %4 digital (%5 active)")
+    m_recordHealth = QStringLiteral("Loaded · %1 samples · %2 · %3 analog · %4 digital (%5 active) · ready %6 ms")
                          .arg(static_cast<qulonglong>(sampleCount()))
                          .arg(accessMode)
                          .arg(m_analogCount)
                          .arg(m_digitalCount)
-                         .arg(m_activeDigitalCount);
+                         .arg(m_activeDigitalCount)
+                         .arg(m_lastLoadMilliseconds);
     QStringList sidecars;
     if (!m_distanceZonePath.isEmpty()) sidecars << QFileInfo(m_distanceZonePath).suffix().toUpper();
     if (!m_headerSourceName.isEmpty()) sidecars << QStringLiteral("HDR");
@@ -371,29 +395,13 @@ QString DocumentController::channelUnit(int index) const {
 }
 
 QString DocumentController::analogRole(int index) const {
-    if (index < 0 || index >= m_channelNames.size()) return QStringLiteral("Other");
-    const QString unit = normalized_unit(channelUnit(index));
-    const QString name = channelName(index).trimmed().toUpper();
+    if (index < 0 || index >= static_cast<int>(m_analogRoles.size())) return QStringLiteral("Other");
+    return analog_role_text(m_analogRoles[static_cast<std::size_t>(index)]);
+}
 
-    if (unit == QStringLiteral("V") || unit == QStringLiteral("KV") || unit == QStringLiteral("MV")
-        || unit.contains(QStringLiteral("VOLT"))) {
-        return QStringLiteral("Voltage");
-    }
-    if (unit == QStringLiteral("A") || unit == QStringLiteral("KA") || unit == QStringLiteral("MA")
-        || unit.contains(QStringLiteral("AMP"))) {
-        return QStringLiteral("Current");
-    }
-
-    if (name.startsWith('V') || name.startsWith('U') || name.contains(QStringLiteral(":V"))
-        || name.contains(QStringLiteral("UL1")) || name.contains(QStringLiteral("UL2"))
-        || name.contains(QStringLiteral("UL3"))) {
-        return QStringLiteral("Voltage");
-    }
-    if (name.startsWith('I') || name.contains(QStringLiteral(":I")) || name.contains(QStringLiteral("IL1"))
-        || name.contains(QStringLiteral("IL2")) || name.contains(QStringLiteral("IL3"))) {
-        return QStringLiteral("Current");
-    }
-    return QStringLiteral("Other");
+QString DocumentController::channelPhase(int index) const {
+    if (index < 0 || index >= static_cast<int>(m_phaseRoles.size())) return QStringLiteral("Other");
+    return phase_role_text(m_phaseRoles[static_cast<std::size_t>(index)]);
 }
 
 double DocumentController::channelDisplayScale(int index) const {
