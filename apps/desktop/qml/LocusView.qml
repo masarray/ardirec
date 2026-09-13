@@ -29,6 +29,15 @@ Rectangle {
     readonly property bool distanceMode: analysisMode === "distance"
     readonly property real kLMagnitude: zoneController ? zoneController.groundingFactorMagnitude : 0.0
     readonly property real kLAngle: zoneController ? zoneController.groundingFactorAngle : 0.0
+    readonly property bool classicalCompensation: locusSnapshotController.classicalGroundingValid
+    readonly property string compensationSummary: classicalCompensation
+                                                  ? "RE/RL " + Number(locusSnapshotController.reOverRl).toFixed(3)
+                                                    + " · XE/XL " + Number(locusSnapshotController.xeOverXl).toFixed(3)
+                                                  : "kL " + Number(kLMagnitude).toFixed(4)
+                                                    + " ∠ " + Number(kLAngle).toFixed(2) + "°"
+    readonly property string calculationSummary: classicalCompensation
+                                                 ? "CLASSICAL RIO · 1-CYCLE BACKWARD"
+                                                 : "FUNDAMENTAL · 1-CYCLE BACKWARD"
     readonly property var earthLoops: ["L1-E", "L2-E", "L3-E"]
     readonly property var phaseLoops: ["L1-L2", "L2-L3", "L3-L1"]
     readonly property var allLoops: earthLoops.concat(phaseLoops)
@@ -199,28 +208,22 @@ Rectangle {
         return 10 * base
     }
 
-    // Relevant fit follows the engineering investigation context: loaded zones and
-    // the two committed cursor measurements. Extreme finite trajectory values remain
-    // in the native buffer and are available through Fit All; they never rewrite data.
-    function distanceTarget(zones, loops) {
+    // Relevant fit is family-local and uses protection zones, committed cursors,
+    // and the robust 99th-percentile valid trajectory extent. This avoids both
+    // clipping the meaningful path and letting rare forensic outliers dominate.
+    // Fit All remains the exact finite family extent with no numerical clipping.
+    function distanceTarget(zones, loops, fullR, fullX, relevantR, relevantX) {
         const zone = zoneMagnitude(zones)
         if (fitMode === "all") {
             return {
-                r: niceCeil(Math.max(3.0, zone.r, locusSnapshotController.maxAbsR) * 1.08),
-                x: niceCeil(Math.max(3.0, zone.x, locusSnapshotController.maxAbsX) * 1.08)
+                r: niceCeil(Math.max(3.0, zone.r, Number(fullR)) * 1.08),
+                x: niceCeil(Math.max(3.0, zone.x, Number(fullX)) * 1.08)
             }
         }
         const cursor = cursorExtent(loops)
-        const hasReference = zone.r > 0 || zone.x > 0 || cursor.r > 0 || cursor.x > 0
-        if (!hasReference) {
-            return {
-                r: niceCeil(Math.max(3.0, locusSnapshotController.maxAbsR) * 1.08),
-                x: niceCeil(Math.max(3.0, locusSnapshotController.maxAbsX) * 1.08)
-            }
-        }
         return {
-            r: niceCeil(Math.max(3.0, zone.r, cursor.r) * 1.15),
-            x: niceCeil(Math.max(3.0, zone.x, cursor.x) * 1.15)
+            r: niceCeil(Math.max(3.0, zone.r, cursor.r, Number(relevantR)) * 1.12),
+            x: niceCeil(Math.max(3.0, zone.x, cursor.x, Number(relevantX)) * 1.12)
         }
     }
 
@@ -252,11 +255,19 @@ Rectangle {
     readonly property real panelHeight: Math.max(1, (graphSurface.height - panelGap) * 0.5)
     readonly property var earthTransform: distanceMode
                                           ? panelTransform(0, 0, graphSurface.width, panelHeight,
-                                                           distanceTarget(earthZones, earthLoops), true)
+                                                           distanceTarget(earthZones, earthLoops,
+                                                                          locusSnapshotController.earthMaxAbsR,
+                                                                          locusSnapshotController.earthMaxAbsX,
+                                                                          locusSnapshotController.earthRelevantMaxAbsR,
+                                                                          locusSnapshotController.earthRelevantMaxAbsX), true)
                                           : ({valid:false})
     readonly property var phaseTransform: distanceMode
                                           ? panelTransform(0, panelHeight + panelGap, graphSurface.width, panelHeight,
-                                                           distanceTarget(phaseZones, phaseLoops), true)
+                                                           distanceTarget(phaseZones, phaseLoops,
+                                                                          locusSnapshotController.phaseMaxAbsR,
+                                                                          locusSnapshotController.phaseMaxAbsX,
+                                                                          locusSnapshotController.phaseRelevantMaxAbsR,
+                                                                          locusSnapshotController.phaseRelevantMaxAbsX), true)
                                           : ({valid:false})
     readonly property var rawTransform: !distanceMode
                                         ? panelTransform(0, 0, graphSurface.width, graphSurface.height,
@@ -367,7 +378,7 @@ Rectangle {
                     checked: root.fitMode === "relevant"
                     onClicked: { root.fitMode = "relevant"; root.setLocusZoom(1.0) }
                     ToolTip.visible:hovered
-                    ToolTip.text:"Fit protection zones and C1/C2 measurement context; trajectory outliers remain available in Fit All"
+                    ToolTip.text:"Family-local fit of valid trajectory, protection zones and C1/C2; every finite point remains available in Fit All"
                 }
                 ToolButton {
                     text:"Fit All"
@@ -383,8 +394,13 @@ Rectangle {
                 Label { text:Math.round(root.locusZoom*100)+"%"; color:"#59656d"; font.pixelSize:9 }
 
                 Rectangle { visible:root.distanceMode; width:1; height:26; color:"#cbd1d6" }
-                Label { visible:root.distanceMode; text:"kL"; color:"#56626b"; font.pixelSize:9; font.weight:Font.DemiBold }
-                Label { visible:root.distanceMode; text:Number(root.kLMagnitude).toFixed(4)+" ∠ "+Number(root.kLAngle).toFixed(2)+"°"; color:"#48545d"; font.pixelSize:9 }
+                Label {
+                    visible: root.distanceMode
+                    text: root.compensationSummary
+                    color: "#48545d"
+                    font.pixelSize: 9
+                    font.weight: Font.DemiBold
+                }
 
                 Item { Layout.fillWidth:true }
                 Label {
@@ -392,6 +408,13 @@ Rectangle {
                     text: "Updating trajectory…"
                     color: "#6e7880"
                     font.pixelSize: 9
+                }
+                Label {
+                    visible: root.distanceMode
+                    text: root.calculationSummary
+                    color: root.classicalCompensation ? "#3f6757" : "#68737b"
+                    font.pixelSize: 8
+                    font.weight: Font.DemiBold
                 }
                 Label {
                     visible: root.distanceMode
@@ -454,6 +477,12 @@ Rectangle {
                 Label { text:"C2"; color:"#b77900"; font.pixelSize:9; font.weight:Font.Bold }
                 Label { text:root.compactImpedance(root.cursorBValue); color:"#354049"; font.pixelSize:9; font.family:"Consolas" }
                 Item { Layout.fillWidth:true }
+                Label {
+                    visible: locusSnapshotController.statusRejectedCount > 0
+                    text: "window gaps " + locusSnapshotController.statusRejectedCount
+                    color: "#8a6b3c"
+                    font.pixelSize: 8
+                }
                 Label {
                     text: root.analysis ? "I floor " + (root.analysis.distanceCurrentFloor()*1000).toFixed(2) + " mA" : ""
                     color: "#6f7980"

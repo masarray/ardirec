@@ -45,6 +45,7 @@ int main() {
         using ardirec::distance::FaultLoop;
         using ardirec::distance::ThreePhasePhasors;
         using ardirec::distance::distance_impedance;
+        using ardirec::distance::distance_impedance_rerl_xexl;
         using ardirec::distance::grounding_factor_from_rerl_xexl;
         using ardirec::distance::grounding_factor_from_z0z1;
 
@@ -70,6 +71,30 @@ int main() {
         require(lnResult.valid, "L1-E compensated loop is valid");
         require_complex_near(lnResult.impedance, targetLn, 1.0e-12, "L1-E compensation recovers target impedance");
 
+        // Classical SIGRA compensation is not a complex-kL shortcut. RE/RL and
+        // XE/XL multiply the earth current independently in the R and X equations.
+        ThreePhasePhasors classical{};
+        classical.current[0] = {1.2, -0.35};
+        const Complex earthCurrentIe{-0.8, 0.45};
+        constexpr double kr = 1.0;
+        constexpr double kx = 0.6;
+        const Complex targetClassical{5.0, 7.0};
+        const Complex resistanceCurrent = classical.current[0] - kr * earthCurrentIe;
+        const Complex reactanceCurrent = classical.current[0] - kx * earthCurrentIe;
+        classical.voltage[0] = resistanceCurrent * targetClassical.real()
+                               + Complex{0.0, 1.0} * reactanceCurrent * targetClassical.imag();
+        const auto classicalResult = distance_impedance_rerl_xexl(
+            FaultLoop::L1E, classical, earthCurrentIe, kr, kx);
+        require(classicalResult.valid, "classical RE/RL-XE/XL earth loop is valid");
+        require_complex_near(classicalResult.impedance, targetClassical, 1.0e-12,
+                             "classical RE/RL-XE/XL solver recovers independent R/X target");
+
+        const auto classicalPhasePhase = distance_impedance_rerl_xexl(
+            FaultLoop::L1L2, ll, earthCurrentIe, kr, kx);
+        require(classicalPhasePhase.valid, "classical mode leaves phase-phase equation valid");
+        require_complex_near(classicalPhasePhase.impedance, targetLl, 1.0e-12,
+                             "classical earth compensation does not alter phase-phase loops");
+
         ThreePhasePhasors weak{};
         weak.voltage[0] = {100.0, 0.0};
         const auto weakResult = distance_impedance(FaultLoop::L1E, weak, kL);
@@ -78,7 +103,7 @@ int main() {
         require_complex_near(grounding_factor_from_z0z1({4.0, 3.0}), {1.0, 1.0}, 1.0e-12,
                              "Z0/Z1 conversion to kL");
         require_complex_near(grounding_factor_from_rerl_xexl(2.0, 3.0, 45.0), {2.5, 0.5}, 1.0e-12,
-                             "RE/RL XE/XL conversion uses line angle");
+                             "RE/RL XE/XL conversion uses an explicitly supplied line angle");
 
         const std::string rio = R"RIO(
 BEGIN TESTOBJECT
@@ -164,7 +189,7 @@ END TESTOBJECT
         require_near(sigraModel.line_angle_degrees, 80.0, 1.0e-12, "legacy SIGRA line angle");
         require(sigraModel.grounding_factor_valid, "legacy SIGRA grounding factor available");
         require_complex_near(sigraModel.grounding_factor, {1.0, 0.0}, 1.0e-12,
-                             "legacy SIGRA RE/RL and XE/XL convert to kL");
+                             "legacy SIGRA RE/RL and XE/XL convert to kL when explicit line angle is present");
         require(sigraModel.zones.size() == 10, "legacy SIGRA five zones become LL/LN pairs");
 
         const auto& sigraZ1Ll = sigraModel.zones[0];

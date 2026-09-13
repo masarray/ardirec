@@ -97,6 +97,7 @@ public:
     QString headerText() const { return m_headerText; }
 
     [[nodiscard]] const std::vector<double>& timeSeconds() const;
+    [[nodiscard]] const std::vector<double>& digitalEdgeTimes() const noexcept { return m_digitalEdgeTimes; }
     [[nodiscard]] std::shared_ptr<const std::vector<double>> timeIndexSnapshot() const { return m_timeSeconds; }
     [[nodiscard]] std::shared_ptr<const ardirec::comtrade::IndexedDatFile> dataStoreSnapshot() const { return m_datStore; }
     [[nodiscard]] std::shared_ptr<const ardirec::comtrade::AnalogLodIndex> analogLodSnapshot() const {
