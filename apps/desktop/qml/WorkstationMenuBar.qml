@@ -72,6 +72,28 @@ MenuBar {
     }
 
     Menu {
+        title: "&Window"
+
+        Menu {
+            title: "&New Analysis Window"
+            MenuItem { action: root.actions?.newTimeView ?? null }
+            MenuItem { action: root.actions?.newPhasorView ?? null }
+            MenuItem { action: root.actions?.newLocusView ?? null }
+            MenuItem { action: root.actions?.newHarmonicsView ?? null }
+            MenuItem { action: root.actions?.newTableView ?? null }
+        }
+
+        MenuItem { action: root.actions?.closeAnalysisWindow ?? null }
+        MenuSeparator { }
+        MenuItem { action: root.actions?.nextAnalysisWindow ?? null }
+        MenuItem { action: root.actions?.previousAnalysisWindow ?? null }
+        MenuSeparator { }
+        MenuItem { action: root.actions?.cascadeWindows ?? null }
+        MenuItem { action: root.actions?.tileHorizontalWindows ?? null }
+        MenuItem { action: root.actions?.tileVerticalWindows ?? null }
+    }
+
+    Menu {
         title: "&View"
         MenuItem { action: root.actions?.fitRecord ?? null }
         MenuItem { action: root.actions?.focusTrigger ?? null }
