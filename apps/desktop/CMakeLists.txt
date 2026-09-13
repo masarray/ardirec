@@ -6,6 +6,8 @@ qt_add_executable(ardirec WIN32 MACOSX_BUNDLE
     document_loader.hpp
     document_controller.cpp
     document_controller.hpp
+    analog_lod_pyramid.cpp
+    analog_lod_pyramid.hpp
     analysis_controller.cpp
     analysis_controller.hpp
     analysis_cursor_batch.cpp
@@ -25,6 +27,8 @@ qt_add_executable(ardirec WIN32 MACOSX_BUNDLE
     waveform_item.cpp
     waveform_item.hpp
     rms_cycle_window.hpp
+    rms_tile_cache.cpp
+    rms_tile_cache.hpp
     rms_waveform_item.cpp
     rms_waveform_item.hpp
     phasor_vector_item.cpp
