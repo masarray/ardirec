@@ -20,6 +20,7 @@ Rectangle {
     property color activeColor: "#d99a32"
     property color cursorAColor: "#2466b3"
     property color cursorBColor: "#c78100"
+    property bool renderActive: true
 
     Rectangle {
         id: labelRail
@@ -56,7 +57,7 @@ Rectangle {
 
             Label {
                 anchors.verticalCenter: parent.verticalCenter
-                text: root.document ? root.document.digitalStateText(root.channelIndex, root.cursorBTime) : "0"
+                text: root.document && root.renderActive ? root.document.digitalStateText(root.channelIndex, root.cursorBTime) : "—"
                 color: "#7c838a"
                 font.pixelSize: 8
             }
@@ -91,13 +92,19 @@ Rectangle {
             }
         }
 
-        DigitalItem {
+        Loader {
             anchors.fill: parent
-            document: root.document
-            channelIndex: root.channelIndex
-            zoomFactor: root.zoomFactor
-            panFraction: root.panFraction
-            activeColor: root.activeColor
+            active: root.renderActive
+            asynchronous: true
+            sourceComponent: Component {
+                DigitalItem {
+                    document: root.document
+                    channelIndex: root.channelIndex
+                    zoomFactor: root.zoomFactor
+                    panFraction: root.panFraction
+                    activeColor: root.activeColor
+                }
+            }
         }
 
         TriggerReference {
