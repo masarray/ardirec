@@ -64,7 +64,7 @@ require("apps/desktop/rms_waveform_item.cpp", "cancel", "RMS background preparat
 
 # Cursor interaction: raw pointer-rate movement must be preview/coalesced.
 time_view = text("apps/desktop/qml/TimeSignalsView.qml")
-require("apps/desktop/qml/TimeSignalsView.qml", "analysisCommitTimer", "cursor analysis commits must be frame-coalesced")
+require("apps/desktop/qml/TimeSignalsView.qml", "cursorCommitTimer", "cursor analysis commits must be frame-coalesced")
 require("apps/desktop/qml/TimeSignalsView.qml", "pendingATime", "cursor drag must use pending/latest state")
 position_match = re.search(r"onPositionChanged\s*:\s*mouse\s*=>\s*\{(?P<body>.*?)\n\s*\}", time_view, re.S)
 if position_match:
