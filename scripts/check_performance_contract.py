@@ -176,26 +176,53 @@ elif "QVariantMap" in bulk_worker or "QVariantList" in bulk_worker:
 if "4096" not in locus_cpp:
     FAILURES.append("apps/desktop/locus_snapshot_controller.cpp: bounded locus point budget guard is missing")
 
-# P1 first-interactive contract: heavy engineering views are demand-created, not
-# all synchronously constructed during application/record startup. Retained hidden
-# views must also be quiescent rather than continuing analysis in the background.
-require("apps/desktop/qml/Main.qml", "DeferredEngineeringViews", "heavy engineering views must be hosted by the deferred workspace")
-deferred = text("apps/desktop/qml/DeferredEngineeringViews.qml")
-if deferred.count("asynchronous: true") < 4:
-    FAILURES.append("apps/desktop/qml/DeferredEngineeringViews.qml: all four heavy engineering loaders must be asynchronous")
-if deferred.count("visible: root.viewMode ===") < 4:
-    FAILURES.append("apps/desktop/qml/DeferredEngineeringViews.qml: retained heavy views must explicitly become locally invisible when inactive")
-if deferred.count("analysis: visible ?") < 3:
-    FAILURES.append("apps/desktop/qml/DeferredEngineeringViews.qml: hidden engineering views must detach analysis inputs")
-for warm_flag in ("phasorWarm", "locusWarm", "harmonicsWarm", "tableWarm"):
-    if warm_flag not in deferred:
-        FAILURES.append(f"apps/desktop/qml/DeferredEngineeringViews.qml: missing retained warm flag {warm_flag}")
-require("apps/desktop/qml/DeferredEngineeringViews.qml", "resetForRecord", "deferred view lifetime must reset at record boundaries")
-
+# First-interactive / multi-window contract. R3 replaces the historical single
+# DeferredEngineeringViews host with a stronger per-child retained loader. Child
+# creation remains demand-driven, heavy view creation is asynchronous, and a
+# minimized child loses heavy numerical inputs/lane models while preserving only
+# lightweight local UI state. Shared C++ document/cache engines remain singletons.
 main_qml = text("apps/desktop/qml/Main.qml")
-for eager_type in ("PhasorView {", "LocusView {", "HarmonicsView {", "ValueTableView {"):
-    if eager_type in main_qml:
-        FAILURES.append(f"apps/desktop/qml/Main.qml: eager heavy view construction {eager_type!r} is forbidden; use DeferredEngineeringViews")
+if "MdiWorkspace {" in main_qml:
+    forbid("apps/desktop/qml/Main.qml", "DeferredEngineeringViews {",
+           "the R3 MDI shell must not instantiate the legacy single-view host")
+    for eager_type in ("PhasorView {", "LocusView {", "HarmonicsView {", "ValueTableView {"):
+        if eager_type in main_qml:
+            FAILURES.append(f"apps/desktop/qml/Main.qml: eager heavy view construction {eager_type!r} is forbidden; use AnalysisViewHost")
+
+    host = text("apps/desktop/qml/AnalysisViewHost.qml")
+    require("apps/desktop/qml/AnalysisViewHost.qml", "Loader {",
+            "each MDI child needs one demand-created analysis loader boundary")
+    require("apps/desktop/qml/AnalysisViewHost.qml", 'asynchronous: root.viewType !== "time"',
+            "heavy non-time analysis views must instantiate asynchronously")
+    require("apps/desktop/qml/AnalysisViewHost.qml", "visible: root.live && status === Loader.Ready",
+            "minimized retained children must not remain visibly/render-active")
+    require("apps/desktop/qml/AnalysisViewHost.qml", "analysis: root.live ? root.analysis : null",
+            "minimized children must detach expensive analysis inputs")
+    require("apps/desktop/qml/AnalysisViewHost.qml", "snapshot: root.live ? root.harmonicSnapshot : null",
+            "minimized Harmonics children must detach snapshot work")
+    require("apps/desktop/qml/AnalysisViewHost.qml", "snapshot: root.live ? root.tableSnapshot : null",
+            "minimized Table children must detach snapshot work")
+    require("apps/desktop/qml/AnalysisViewHost.qml", "voltageChannels: root.live ? root.voltageChannels : []",
+            "minimized Time Signals must remove lane models and native render workers")
+    require("apps/desktop/qml/MdiWorkspace.qml", 'live: childWindow.windowState !== "minimized"',
+            "MDI window state must explicitly drive child quiescence")
+    require("apps/desktop/qml/MdiWorkspace.qml", "ListModel { id: windowsModel }",
+            "child-window geometry/lifetime must stay lightweight and independent from shared numerical stores")
+else:
+    # Preserve compatibility with the green pre-R3 shell if this contract is
+    # reused on an older branch, but keep the original P1 invariants intact.
+    require("apps/desktop/qml/Main.qml", "DeferredEngineeringViews", "heavy engineering views must be hosted by the deferred workspace")
+    deferred = text("apps/desktop/qml/DeferredEngineeringViews.qml")
+    if deferred.count("asynchronous: true") < 4:
+        FAILURES.append("apps/desktop/qml/DeferredEngineeringViews.qml: all four heavy engineering loaders must be asynchronous")
+    if deferred.count("visible: root.viewMode ===") < 4:
+        FAILURES.append("apps/desktop/qml/DeferredEngineeringViews.qml: retained heavy views must explicitly become locally invisible when inactive")
+    if deferred.count("analysis: visible ?") < 3:
+        FAILURES.append("apps/desktop/qml/DeferredEngineeringViews.qml: hidden engineering views must detach analysis inputs")
+    for warm_flag in ("phasorWarm", "locusWarm", "harmonicsWarm", "tableWarm"):
+        if warm_flag not in deferred:
+            FAILURES.append(f"apps/desktop/qml/DeferredEngineeringViews.qml: missing retained warm flag {warm_flag}")
+    require("apps/desktop/qml/DeferredEngineeringViews.qml", "resetForRecord", "deferred view lifetime must reset at record boundaries")
 
 # Channel semantics are classified once when the document is applied. Numeric/UI
 # interaction paths consume integer cached roles instead of regex/string discovery.
