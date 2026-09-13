@@ -23,6 +23,9 @@ Rectangle {
     property real axisWidth: 92
     property color cursorAColor: "#244f9e"
     property color cursorBColor: "#b77900"
+    // TimeSignalsView keeps lightweight lane shells but only visible/near-visible
+    // lanes instantiate C++ render items or evaluate cursor RMS bindings.
+    property bool renderActive: true
 
     readonly property real rawPeak: {
         const representationDependency = root.valueRepresentation
@@ -47,18 +50,16 @@ Rectangle {
     }
     readonly property real displayPeak: (displayMode === "rms" ? rawPeak / Math.sqrt(2.0) : rawPeak) * engineeringScale
 
-    // Evaluate only the measurement mode that is visible. Keeping four always-live bindings here
-    // would run two one-cycle RMS traversals per lane even while the operator is viewing samples.
     readonly property real cursorAValue: {
         const representationDependency = root.valueRepresentation
-        if (!root.document || root.channelIndex < 0) return NaN
+        if (!root.renderActive || !root.document || root.channelIndex < 0) return NaN
         if (root.displayMode === "rms")
             return root.analysis ? root.analysis.rmsValue(root.channelIndex, root.cursorATime) : NaN
         return root.document.sampleValue(root.channelIndex, root.cursorATime)
     }
     readonly property real cursorBValue: {
         const representationDependency = root.valueRepresentation
-        if (!root.document || root.channelIndex < 0) return NaN
+        if (!root.renderActive || !root.document || root.channelIndex < 0) return NaN
         if (root.displayMode === "rms")
             return root.analysis ? root.analysis.rmsValue(root.channelIndex, root.cursorBTime) : NaN
         return root.document.sampleValue(root.channelIndex, root.cursorBTime)
@@ -226,24 +227,34 @@ Rectangle {
             }
         }
 
-        WaveformItem {
+        Loader {
             anchors.fill: parent
-            visible: root.displayMode !== "rms"
-            document: root.document
-            channelIndex: root.channelIndex
-            traceColor: root.traceColor
-            zoomFactor: root.zoomFactor
-            panFraction: root.panFraction
+            active: root.renderActive && root.displayMode !== "rms"
+            asynchronous: true
+            sourceComponent: Component {
+                WaveformItem {
+                    document: root.document
+                    channelIndex: root.channelIndex
+                    traceColor: root.traceColor
+                    zoomFactor: root.zoomFactor
+                    panFraction: root.panFraction
+                }
+            }
         }
 
-        RmsWaveformItem {
+        Loader {
             anchors.fill: parent
-            visible: root.displayMode === "rms"
-            document: root.document
-            channelIndex: root.channelIndex
-            traceColor: root.traceColor
-            zoomFactor: root.zoomFactor
-            panFraction: root.panFraction
+            active: root.renderActive && root.displayMode === "rms"
+            asynchronous: true
+            sourceComponent: Component {
+                RmsWaveformItem {
+                    document: root.document
+                    channelIndex: root.channelIndex
+                    traceColor: root.traceColor
+                    zoomFactor: root.zoomFactor
+                    panFraction: root.panFraction
+                }
+            }
         }
 
         TriggerReference {

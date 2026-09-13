@@ -24,10 +24,23 @@ ardirec_set_warnings(ardirec_binary_field_robustness_tests)
 ardirec_enable_sanitizers(ardirec_binary_field_robustness_tests)
 add_test(NAME ardirec_binary_field_robustness_tests COMMAND ardirec_binary_field_robustness_tests)
 
+set(ARDIREC_LOADER_DERIVED_SOURCES
+    ../apps/desktop/analog_lod_pyramid.cpp
+    ../apps/desktop/analog_lod_pyramid.hpp
+)
+
+set(ARDIREC_DOCUMENT_DERIVED_SOURCES
+    ${ARDIREC_LOADER_DERIVED_SOURCES}
+    ../apps/desktop/rms_tile_cache.cpp
+    ../apps/desktop/rms_tile_cache.hpp
+    ../apps/desktop/rms_cycle_window.hpp
+)
+
 add_executable(ardirec_document_loader_tests
     test_document_loader.cpp
     ../apps/desktop/document_loader.cpp
     ../apps/desktop/document_loader.hpp
+    ${ARDIREC_LOADER_DERIVED_SOURCES}
 )
 target_include_directories(ardirec_document_loader_tests PRIVATE ../apps/desktop)
 target_link_libraries(ardirec_document_loader_tests PRIVATE ardirec::core)
@@ -39,6 +52,7 @@ add_executable(ardirec_loader_file_safety_tests
     test_loader_file_safety.cpp
     ../apps/desktop/document_loader.cpp
     ../apps/desktop/document_loader.hpp
+    ${ARDIREC_LOADER_DERIVED_SOURCES}
 )
 target_include_directories(ardirec_loader_file_safety_tests PRIVATE ../apps/desktop)
 target_link_libraries(ardirec_loader_file_safety_tests PRIVATE ardirec::core)
@@ -88,6 +102,7 @@ if(TARGET Qt6::Core)
         ../apps/desktop/document_loader.hpp
         ../apps/desktop/document_controller.cpp
         ../apps/desktop/document_controller.hpp
+        ${ARDIREC_DOCUMENT_DERIVED_SOURCES}
     )
     set_target_properties(ardirec_analysis_tests PROPERTIES AUTOMOC ON)
     target_include_directories(ardirec_analysis_tests PRIVATE ../apps/desktop)
@@ -107,6 +122,7 @@ if(TARGET Qt6::Core)
         ../apps/desktop/document_loader.hpp
         ../apps/desktop/document_controller.cpp
         ../apps/desktop/document_controller.hpp
+        ${ARDIREC_DOCUMENT_DERIVED_SOURCES}
     )
     set_target_properties(ardirec_analysis_sequence_tests PROPERTIES AUTOMOC ON)
     target_include_directories(ardirec_analysis_sequence_tests PRIVATE ../apps/desktop)

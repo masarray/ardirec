@@ -13,6 +13,7 @@
 #include <vector>
 
 struct WaveformGeometrySnapshot;
+namespace ardirec::desktop { class AnalogLodPyramid; }
 
 class WaveformItem : public QQuickItem {
     Q_OBJECT
@@ -58,7 +59,7 @@ private:
     QPointer<DocumentController> m_document;
     std::shared_ptr<const ardirec::comtrade::IndexedDatFile> m_data;
     std::shared_ptr<const std::vector<double>> m_times;
-    std::shared_ptr<const ardirec::comtrade::AnalogLodIndex> m_lod;
+    std::shared_ptr<const ardirec::desktop::AnalogLodPyramid> m_lodPyramid;
     std::shared_ptr<const WaveformGeometrySnapshot> m_renderSnapshot;
     std::shared_ptr<std::atomic_bool> m_activeCancel;
     QTimer m_rebuildTimer;

@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <span>
 #include <vector>
 
@@ -28,6 +29,7 @@ HarmonicSnapshotController::HarmonicSnapshotController(DocumentController* docum
 
 void HarmonicSnapshotController::clearCache() {
     m_cache.clear();
+    m_touchCounter = 0;
 }
 
 std::pair<std::size_t, std::size_t>
@@ -58,27 +60,69 @@ HarmonicSnapshotController::oneCycleWindow(double absoluteTimeSeconds) const {
     return {first, end};
 }
 
-QString HarmonicSnapshotController::cacheKey(int channelIndex,
-                                             double absoluteTimeSeconds,
-                                             int maximumOrder) const {
-    return QStringLiteral("%1|%2|%3|%4")
-        .arg(channelIndex)
-        .arg(QString::number(absoluteTimeSeconds, 'f', 12))
-        .arg(maximumOrder)
-        .arg(m_document ? m_document->valueRepresentation() : QStringLiteral("secondary"));
+SampleSnapshotKey HarmonicSnapshotController::cacheKey(int channelIndex,
+                                                        double absoluteTimeSeconds,
+                                                        int maximumOrder) const {
+    const auto [first, end] = oneCycleWindow(absoluteTimeSeconds);
+    const quint64 lastSample = end > 0u ? static_cast<quint64>(end - 1u) : 0u;
+    return SampleSnapshotKey{
+        lastSample,
+        static_cast<quint64>(first),
+        channelIndex,
+        maximumOrder,
+        m_document && m_document->valueRepresentation() == QStringLiteral("primary")};
+}
+
+QVariantMap HarmonicSnapshotController::adjustedForReference(const CacheEntry& entry,
+                                                              double absoluteTimeSeconds) const {
+    QVariantMap result = entry.value;
+    if (!m_document || !std::isfinite(absoluteTimeSeconds) || !std::isfinite(entry.referenceTime)) return result;
+    const double frequency = m_document->nominalFrequency() > 1.0
+                                 ? m_document->nominalFrequency()
+                                 : 50.0;
+    const double delta = absoluteTimeSeconds - entry.referenceTime;
+    QVariantList bins = result.value(QStringLiteral("bins")).toList();
+    for (QVariant& variant : bins) {
+        QVariantMap bin = variant.toMap();
+        const int order = bin.value(QStringLiteral("order")).toInt();
+        if (order > 0) {
+            const double baseAngle = bin.value(QStringLiteral("angle")).toDouble();
+            bin.insert(QStringLiteral("angle"),
+                       wrap_degrees(baseAngle + 360.0 * frequency * static_cast<double>(order) * delta));
+            variant = bin;
+        }
+    }
+    result.insert(QStringLiteral("bins"), bins);
+    result.insert(QStringLiteral("windowEnd"), absoluteTimeSeconds);
+    return result;
+}
+
+void HarmonicSnapshotController::trimCache() {
+    while (m_cache.size() > m_maxCacheEntries) {
+        auto victim = m_cache.end();
+        for (auto it = m_cache.begin(); it != m_cache.end(); ++it) {
+            if (victim == m_cache.end() || it.value().touch < victim.value().touch) victim = it;
+        }
+        if (victim == m_cache.end()) break;
+        m_cache.erase(victim);
+    }
 }
 
 QVariantMap HarmonicSnapshotController::spectrumAt(int channelIndex,
                                                    double absoluteTimeSeconds,
                                                    int maximumOrder) {
     QVariantList bins;
-    if (!m_document || channelIndex < 0 || channelIndex >= m_document->analogCount()) {
+    if (!m_document || channelIndex < 0 || channelIndex >= m_document->analogCount()
+        || !std::isfinite(absoluteTimeSeconds)) {
         return {{QStringLiteral("valid"), false}, {QStringLiteral("bins"), bins}};
     }
 
     maximumOrder = std::clamp(maximumOrder, 1, 50);
-    const QString key = cacheKey(channelIndex, absoluteTimeSeconds, maximumOrder);
-    if (const auto it = m_cache.constFind(key); it != m_cache.constEnd()) return it.value();
+    const SampleSnapshotKey key = cacheKey(channelIndex, absoluteTimeSeconds, maximumOrder);
+    if (auto it = m_cache.find(key); it != m_cache.end()) {
+        it.value().touch = ++m_touchCounter;
+        return adjustedForReference(it.value(), absoluteTimeSeconds);
+    }
 
     const auto& times = m_document->timeSeconds();
     const auto [first, end] = oneCycleWindow(absoluteTimeSeconds);
@@ -95,12 +139,13 @@ QVariantMap HarmonicSnapshotController::spectrumAt(int channelIndex,
     const double frequency = m_document->nominalFrequency() > 1.0
                                  ? m_document->nominalFrequency()
                                  : 50.0;
+    const double referenceTime = times[std::min(cappedEnd - 1u, times.size() - 1u)];
     const auto spectrum = ardirec::power::harmonic_spectrum(
         std::span<const double>(samples.data(), count),
         std::span<const double>(times.data() + first, count),
         frequency,
         maximumOrder,
-        absoluteTimeSeconds);
+        referenceTime);
     if (!spectrum.valid) {
         return {{QStringLiteral("valid"), false}, {QStringLiteral("bins"), bins}};
     }
@@ -145,10 +190,11 @@ QVariantMap HarmonicSnapshotController::spectrumAt(int channelIndex,
                        {QStringLiteral("bins"), bins},
                        {QStringLiteral("unit"), m_document->channelUnit(channelIndex)},
                        {QStringLiteral("name"), m_document->channelName(channelIndex)},
-                       {QStringLiteral("windowEnd"), absoluteTimeSeconds},
+                       {QStringLiteral("windowEnd"), referenceTime},
                        {QStringLiteral("windowDuration"), 1.0 / frequency}};
 
-    if (m_cache.size() >= 256) m_cache.clear();
-    m_cache.insert(key, result);
-    return result;
+    CacheEntry entry{result, referenceTime, ++m_touchCounter};
+    m_cache.insert(key, entry);
+    trimCache();
+    return adjustedForReference(entry, absoluteTimeSeconds);
 }

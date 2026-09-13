@@ -43,6 +43,14 @@ Rectangle {
 
     function clamp(value, lo, hi) { return Math.max(lo, Math.min(hi, value)) }
     function resetScroll() { signalFlick.contentY = 0 }
+    function trackRenderActive(itemY, itemHeight) {
+        // Keep one analog-lane-sized prefetch margin so scrolling never exposes
+        // an unprepared lane, while distant lanes own no C++ render item/workers.
+        const margin = Math.max(root.analogTrackHeight, 96)
+        const top = signalFlick.contentY - margin
+        const bottom = signalFlick.contentY + signalFlick.height + margin
+        return itemY + itemHeight >= top && itemY <= bottom
+    }
     function cursorPixel(timeSeconds, plotWidth) {
         return (timeSeconds - root.viewStart) / Math.max(1e-12, root.visibleDuration) * plotWidth
     }
@@ -143,6 +151,7 @@ Rectangle {
                     displayMode: root.displayMode
                     valueRepresentation: root.valueRepresentation
                     traceColor: root.analysis ? root.analysis.phaseColor(modelData) : "#6f7780"
+                    renderActive: root.trackRenderActive(y, height)
                 }
             }
 
@@ -175,6 +184,7 @@ Rectangle {
                     displayMode: root.displayMode
                     valueRepresentation: root.valueRepresentation
                     traceColor: root.analysis ? root.analysis.phaseColor(modelData) : "#6f7780"
+                    renderActive: root.trackRenderActive(y, height)
                 }
             }
 
@@ -207,6 +217,7 @@ Rectangle {
                     displayMode: root.displayMode
                     valueRepresentation: root.valueRepresentation
                     traceColor: root.analysis ? root.analysis.phaseColor(modelData) : "#6f7780"
+                    renderActive: root.trackRenderActive(y, height)
                 }
             }
 
@@ -275,6 +286,7 @@ Rectangle {
                     cursorATime: root.cursorATime
                     cursorBTime: root.cursorBTime
                     axisWidth: root.axisWidth
+                    renderActive: root.trackRenderActive(y, height)
                 }
             }
 

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "waveform_item.hpp"
 
+#include "analog_lod_pyramid.hpp"
+
 #include <QFutureWatcher>
 #include <QSGFlatColorMaterial>
 #include <QSGGeometryNode>
@@ -32,7 +34,7 @@ using SnapshotPtr = std::shared_ptr<const WaveformGeometrySnapshot>;
 [[nodiscard]] SnapshotPtr build_waveform_geometry(
     const std::shared_ptr<const ardirec::comtrade::IndexedDatFile>& data,
     const std::shared_ptr<const std::vector<double>>& times,
-    const std::shared_ptr<const ardirec::comtrade::AnalogLodIndex>& lod,
+    const std::shared_ptr<const ardirec::desktop::AnalogLodPyramid>& pyramid,
     int channelIndex,
     double displayScale,
     double zoomFactor,
@@ -92,9 +94,12 @@ using SnapshotPtr = std::shared_ptr<const WaveformGeometrySnapshot>;
         std::vector<double> bucketLows(pixelWidth, std::numeric_limits<double>::infinity());
         std::vector<double> bucketHighs(pixelWidth, -std::numeric_limits<double>::infinity());
         const std::size_t samplesPerPixel = std::max<std::size_t>(1u, visibleCount / pixelWidth);
-        const bool lodCompatible = lod && lod->block_size > 0u
-                                   && channel < lod->channel_count
-                                   && lod->block_size <= samplesPerPixel * 2u;
+        const std::size_t lodLevel = pyramid ? pyramid->bestLevel(samplesPerPixel) : 0u;
+        const std::size_t lodBlockSize = pyramid ? pyramid->blockSize(lodLevel) : 0u;
+        const bool lodCompatible = pyramid && pyramid->levelCount() > 0u
+                                   && channel < pyramid->channelCount()
+                                   && lodBlockSize > 0u
+                                   && lodBlockSize <= samplesPerPixel * 2u;
 
         const auto accumulate = [&](std::size_t representativeIndex, double rawLow, double rawHigh) {
             if (representativeIndex >= count || !std::isfinite(rawLow) || !std::isfinite(rawHigh)) return;
@@ -123,7 +128,7 @@ using SnapshotPtr = std::shared_ptr<const WaveformGeometrySnapshot>;
         };
 
         if (lodCompatible) {
-            const std::size_t blockSize = lod->block_size;
+            const std::size_t blockSize = lodBlockSize;
             const std::size_t firstFullBlock = (start + blockSize - 1u) / blockSize;
             const std::size_t lastFullBlockExclusive = end / blockSize;
 
@@ -136,7 +141,7 @@ using SnapshotPtr = std::shared_ptr<const WaveformGeometrySnapshot>;
                     if ((checked++ & 0xFFu) == 0u && cancelled(cancel)) return {};
                     double low = 0.0;
                     double high = 0.0;
-                    if (!lod->blockExtrema(channel, block, low, high)) continue;
+                    if (!pyramid->blockExtrema(lodLevel, channel, block, low, high)) continue;
                     const std::size_t blockStart = block * blockSize;
                     const std::size_t representative = std::min(
                         count - 1u, blockStart + (blockSize - 1u) / 2u);
@@ -282,12 +287,12 @@ void WaveformItem::reloadData() {
     if (!m_document) {
         m_data.reset();
         m_times.reset();
-        m_lod.reset();
+        m_lodPyramid.reset();
         m_displayScale = 1.0;
     } else {
         m_data = m_document->dataStoreSnapshot();
         m_times = m_document->timeIndexSnapshot();
-        m_lod = m_document->analogLodSnapshot();
+        m_lodPyramid = m_document->analogLodPyramidSnapshot();
         m_displayScale = m_document->channelDisplayScale(m_channelIndex);
     }
     scheduleRebuild();
@@ -309,7 +314,7 @@ void WaveformItem::startRebuild() {
     const quint64 generation = m_rebuildGeneration;
     const auto data = m_data;
     const auto times = m_times;
-    const auto lod = m_lod;
+    const auto pyramid = m_lodPyramid;
     const int channelIndex = m_channelIndex;
     const double displayScale = m_displayScale;
     const double zoomFactor = m_zoomFactor;
@@ -340,8 +345,8 @@ void WaveformItem::startRebuild() {
     });
 
     watcher->setFuture(QtConcurrent::run(
-        [data, times, lod, channelIndex, displayScale, zoomFactor, panFraction, pixelWidth, cancel]() {
-            return build_waveform_geometry(data, times, lod, channelIndex, displayScale,
+        [data, times, pyramid, channelIndex, displayScale, zoomFactor, panFraction, pixelWidth, cancel]() {
+            return build_waveform_geometry(data, times, pyramid, channelIndex, displayScale,
                                            zoomFactor, panFraction, pixelWidth, cancel);
         }));
 }

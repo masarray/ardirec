@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #pragma once
 
+#include "analog_lod_pyramid.hpp"
 #include "ardirec/comtrade/indexed_dat.hpp"
 #include "ardirec/comtrade/record.hpp"
 
@@ -16,6 +17,7 @@ struct LoadedDocumentData {
     std::shared_ptr<ardirec::comtrade::IndexedDatFile> dat;
     std::shared_ptr<const std::vector<double>> time_seconds;
     std::shared_ptr<const ardirec::comtrade::AnalogLodIndex> analog_lod;
+    std::shared_ptr<const ardirec::desktop::AnalogLodPyramid> analog_lod_pyramid;
     std::vector<double> channel_peaks;
     std::vector<std::uint8_t> status_active;
     std::vector<double> digital_edge_times;

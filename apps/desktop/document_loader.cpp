@@ -195,11 +195,21 @@ loadDocumentData(const std::filesystem::path& cfgPath,
                 "DAT time index covers a valid prefix rather than the full physical frame count.");
         }
 
-        // Publish the immutable visual cache before this DAT source can reach
+        // Build all record-sized visual indexing in this worker. Level 0 remains
+        // the single-pass extrema cache; coarser levels are derived without raw
+        // DAT traversal and let zoomed-out geometry select the nearest resolution.
+        result->analog_lod = index.analog_lod;
+        result->analog_lod_pyramid = ardirec::desktop::buildAnalogLodPyramid(
+            result->analog_lod, cancel.get());
+        if (cancel && cancel->load(std::memory_order_relaxed)) {
+            result->cancelled = true;
+            return result;
+        }
+
+        // Publish the immutable base visual cache before this DAT source can reach
         // the UI/render thread. Engineering calculations still read raw data.
-        result->dat->publishAnalogLod(index.analog_lod);
+        result->dat->publishAnalogLod(result->analog_lod);
         result->time_seconds = std::make_shared<const std::vector<double>>(std::move(index.time_seconds));
-        result->analog_lod = std::move(index.analog_lod);
         result->channel_peaks = std::move(index.analog_abs_peaks);
         result->status_active = std::move(index.status_active);
         result->digital_edge_times = std::move(index.digital_edge_times);

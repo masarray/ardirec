@@ -64,6 +64,14 @@ require("apps/desktop/waveform_item.cpp", "QtConcurrent::run", "instantaneous vi
 require("apps/desktop/waveform_item.cpp", "m_rebuildGeneration", "instantaneous waveform work must remain latest-wins")
 require("apps/desktop/waveform_item.cpp", "cancel", "instantaneous background preparation must remain cancellable")
 
+# Multi-resolution instantaneous LOD is mandatory after P1. A zoomed-out viewport
+# must choose a nearby extrema level instead of repeatedly scanning raw DAT.
+require("apps/desktop/analog_lod_pyramid.cpp", "kMaximumAdditionalLodCells", "waveform LOD pyramid memory must stay bounded")
+require("apps/desktop/analog_lod_pyramid.cpp", "bestLevel", "waveform LOD must expose viewport-density level selection")
+require("apps/desktop/document_loader.cpp", "buildAnalogLodPyramid", "LOD pyramid must be built in the background document loader")
+require("apps/desktop/waveform_item.cpp", "m_lodPyramid", "waveform worker must consume the multi-resolution LOD pyramid")
+require("apps/desktop/waveform_item.cpp", "pyramid->bestLevel", "waveform worker must select a resolution level per viewport")
+
 rms = text("apps/desktop/rms_waveform_item.cpp")
 rms_paint = function_body(rms, "RmsWaveformItem::updatePaintNode")
 if not rms_paint:
@@ -76,6 +84,16 @@ else:
             )
 require("apps/desktop/rms_waveform_item.cpp", "QtConcurrent::run", "RMS viewport preparation must stay asynchronous")
 require("apps/desktop/rms_waveform_item.cpp", "cancel", "RMS background preparation must remain cancellable/latest-wins")
+require("apps/desktop/rms_waveform_item.cpp", "RmsTileCache", "RMS viewport must reuse the shared derived tile cache")
+rms_builder = function_body(rms, "build_rms_geometry")
+for token in ("analogValue(", "rms_cycle_window_for_sample", "sumSquares"):
+    if token in rms_builder:
+        FAILURES.append(
+            f"apps/desktop/rms_waveform_item.cpp: {token!r} inside build_rms_geometry() — viewport RMS must consume reusable derived tiles"
+        )
+require("apps/desktop/rms_tile_cache.cpp", "m_maxTiles", "RMS tile cache must have a hard memory/entry bound")
+require("apps/desktop/rms_tile_cache.cpp", "strideForLevel", "RMS derived data must support multiple resolution levels")
+require("apps/desktop/document_controller.cpp", "m_rmsTileCache", "one RMS tile cache must be shared by all lanes of a document")
 
 digital = text("apps/desktop/digital_item.cpp")
 digital_paint = function_body(digital, "DigitalItem::updatePaintNode")
@@ -101,11 +119,36 @@ if position_match:
     if "root.cursorARequested(" in body or "root.cursorBRequested(" in body:
         FAILURES.append("apps/desktop/qml/TimeSignalsView.qml: raw pointer-rate cursor commit bypasses coalescing")
 
+# Visible-track virtualization: distant lane shells may exist for layout continuity,
+# but they must not instantiate native waveform/digital workers.
+require("apps/desktop/qml/TimeSignalsView.qml", "trackRenderActive", "Time Signals must gate expensive lane rendering by viewport visibility")
+if time_view.count("renderActive: root.trackRenderActive") < 4:
+    FAILURES.append("apps/desktop/qml/TimeSignalsView.qml: every analog/digital lane family must use viewport renderActive gating")
+track_view = text("apps/desktop/qml/TrackView.qml")
+require("apps/desktop/qml/TrackView.qml", "property bool renderActive", "analog lanes require an explicit quiescent state")
+if track_view.count("active: root.renderActive") < 2:
+    FAILURES.append("apps/desktop/qml/TrackView.qml: instantaneous and RMS native renderers must be Loader-gated by renderActive")
+require("apps/desktop/qml/DigitalTrackView.qml", "active: root.renderActive", "digital native renderer must be Loader-gated by renderActive")
+
 # Shared cursor snapshot: one async batched source for expensive fundamental work.
 require("apps/desktop/cursor_snapshot_controller.cpp", "QtConcurrent::run", "cursor fundamental analysis must run off the UI thread")
 require("apps/desktop/cursor_snapshot_controller.cpp", "m_generationA", "stale C1 work must be generation-guarded")
 require("apps/desktop/cursor_snapshot_controller.cpp", "m_generationB", "stale C2 work must be generation-guarded")
 require("apps/desktop/cursor_snapshot_controller.cpp", "std::vector<std::complex<long double>> accumulators", "fundamental phasors must be batched in one sample traversal")
+
+# Harmonic/Table scalar caches must be bounded and indexed by sampled windows,
+# never exact floating-time QStrings with clear-all cliffs.
+for cache_cpp, limit_marker in (
+    ("apps/desktop/harmonic_snapshot_controller.cpp", "m_maxCacheEntries"),
+    ("apps/desktop/table_snapshot_controller.cpp", "m_maxCacheEntries"),
+):
+    forbid(cache_cpp, "QString::number(absoluteTimeSeconds", "continuous cursor time must not allocate exact floating-string cache keys")
+    require(cache_cpp, "SampleSnapshotKey", "snapshot cache must use compact sampled-window keys")
+    require(cache_cpp, "trimCache", "snapshot cache must evict incrementally instead of clear-all overflow")
+    require(cache_cpp, limit_marker, "snapshot cache must remain explicitly bounded")
+
+forbid("apps/desktop/table_snapshot_controller.cpp", "QRegularExpression", "Engineering Table must reuse cached document phase semantics")
+require("apps/desktop/table_snapshot_controller.cpp", "m_document->channelPhase(channelIndex)", "Engineering Table phase metadata must use cached document semantics")
 
 # Phasor: dynamic vectors must stay in retained native scene-graph geometry.
 forbid("apps/desktop/qml/PhasorDiagram.qml", "Canvas {", "high-frequency phasor Canvas repaint/texture uploads are forbidden")
