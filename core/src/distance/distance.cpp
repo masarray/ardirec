@@ -36,7 +36,8 @@ std::pair<int, int> phase_pair(FaultLoop loop) {
 DistanceImpedance distance_impedance(FaultLoop loop,
                                      const ThreePhasePhasors& phasors,
                                      std::complex<double> grounding_factor_kl,
-                                     double minimum_current) {
+                                     double minimum_current,
+                                     std::optional<std::complex<double>> residual_current) {
     DistanceImpedance result;
     if (!std::isfinite(minimum_current) || minimum_current <= 0.0) minimum_current = 1.0e-9;
 
@@ -45,7 +46,8 @@ DistanceImpedance distance_impedance(FaultLoop loop,
     const auto [first, second] = phase_pair(loop);
 
     if (is_earth_loop(loop)) {
-        const std::complex<double> residual = phasors.current[0] + phasors.current[1] + phasors.current[2];
+        const std::complex<double> residual = residual_current.value_or(
+            phasors.current[0] + phasors.current[1] + phasors.current[2]);
         voltage = phasors.voltage[static_cast<std::size_t>(first)];
         measuring_current = phasors.current[static_cast<std::size_t>(first)] + grounding_factor_kl * residual;
     } else {
