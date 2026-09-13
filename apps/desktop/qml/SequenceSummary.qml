@@ -40,14 +40,14 @@ Rectangle {
     readonly property bool hasData: hasVoltage || hasCurrent
 
     function requestSharedSnapshot() {
-        if (!root.visible || !Number.isFinite(root.cursorTime)) return
         if (root.snapshot && root.snapshot.valid) return
+        if (!root.analysis || !Number.isFinite(root.cursorTime)) return
         cursorSnapshotController.requestCursorA(root.cursorTime)
     }
 
+    onAnalysisChanged: if (analysis) Qt.callLater(requestSharedSnapshot)
     onCursorTimeChanged: requestSharedSnapshot()
-    onVisibleChanged: if (visible) Qt.callLater(requestSharedSnapshot)
-    Component.onCompleted: if (visible) Qt.callLater(requestSharedSnapshot)
+    Component.onCompleted: Qt.callLater(requestSharedSnapshot)
 
     function wrapDegrees(value) {
         let angle = value
