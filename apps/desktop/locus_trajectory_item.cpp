@@ -38,7 +38,7 @@ QSGGeometryNode* make_segment(const std::vector<QPointF>& points,
 
     auto* material = new QSGFlatColorMaterial();
     QColor display = color;
-    display.setAlphaF(selected ? 1.0 : 0.90);
+    display.setAlphaF(selected ? 1.0f : 0.90f);
     material->setColor(display);
 
     auto* node = new QSGGeometryNode();
@@ -52,6 +52,10 @@ QSGGeometryNode* make_segment(const std::vector<QPointF>& points,
 
 LocusTrajectoryItem::LocusTrajectoryItem(QQuickItem* parent) : QQuickItem(parent) {
     setFlag(ItemHasContents, true);
+}
+
+QObject* LocusTrajectoryItem::source() const {
+    return m_source.data();
 }
 
 void LocusTrajectoryItem::setSource(QObject* value) {
@@ -131,7 +135,7 @@ QSGNode* LocusTrajectoryItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeD
     const int last = std::min(available, start + m_loopCount);
 
     for (int loopIndex = start; loopIndex < last; ++loopIndex) {
-        const int maskBit = m_rawPhase ? loopIndex : loopIndex;
+        const int maskBit = loopIndex;
         if ((m_visibilityMask & (1 << maskBit)) == 0) continue;
         const auto& points = m_rawPhase
                                  ? snapshot->rawPhase[static_cast<std::size_t>(loopIndex)]
