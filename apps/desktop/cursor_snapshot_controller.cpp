@@ -3,6 +3,7 @@
 
 #include "ardirec/distance/distance.hpp"
 #include "ardirec/power/symmetrical_components.hpp"
+#include "ardirec/power/timestamped_dft.hpp"
 #include "distance_compensation.hpp"
 
 #include <QFutureWatcher>
@@ -144,33 +145,14 @@ QVariantMap make_sequence(const QString& role,
             {QStringLiteral("zeroPercent"), positive > floor ? std::abs(components->zero) / positive * 100.0 : nan}};
 }
 
-std::pair<std::size_t, std::size_t> one_cycle_window(const std::vector<double>& times,
-                                                     double absoluteTimeSeconds,
-                                                     double frequency) {
-    if (times.size() < 2) return {0, times.size()};
-    const double period = 1.0 / frequency;
-    const double endTime = std::clamp(absoluteTimeSeconds, times.front(), times.back());
-    const double startTime = std::max(times.front(), endTime - period);
-    auto firstIt = std::lower_bound(times.begin(), times.end(), startTime);
-    auto endIt = std::upper_bound(times.begin(), times.end(), endTime);
-    std::size_t first = static_cast<std::size_t>(std::distance(times.begin(), firstIt));
-    std::size_t end = static_cast<std::size_t>(std::distance(times.begin(), endIt));
-    end = std::min(end, times.size());
-    if (end > first + 2 && times[end - 1] - times[first] >= period * (1.0 - 1.0e-8)) ++first;
-    if (end <= first) return {0, 0};
-    return {first, end};
-}
-
 bool window_has_status_change(const std::vector<double>& edges,
-                              const std::vector<double>& times,
-                              std::size_t first,
-                              std::size_t end) {
-    if (edges.empty() || first >= end || end > times.size()) return false;
+                              double startSeconds,
+                              double endSeconds) {
+    if (edges.empty() || !std::isfinite(startSeconds) || !std::isfinite(endSeconds)
+        || endSeconds < startSeconds) return false;
     constexpr double epsilon = 1.0e-10;
-    const double start = times[first] - epsilon;
-    const double finish = times[end - 1] + epsilon;
-    const auto it = std::lower_bound(edges.begin(), edges.end(), start);
-    return it != edges.end() && *it <= finish;
+    const auto it = std::lower_bound(edges.begin(), edges.end(), startSeconds - epsilon);
+    return it != edges.end() && *it <= endSeconds + epsilon;
 }
 
 QVariantMap invalid_distance(const QString& loop, double minimumCurrent) {
@@ -195,7 +177,8 @@ struct CursorSnapshotSource {
     int residualCurrent{-1};
     double residualToSumMultiplier{1.0};
     ardirec::desktop::ClassicalGroundingFactors classicalGrounding;
-    double nominalFrequency{50.0};
+    double calculationFrequency{50.0};
+    QString calculationFrequencyProvenance{QStringLiteral("COMTRADE nominal")};
     double referenceTime{0.0};
     double currentFloor{1.0e-6};
 };
@@ -210,27 +193,34 @@ QVariantMap build_cursor_snapshot(const std::shared_ptr<const CursorSnapshotSour
     }
 
     const auto& times = *source->times;
-    const double frequency = source->nominalFrequency > 1.0 ? source->nominalFrequency : 50.0;
-    const auto [first, end] = one_cycle_window(times, absoluteTimeSeconds, frequency);
-    if (first >= end || end - first < 4) return {{QStringLiteral("valid"), false}};
+    const double frequency = source->calculationFrequency > 1.0 ? source->calculationFrequency : 50.0;
+    const auto window = ardirec::power::trailing_cycle_window(times, absoluteTimeSeconds, frequency);
+    if (!window.valid() || window.end - window.first < 4u) return {{QStringLiteral("valid"), false}};
     const bool statusWindowValid = !source->statusEdges
-                                   || !window_has_status_change(*source->statusEdges, times, first, end);
+                                   || !window_has_status_change(*source->statusEdges,
+                                                                window.start_seconds,
+                                                                window.end_seconds);
 
     const std::size_t channelCount = source->channels.size();
     std::vector<std::complex<long double>> accumulators(channelCount, {0.0L, 0.0L});
+    std::vector<long double> weightSums(channelCount, 0.0L);
     std::vector<std::size_t> counts(channelCount, 0u);
     const double omega = 2.0 * kPi * frequency;
 
-    for (std::size_t sample = first; sample < end; ++sample) {
-        if (cancel && ((sample - first) & 7u) == 0u && cancel->load(std::memory_order_relaxed)) {
+    for (std::size_t sample = window.first; sample < window.end; ++sample) {
+        if (cancel && ((sample - window.first) & 7u) == 0u && cancel->load(std::memory_order_relaxed)) {
             return {{QStringLiteral("cancelled"), true}};
         }
+        const double weight = ardirec::power::timestamp_cell_weight(times, window, sample);
+        if (!(weight > 0.0) || !std::isfinite(weight)) continue;
         const long double angle = -static_cast<long double>(omega * (times[sample] - source->referenceTime));
         const std::complex<long double> basis{std::cos(angle), std::sin(angle)};
+        const long double weighted = static_cast<long double>(weight);
         for (std::size_t channel = 0; channel < channelCount; ++channel) {
             const double value = source->data->analogValue(sample, channel);
             if (!std::isfinite(value)) continue;
-            accumulators[channel] += static_cast<long double>(value) * basis;
+            accumulators[channel] += static_cast<long double>(value) * basis * weighted;
+            weightSums[channel] += weighted;
             ++counts[channel];
         }
     }
@@ -246,12 +236,12 @@ QVariantMap build_cursor_snapshot(const std::shared_ptr<const CursorSnapshotSour
                         {QStringLiteral("name"), source->channels[channel].name},
                         {QStringLiteral("unit"), source->channels[channel].unit},
                         {QStringLiteral("phase"), source->channels[channel].phase}};
-        if (counts[channel] < 4) {
+        if (counts[channel] < 4u || !(weightSums[channel] > 0.0L)) {
             row.insert(QStringLiteral("valid"), false);
             rows.push_back(row);
             continue;
         }
-        const long double scale = std::sqrt(2.0L) / static_cast<long double>(counts[channel])
+        const long double scale = std::sqrt(2.0L) / weightSums[channel]
                                   * static_cast<long double>(source->channels[channel].displayScale);
         const auto value = accumulators[channel] * scale;
         const std::complex<double> phasor{static_cast<double>(value.real()), static_cast<double>(value.imag())};
@@ -283,9 +273,13 @@ QVariantMap build_cursor_snapshot(const std::shared_ptr<const CursorSnapshotSour
 
     return {{QStringLiteral("valid"), true},
             {QStringLiteral("time"), std::clamp(absoluteTimeSeconds, times.front(), times.back())},
-            {QStringLiteral("windowFirst"), static_cast<qulonglong>(first)},
-            {QStringLiteral("windowEnd"), static_cast<qulonglong>(end)},
+            {QStringLiteral("windowFirst"), static_cast<qulonglong>(window.first)},
+            {QStringLiteral("windowEnd"), static_cast<qulonglong>(window.end)},
+            {QStringLiteral("windowStart"), window.start_seconds},
+            {QStringLiteral("windowFinish"), window.end_seconds},
             {QStringLiteral("statusWindowValid"), statusWindowValid},
+            {QStringLiteral("calculationFrequency"), frequency},
+            {QStringLiteral("calculationFrequencyProvenance"), source->calculationFrequencyProvenance},
             {QStringLiteral("channels"), rows},
             {QStringLiteral("semantics"), semantics},
             {QStringLiteral("currentFloor"), source->currentFloor},
@@ -332,7 +326,10 @@ void CursorSnapshotController::rebuildSource() {
     source->times = m_document->timeIndexSnapshot();
     source->statusEdges = std::make_shared<const std::vector<double>>(m_document->digitalEdgeTimes());
     source->classicalGrounding = ardirec::desktop::read_classical_grounding_factors(m_document->distanceZonePath());
-    source->nominalFrequency = m_document->nominalFrequency() > 1.0 ? m_document->nominalFrequency() : 50.0;
+    source->calculationFrequency = m_document->calculationFrequency() > 1.0
+                                       ? m_document->calculationFrequency()
+                                       : (m_document->nominalFrequency() > 1.0 ? m_document->nominalFrequency() : 50.0);
+    source->calculationFrequencyProvenance = m_document->calculationFrequencyProvenance();
     source->referenceTime = m_document->dataStartSeconds();
     source->channels.reserve(static_cast<std::size_t>(m_document->analogCount()));
 
