@@ -6,15 +6,28 @@ import QtQuick.Layouts
 Item {
     id: root
 
-    property int windowId: -1
-    property string windowTitle: "Analysis"
-    property string viewType: "time"
-    property string windowState: "normal" // normal | minimized | maximized
+    required property int windowId
+    required property string windowTitle
+    required property string viewType
+    required property real windowX
+    required property real windowY
+    required property real windowWidth
+    required property real windowHeight
+    required property string windowState // normal | minimized | maximized
+    required property int zOrder
+    required property bool requestOwner
+
     property bool activeWindow: false
     property real workspaceWidth: parent ? parent.width : width
     property real workspaceHeight: parent ? parent.height : height
     property real minimumWindowWidth: 360
     property real minimumWindowHeight: 240
+
+    x: windowX
+    y: windowY
+    width: windowWidth
+    height: windowHeight
+    z: zOrder
 
     signal activateRequested()
     signal closeRequested()
