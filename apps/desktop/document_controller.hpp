@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #pragma once
 
+#include "calculation_frequency.hpp"
 #include "ardirec/comtrade/channel_semantics.hpp"
 #include "ardirec/comtrade/indexed_dat.hpp"
 #include "ardirec/comtrade/parser.hpp"
@@ -48,6 +49,8 @@ class DocumentController final : public QObject {
     Q_PROPERTY(QString revisionText READ revisionText NOTIFY documentChanged)
     Q_PROPERTY(QString dataFormatText READ dataFormatText NOTIFY documentChanged)
     Q_PROPERTY(double nominalFrequency READ nominalFrequency NOTIFY documentChanged)
+    Q_PROPERTY(double calculationFrequency READ calculationFrequency NOTIFY documentChanged)
+    Q_PROPERTY(QString calculationFrequencyProvenance READ calculationFrequencyProvenance NOTIFY documentChanged)
     Q_PROPERTY(QString startTimeText READ startTimeText NOTIFY documentChanged)
     Q_PROPERTY(QString triggerTimeText READ triggerTimeText NOTIFY documentChanged)
     Q_PROPERTY(QString recordHealth READ recordHealth NOTIFY documentChanged)
@@ -84,11 +87,23 @@ public:
     QString revisionText() const { return m_revisionText; }
     QString dataFormatText() const { return m_dataFormatText; }
     double nominalFrequency() const { return m_nominalFrequency; }
+    double calculationFrequency() const {
+        const auto selection = calculationFrequencySelectionFor(m_datStore);
+        if (std::isfinite(selection.hz) && selection.hz > 1.0) return selection.hz;
+        return m_nominalFrequency > 1.0 ? m_nominalFrequency : 50.0;
+    }
+    QString calculationFrequencyProvenance() const {
+        const auto selection = calculationFrequencySelectionFor(m_datStore);
+        if (std::isfinite(selection.hz) && selection.hz > 1.0 && !selection.provenance.empty()) {
+            return QString::fromStdString(selection.provenance);
+        }
+        return QStringLiteral("COMTRADE nominal");
+    }
     QString startTimeText() const { return m_startTimeText; }
     QString triggerTimeText() const { return m_triggerTimeText; }
     QString recordHealth() const { return m_recordHealth; }
     QStringList diagnostics() const { return m_diagnostics; }
-    int diagnosticCount() const { return m_diagnostics.size(); }
+    int diagnosticCount() const { return static_cast<int>(m_diagnostics.size()); }
     QString valueRepresentation() const { return m_valueRepresentation; }
     bool transformerRatiosAvailable() const { return m_transformerRatiosAvailable; }
     QString transformerRatioSummary() const { return m_transformerRatioSummary; }

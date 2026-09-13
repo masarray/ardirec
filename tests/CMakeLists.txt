@@ -134,6 +134,8 @@ if(TARGET Qt6::Core)
 
     qt_add_executable(ardirec_locus_snapshot_tests
         test_locus_snapshot.cpp
+        ../apps/desktop/cursor_snapshot_controller.cpp
+        ../apps/desktop/cursor_snapshot_controller.hpp
         ../apps/desktop/locus_snapshot_controller.cpp
         ../apps/desktop/locus_snapshot_controller.hpp
         ../apps/desktop/document_loader.cpp

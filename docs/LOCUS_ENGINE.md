@@ -11,19 +11,36 @@ ArdIREC treats the R-X locus as an engineering calculation first and a visualiza
 - Phase-phase loops use line-line voltage and line-current difference on the phase-loop impedance plane.
 - For classical Siemens/SIGRA earth compensation, `RE/RL` and `XE/XL` remain independent real factors. They are never collapsed into a synthetic complex `kL` using an assumed line angle. A complex `kL` path remains available only for formats that explicitly provide it or provide enough line data for an unambiguous conversion.
 - A low measuring-current condition is invalid, not an arbitrarily large finite impedance.
-- C1/C2 readouts and the rendered trajectory must use exactly the same channel mapping, DFT window, residual-current convention, compensation model, current floor, and validity rules.
+- C1/C2 readouts and the rendered trajectory must use exactly the same channel mapping, DFT frequency, timestamp weighting, measuring window, residual-current convention, compensation model, current floor, and validity rules.
 
 ## Frequency policy
 
-SIGRA determines the calculation frequency from the prefault positive-sequence space vector when a valid prefault state is available, and falls back to the COMTRADE frequency otherwise. R1.1 keeps the COMTRADE nominal frequency as the calculation frequency because the EPRI parity record is a stable 50 Hz record; prefault-frequency estimation is a separate compatibility hardening item and must be qualified before replacing the nominal-frequency path.
+The calculation frequency is selected once during the background document-load pipeline and then shared by cursor snapshots and Locus workers.
 
-The UI must never imply that a derived frequency is being used when only the COMTRADE nominal frequency is active.
+1. Prefer a bounded prefault positive-sequence space-vector estimate from the three phase voltages.
+2. If a valid voltage triplet is unavailable, try the three phase currents.
+3. Inspect at most 8,192 prefault samples and reject weak, implausible, or poorly fitted angle progression.
+4. Fall back explicitly to the COMTRADE nominal frequency when no qualified prefault estimate exists.
 
-## COMTRADE sampling
+The status bar exposes both `fn` (COMTRADE nominal) and `fcalc` plus its provenance. The UI must never imply that a derived frequency is active when the nominal fallback is being used.
 
-COMTRADE can describe records with different sample-rate sections. The timestamp index therefore remains the primary time coordinate and no renderer may assume one global sample interval.
+Frequency estimation remains outside paint, scene-graph, and pointer paths. Scrubbing C1/C2 does not rerun the prefault estimator.
 
-R1.1 is qualified for the current single-rate production path. Before multi-rate records are declared SIGRA-equivalent, add a golden fixture whose one-cycle DFT window crosses a sample-rate boundary and qualify the weighting/interpolation policy against the actual timestamps. A renderer must never resample or reinterpret the numerical data merely to make the trajectory smoother.
+## COMTRADE sampling and DFT weighting
+
+COMTRADE can describe records with different sample-rate sections. The timestamp index is therefore the primary time coordinate and no renderer or numerical worker may assume one global sample interval.
+
+A full-cycle DFT uses causal timestamp-cell quadrature:
+
+- the window starts exactly one calculation-frequency period before the requested instant, clipped only by the beginning of the record;
+- no sample later than the requested instant can contribute;
+- each sample is weighted by its local midpoint cell clipped to the exact window boundaries;
+- phasor normalization uses accumulated time weight, not sample count;
+- the same kernel is used by shared C1/C2 snapshots and native Locus trajectories.
+
+This prevents a higher-rate section from receiving disproportionate numerical weight when a measuring window crosses a COMTRADE rate boundary. Numerical calculation is never resampled merely to make a trajectory smoother.
+
+The R1.2 production regression fixture crosses a 1000 -> 2000 sample/s boundary inside a one-cycle window while carrying harmonic/DC contamination and a 50.4 Hz fundamental against a 50 Hz nominal declaration. Both cursor and Locus paths must recover the same fundamental impedance within tolerance.
 
 ## Correct impedance plane
 
@@ -60,6 +77,7 @@ Earth and phase-phase diagrams have independent transforms and equal R/X enginee
 
 - No DAT traversal or DFT in `updatePaintNode()`, Canvas paint handlers, or pointer handlers.
 - Heavy work remains cancellable and off the GUI/render thread.
+- Prefault frequency estimation is bounded and performed during background document load.
 - Cursor requests are latest-wins.
 - Native render geometry remains bounded.
 - Zooming changes transforms only; it must not alter numerical results.
@@ -70,14 +88,14 @@ Earth and phase-phase diagrams have independent transforms and equal R/X enginee
 A locus change is not complete until all of the following remain green:
 
 - distance core tests;
-- production-path async locus golden tests;
+- production-path async cursor/Locus golden tests, including the multi-rate boundary fixture;
 - recovery correctness contract;
 - performance contract;
 - large-record contract;
 - CodeQL;
 - Windows packaged application startup smoke.
 
-The SIGRA parity fixture intentionally combines explicit COMTRADE phase metadata, a measured `IE` channel, a classical `RE/RL` + `XE/XL` RIO sidecar, and a binary transition so those semantics cannot regress independently.
+The SIGRA parity fixture intentionally combines explicit COMTRADE phase metadata, a measured `IE` channel, a classical `RE/RL` + `XE/XL` RIO sidecar, and a binary transition so those semantics cannot regress independently. The multi-rate fixture separately locks frequency provenance and timestamp-weighted DFT behavior.
 
 ## External engineering references
 

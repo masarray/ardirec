@@ -78,36 +78,63 @@ Rectangle {
         StatusLabel {
             visible: root.hasRecord
             text: "fn " + root.document.nominalFrequency.toFixed(2) + " Hz"
+            ToolTip.visible: nominalFrequencyHover.containsMouse
+            ToolTip.text: "Nominal system frequency declared by COMTRADE"
+            MouseArea {
+                id: nominalFrequencyHover
+                anchors.fill: parent
+                hoverEnabled: true
+                acceptedButtons: Qt.NoButton
+            }
         }
 
-        Separator { visible: root.hasRecord && root.width >= 880 }
+        Separator { visible: root.hasRecord && root.width >= 980 }
 
         StatusLabel {
-            visible: root.hasRecord && root.width >= 880
+            visible: root.hasRecord && root.width >= 980
+            Layout.maximumWidth: 235
+            text: "fcalc " + root.document.calculationFrequency.toFixed(3) + " Hz · "
+                  + root.document.calculationFrequencyProvenance
+            color: "#536875"
+            ToolTip.visible: calculationFrequencyHover.containsMouse
+            ToolTip.text: "Shared full-cycle DFT frequency used by cursor and Locus calculations. "
+                          + root.document.calculationFrequencyProvenance
+            MouseArea {
+                id: calculationFrequencyHover
+                anchors.fill: parent
+                hoverEnabled: true
+                acceptedButtons: Qt.NoButton
+            }
+        }
+
+        Separator { visible: root.hasRecord && root.width >= 1120 }
+
+        StatusLabel {
+            visible: root.hasRecord && root.width >= 1120
             text: "COMTRADE " + root.document.revisionText + " · " + root.document.dataFormatText
         }
 
-        Separator { visible: root.hasRecord && root.width >= 1040 }
+        Separator { visible: root.hasRecord && root.width >= 1240 }
 
         StatusLabel {
-            visible: root.hasRecord && root.width >= 1040
+            visible: root.hasRecord && root.width >= 1240
             text: root.document.analogCount + "A / " + root.document.digitalCount + "D · "
                   + Number(root.document.sampleCount).toLocaleString(Qt.locale()) + " samples"
         }
 
-        Separator { visible: root.hasRecord && root.width >= 1260 }
+        Separator { visible: root.hasRecord && root.width >= 1450 }
 
         StatusLabel {
-            visible: root.hasRecord && root.width >= 1260
+            visible: root.hasRecord && root.width >= 1450
             Layout.maximumWidth: 245
             text: root.document.transformerRatioSummary
             color: root.document.transformerRatiosAvailable ? "#4f5961" : "#8a6d3b"
         }
 
-        Separator { visible: root.hasRecord && root.width >= 1420 }
+        Separator { visible: root.hasRecord && root.width >= 1580 }
 
         StatusLabel {
-            visible: root.hasRecord && root.width >= 1420
+            visible: root.hasRecord && root.width >= 1580
             text: "ready " + Number(root.document.lastLoadMilliseconds).toLocaleString(Qt.locale()) + " ms"
             color: "#65717a"
             ToolTip.visible: loadTimingHover.containsMouse
@@ -123,7 +150,7 @@ Rectangle {
         Item { Layout.fillWidth: true }
 
         StatusLabel {
-            visible: root.hasRecord && root.width >= 1120
+            visible: root.hasRecord && root.width >= 1180
             text: "View " + root.relativeMs(root.viewStart).toFixed(2) + " … "
                   + root.relativeMs(root.viewEnd).toFixed(2) + " ms · " + root.zoomFactor.toFixed(2) + "×"
         }

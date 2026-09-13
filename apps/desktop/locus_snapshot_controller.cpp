@@ -2,6 +2,7 @@
 #include "locus_snapshot_controller.hpp"
 
 #include "ardirec/distance/distance.hpp"
+#include "ardirec/power/timestamped_dft.hpp"
 #include "distance_compensation.hpp"
 
 #include <QFutureWatcher>
@@ -71,32 +72,14 @@ double unit_scale_to_si(QString unit) {
     return 1.0;
 }
 
-std::pair<std::size_t, std::size_t> one_cycle_window(const std::vector<double>& times,
-                                                     double absoluteTimeSeconds,
-                                                     double frequency) {
-    if (times.size() < 2) return {0, times.size()};
-    const double period = 1.0 / frequency;
-    const double endTime = std::clamp(absoluteTimeSeconds, times.front(), times.back());
-    const double startTime = std::max(times.front(), endTime - period);
-    auto firstIt = std::lower_bound(times.begin(), times.end(), startTime);
-    auto endIt = std::upper_bound(times.begin(), times.end(), endTime);
-    std::size_t first = static_cast<std::size_t>(std::distance(times.begin(), firstIt));
-    std::size_t end = static_cast<std::size_t>(std::distance(times.begin(), endIt));
-    end = std::min(end, times.size());
-    if (end > first + 2 && times[end - 1] - times[first] >= period * (1.0 - 1.0e-8)) ++first;
-    return end > first ? std::pair{first, end} : std::pair<std::size_t, std::size_t>{0, 0};
-}
-
 bool window_has_status_change(const std::vector<double>& edges,
-                              const std::vector<double>& times,
-                              std::size_t first,
-                              std::size_t end) {
-    if (edges.empty() || first >= end || end > times.size()) return false;
+                              double startSeconds,
+                              double endSeconds) {
+    if (edges.empty() || !std::isfinite(startSeconds) || !std::isfinite(endSeconds)
+        || endSeconds < startSeconds) return false;
     constexpr double epsilon = 1.0e-10;
-    const double start = times[first] - epsilon;
-    const double finish = times[end - 1] + epsilon;
-    const auto it = std::lower_bound(edges.begin(), edges.end(), start);
-    return it != edges.end() && *it <= finish;
+    const auto it = std::lower_bound(edges.begin(), edges.end(), startSeconds - epsilon);
+    return it != edges.end() && *it <= endSeconds + epsilon;
 }
 
 int loop_index(const QString& loopId) {
@@ -270,7 +253,7 @@ struct LocusSnapshotSource {
     double residualScale{1.0};
     double residualToSumMultiplier{1.0};
     ardirec::desktop::ClassicalGroundingFactors classicalGrounding;
-    double nominalFrequency{50.0};
+    double calculationFrequency{50.0};
     double referenceTime{0.0};
     double currentFloor{1.0e-6};
 };
@@ -300,35 +283,54 @@ bool batch_phasors_at(const LocusSnapshotSource& source,
                       const std::shared_ptr<std::atomic_bool>& cancel) {
     const auto& times = *source.times;
     if (sampleIndex >= times.size()) return false;
-    const auto [first, end] = one_cycle_window(times, times[sampleIndex], source.nominalFrequency);
-    if (first >= end || end - first < 4) return false;
-    if (source.statusEdges && window_has_status_change(*source.statusEdges, times, first, end)) {
+    const double frequency = source.calculationFrequency > 1.0 ? source.calculationFrequency : 50.0;
+    const auto window = ardirec::power::trailing_cycle_window(times, times[sampleIndex], frequency);
+    if (!window.valid() || window.end - window.first < 4u) return false;
+    if (source.statusEdges && window_has_status_change(*source.statusEdges,
+                                                       window.start_seconds,
+                                                       window.end_seconds)) {
         statusRejected = true;
         return false;
     }
 
     std::array<std::complex<long double>, 7> accum{};
+    std::array<long double, 7> weightSum{};
     std::array<std::size_t, 7> count{};
-    const double omega = 2.0 * kPi * source.nominalFrequency;
-    for (std::size_t sample = first; sample < end; ++sample) {
-        if (cancel && ((sample - first) & 15u) == 0u && cancel->load(std::memory_order_relaxed)) return false;
+    const double omega = 2.0 * kPi * frequency;
+    for (std::size_t sample = window.first; sample < window.end; ++sample) {
+        if (cancel && ((sample - window.first) & 15u) == 0u && cancel->load(std::memory_order_relaxed)) return false;
+        const double weight = ardirec::power::timestamp_cell_weight(times, window, sample);
+        if (!(weight > 0.0) || !std::isfinite(weight)) continue;
         const long double angle = -static_cast<long double>(omega * (times[sample] - source.referenceTime));
         const std::complex<long double> basis{std::cos(angle), std::sin(angle)};
+        const long double weighted = static_cast<long double>(weight);
         for (std::size_t phase = 0; phase < 3; ++phase) {
             const int vc = source.voltage[phase];
             if (vc >= 0) {
                 const double value = source.data->analogValue(sample, static_cast<std::size_t>(vc));
-                if (std::isfinite(value)) { accum[phase] += static_cast<long double>(value) * basis; ++count[phase]; }
+                if (std::isfinite(value)) {
+                    accum[phase] += static_cast<long double>(value) * basis * weighted;
+                    weightSum[phase] += weighted;
+                    ++count[phase];
+                }
             }
             const int ic = source.current[phase];
             if (ic >= 0) {
                 const double value = source.data->analogValue(sample, static_cast<std::size_t>(ic));
-                if (std::isfinite(value)) { accum[phase + 3] += static_cast<long double>(value) * basis; ++count[phase + 3]; }
+                if (std::isfinite(value)) {
+                    accum[phase + 3] += static_cast<long double>(value) * basis * weighted;
+                    weightSum[phase + 3] += weighted;
+                    ++count[phase + 3];
+                }
             }
         }
         if (source.residualCurrent >= 0) {
             const double value = source.data->analogValue(sample, static_cast<std::size_t>(source.residualCurrent));
-            if (std::isfinite(value)) { accum[6] += static_cast<long double>(value) * basis; ++count[6]; }
+            if (std::isfinite(value)) {
+                accum[6] += static_cast<long double>(value) * basis * weighted;
+                weightSum[6] += weighted;
+                ++count[6];
+            }
         }
     }
 
@@ -336,21 +338,21 @@ bool batch_phasors_at(const LocusSnapshotSource& source,
     voltage.fill({nan, nan});
     current.fill({nan, nan});
     for (std::size_t phase = 0; phase < 3; ++phase) {
-        if (source.voltage[phase] >= 0 && count[phase] >= 4) {
-            const long double scale = std::sqrt(2.0L) / static_cast<long double>(count[phase])
+        if (source.voltage[phase] >= 0 && count[phase] >= 4u && weightSum[phase] > 0.0L) {
+            const long double scale = std::sqrt(2.0L) / weightSum[phase]
                                       * static_cast<long double>(source.voltageScale[phase]);
             const auto value = accum[phase] * scale;
             voltage[phase] = {static_cast<double>(value.real()), static_cast<double>(value.imag())};
         }
-        if (source.current[phase] >= 0 && count[phase + 3] >= 4) {
-            const long double scale = std::sqrt(2.0L) / static_cast<long double>(count[phase + 3])
+        if (source.current[phase] >= 0 && count[phase + 3] >= 4u && weightSum[phase + 3] > 0.0L) {
+            const long double scale = std::sqrt(2.0L) / weightSum[phase + 3]
                                       * static_cast<long double>(source.currentScale[phase]);
             const auto value = accum[phase + 3] * scale;
             current[phase] = {static_cast<double>(value.real()), static_cast<double>(value.imag())};
         }
     }
-    if (source.residualCurrent >= 0 && count[6] >= 4) {
-        const long double scale = std::sqrt(2.0L) / static_cast<long double>(count[6])
+    if (source.residualCurrent >= 0 && count[6] >= 4u && weightSum[6] > 0.0L) {
+        const long double scale = std::sqrt(2.0L) / weightSum[6]
                                   * static_cast<long double>(source.residualScale * source.residualToSumMultiplier);
         const auto value = accum[6] * scale;
         measuredResidual = std::complex<double>{static_cast<double>(value.real()), static_cast<double>(value.imag())};
@@ -545,7 +547,9 @@ void LocusSnapshotController::rebuildSource() {
     m_classicalGroundingValid = source->classicalGrounding.valid;
     m_reOverRl = source->classicalGrounding.re_over_rl;
     m_xeOverXl = source->classicalGrounding.xe_over_xl;
-    source->nominalFrequency = m_document->nominalFrequency() > 1.0 ? m_document->nominalFrequency() : 50.0;
+    source->calculationFrequency = m_document->calculationFrequency() > 1.0
+                                       ? m_document->calculationFrequency()
+                                       : (m_document->nominalFrequency() > 1.0 ? m_document->nominalFrequency() : 50.0);
     source->referenceTime = m_document->dataStartSeconds();
 
     double currentPeak = 0.0;
@@ -621,6 +625,8 @@ QVariantMap LocusSnapshotController::snapshot() const {
             {QStringLiteral("classicalGroundingValid"), classicalGroundingValid()},
             {QStringLiteral("reOverRl"), reOverRl()},
             {QStringLiteral("xeOverXl"), xeOverXl()},
+            {QStringLiteral("calculationFrequency"), m_document ? m_document->calculationFrequency() : 0.0},
+            {QStringLiteral("calculationFrequencyProvenance"), m_document ? m_document->calculationFrequencyProvenance() : QString{}},
             {QStringLiteral("pointBudget"), m_nativeSnapshot ? m_nativeSnapshot->pointBudget : 0}};
 }
 
