@@ -5,6 +5,7 @@
 #include "distance_zone_controller.hpp"
 #include "document_controller.hpp"
 #include "harmonic_snapshot_controller.hpp"
+#include "locus_snapshot_controller.hpp"
 #include "phasor_vector_item.hpp"
 #include "rms_waveform_item.hpp"
 #include "table_snapshot_controller.hpp"
@@ -61,6 +62,7 @@ int main(int argc, char* argv[]) {
     DocumentController document;
     AnalysisController analysis(&document);
     CursorSnapshotController cursorSnapshots(&document);
+    LocusSnapshotController locusSnapshots(&document);
     HarmonicSnapshotController harmonicSnapshots(&document);
     TableSnapshotController tableSnapshots(&document);
     DistanceZoneController distanceZones;
@@ -78,6 +80,7 @@ int main(int argc, char* argv[]) {
     engine.rootContext()->setContextProperty(QStringLiteral("documentController"), &document);
     engine.rootContext()->setContextProperty(QStringLiteral("analysisController"), &analysis);
     engine.rootContext()->setContextProperty(QStringLiteral("cursorSnapshotController"), &cursorSnapshots);
+    engine.rootContext()->setContextProperty(QStringLiteral("locusSnapshotController"), &locusSnapshots);
     engine.rootContext()->setContextProperty(QStringLiteral("harmonicSnapshotController"), &harmonicSnapshots);
     engine.rootContext()->setContextProperty(QStringLiteral("tableSnapshotController"), &tableSnapshots);
     engine.rootContext()->setContextProperty(QStringLiteral("distanceZoneController"), &distanceZones);

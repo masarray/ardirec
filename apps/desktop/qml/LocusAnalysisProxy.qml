@@ -9,14 +9,13 @@ Item {
 
     property var source
     property var document
-    property string cachedKey: ""
-    property var cachedLoci: ({})
-    property int revision: 0
+    // LocusSnapshotController publishes only completed latest-generation snapshots.
+    // Bindings subscribe to revision; no heavy locus calculation runs in this QML object.
+    readonly property int revision: locusSnapshotController.revision
+    readonly property bool busy: locusSnapshotController.busy
 
     function invalidate() {
-        cachedKey = ""
-        cachedLoci = ({})
-        revision += 1
+        locusSnapshotController.invalidate()
     }
 
     function distanceLoopAvailable(loopId) {
@@ -39,33 +38,15 @@ Item {
     }
 
     function distanceLocus(loopId, startSeconds, durationSeconds, maximumPoints, kLMagnitude, kLAngle) {
-        if (!source || !document) return []
-
-        // Reading revision here is intentional: bindings calling distanceLocus() subscribe to it.
-        // When a new COMTRADE record arrives while Locus is already active, invalidate() bumps the
-        // revision and forces those bindings to ask for fresh trajectories instead of keeping an
-        // empty/stale list from the previous document state.
-        const revisionDependency = revision
+        if (!source || !document || !(durationSeconds > 0)) return []
+        // Geometry budget is tied to display needs, never to record sample count.
         const pointBudget = Math.max(16, Math.min(2048, maximumPoints))
-        const representation = document.valueRepresentation || "secondary"
-        const key = revisionDependency + "|" + representation + "|"
-                  + startSeconds.toPrecision(16) + "|" + durationSeconds.toPrecision(16)
-                  + "|" + pointBudget + "|" + Number(kLMagnitude).toPrecision(12)
-                  + "|" + Number(kLAngle).toPrecision(12)
-        if (key !== cachedKey) {
-            cachedLoci = source.distanceLoci(startSeconds, durationSeconds, pointBudget, kLMagnitude, kLAngle)
-            cachedKey = key
-        }
-        const list = cachedLoci ? cachedLoci[loopId] : null
-        return list || []
+        locusSnapshotController.request(startSeconds, durationSeconds, pointBudget,
+                                        Number(kLMagnitude), Number(kLAngle))
+        const revisionDependency = root.revision
+        return locusSnapshotController.locus(loopId) || []
     }
 
     onSourceChanged: invalidate()
     onDocumentChanged: invalidate()
-
-    Connections {
-        target: root.document
-        function onDocumentChanged() { root.invalidate() }
-        function onRepresentationChanged() { root.invalidate() }
-    }
 }
