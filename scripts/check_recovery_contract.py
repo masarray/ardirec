@@ -93,9 +93,14 @@ require("apps/desktop/qml/LocusView.qml", "locusSnapshotController.phaseRelevant
         "phase Relevant Fit must include robust valid trajectory extent")
 require("apps/desktop/qml/LocusView.qml", "cursorExtent(loops)", "Relevant Fit must retain committed engineering cursor context")
 require("apps/desktop/qml/LocusView.qml", "LocusTrajectoryItem", "locus trajectory must remain on the native retained renderer")
+require("apps/desktop/qml/LocusView.qml", "CLASSICAL RIO · 1-CYCLE BACKWARD",
+        "the UI must identify direct classical RIO compensation instead of displaying a synthetic kL")
+require("apps/desktop/qml/LocusView.qml", "locusSnapshotController.statusRejectedCount",
+        "measurement-window gaps should remain observable without per-point QML objects")
 
 # R1.4 SIGRA parity: production locus semantics must use COMTRADE metadata,
-# measured residual current when trustworthy, and explicit event-window gaps.
+# measured residual current, trailing one-cycle validity, and direct classical
+# RE/RL-XE/XL compensation when that is what the RIO file supplies.
 require("apps/desktop/locus_snapshot_controller.cpp", "m_document->channelPhase(index)",
         "Locus channel binding must honor cached COMTRADE phase metadata before name fallback")
 require("apps/desktop/locus_snapshot_controller.cpp", "residual_to_sum_multiplier",
@@ -106,15 +111,23 @@ require("apps/desktop/locus_snapshot_controller.cpp", "window_has_status_change"
         "a fault/trip/status change inside the one-cycle window must create an invalid gap")
 require("apps/desktop/locus_snapshot_controller.cpp", "m_document->digitalEdgeTimes()",
         "Locus worker must consume immutable document event timing rather than infer events visually")
+require("apps/desktop/locus_snapshot_controller.cpp", "read_classical_grounding_factors",
+        "the RIO classical factors must be preserved as independent RE/RL and XE/XL values")
+require("apps/desktop/locus_snapshot_controller.cpp", "distance_impedance_rerl_xexl",
+        "earth-loop production calculations must support direct SIGRA classical compensation")
+forbid("apps/desktop/locus_snapshot_controller.cpp", "grounding_factor_from_rerl_xexl",
+       "production locus must not synthesize complex kL from RE/RL-XE/XL using an assumed line angle")
 require("apps/desktop/locus_snapshot_controller.cpp", "kMaximumAnalysisPoints = 65536u",
         "analysis fidelity must be separated from the bounded native render budget")
 require("apps/desktop/locus_snapshot_controller.cpp", "simplify_bounded",
         "high-resolution numerical loci must be shape-simplified before native rendering, not time-stride aliased")
 require("core/include/ardirec/distance/distance.hpp", "residual_current",
         "distance core must accept a measured 3I0 residual with phase-sum fallback")
+require("core/include/ardirec/distance/distance.hpp", "distance_impedance_rerl_xexl",
+        "distance core must expose the direct classical RE/RL-XE/XL solver")
 
 # C1/C2 markers and numeric R/X must share exactly the same distance semantics as
-# the trajectory: phase metadata, measured residual and event-window validity.
+# the trajectory: phase metadata, measured residual, classical RIO and window validity.
 require("apps/desktop/cursor_snapshot_controller.cpp", "m_document->channelPhase(index)",
         "cursor snapshots must honor cached COMTRADE phase metadata")
 require("apps/desktop/cursor_snapshot_controller.cpp", "m_document->digitalEdgeTimes()",
@@ -123,19 +136,25 @@ require("apps/desktop/cursor_snapshot_controller.cpp", "residual_to_sum_multipli
         "cursor distance values must understand IE/3I0 reference direction")
 require("apps/desktop/cursor_snapshot_controller.cpp", 'QStringLiteral("statusWindowValid")',
         "cursor snapshot must carry explicit measurement-window validity")
-require("apps/desktop/cursor_snapshot_controller.cpp", "measuredResidual",
-        "cursor earth-loop calculation must pass measured residual current to the distance core")
+require("apps/desktop/cursor_snapshot_controller.cpp", "distance_impedance_rerl_xexl",
+        "cursor earth-loop calculation must use the same classical RIO solver as the trajectory")
+forbid("apps/desktop/cursor_snapshot_controller.cpp", "grounding_factor_from_rerl_xexl",
+       "cursor distance must not synthesize kL from classical RIO ratios")
 
 # Production-path numerical regression fixtures: the async native locus engine,
 # not only the compatibility AnalysisController API, must be tested against both
-# the 100-ohm opening case and SIGRA-specific measured-IE/status-window semantics.
+# the 100-ohm opening case and SIGRA-specific classical/status-window semantics.
 require("tests/test_locus_snapshot.cpp", "distance_p1.cfg", "async locus production path requires the original deterministic fixture")
 require("tests/test_locus_snapshot.cpp", "100.0", "golden energized impedance must stay locked")
 require("tests/test_locus_snapshot.cpp", "post-open", "low-current invalid/gap semantics must stay locked")
 require("tests/test_locus_snapshot.cpp", "distance_sigra_parity.cfg",
-        "SIGRA parity fixture must exercise metadata, measured IE, and event-window validity")
+        "SIGRA parity fixture must exercise metadata, measured IE, classical RIO and event-window validity")
+require("tests/test_locus_snapshot.cpp", "classicalGroundingValid",
+        "production-path test must prove the matching RIO sidecar selects classical compensation")
 require("tests/test_locus_snapshot.cpp", "statusRejectedCount",
         "SIGRA status-window rejection must remain observable in the native snapshot")
+require("tests/data/distance_sigra_parity.rio", "RE/RL", "SIGRA parity fixture must carry the resistance compensation ratio")
+require("tests/data/distance_sigra_parity.rio", "XE/XL", "SIGRA parity fixture must carry the reactance compensation ratio")
 require("tests/CMakeLists.txt", "ardirec_locus_snapshot_tests", "golden production-path locus test must run under CTest")
 
 if FAILURES:
