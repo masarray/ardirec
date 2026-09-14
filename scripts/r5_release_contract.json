@@ -1,0 +1,54 @@
+{
+  "schema": 1,
+  "baseline": {
+    "version": "0.2.0-alpha.22",
+    "commit": "0aa1c14e78e284a4224b0699621ecd939f020238",
+    "release_qualified": false,
+    "umbrella_issue": 71,
+    "contract_issue": 72
+  },
+  "locked_blobs": {
+    "core/src/distance/distance.cpp": "f404e0790a850c008edddfda525f065ba3679ed7",
+    "tests/data/distance_sigra_parity.cfg": "1964595a41da6de9ed7f132576bdb64bd6b35f99",
+    "tests/data/distance_sigra_parity.dat": "3389421a269a522ad80989279df19c9036cc3a5b",
+    "tests/data/distance_sigra_parity.rio": "23cec142cdec7d16f9efe79984b81768e1aac65d",
+    "tests/data/ligne_1_sigra.rio": "25902ae68e895a9cd2e186e4265facadb236a3d0"
+  },
+  "contracts": {
+    "linked_local_cursors": {
+      "stage": "R5.1",
+      "issue": 73,
+      "expected": "known_fail"
+    },
+    "phasor_committed_frame": {
+      "stage": "R5.2",
+      "issue": 74,
+      "expected": "known_fail"
+    },
+    "phasor_retained_qsg": {
+      "stage": "R5.2",
+      "issue": 74,
+      "expected": "known_fail"
+    },
+    "table_async_atomic_frame": {
+      "stage": "R5.3",
+      "issue": 75,
+      "expected": "known_fail"
+    },
+    "table_stable_geometry": {
+      "stage": "R5.3",
+      "issue": 75,
+      "expected": "known_fail"
+    },
+    "locus_cursor_independent_viewport": {
+      "stage": "R5.4",
+      "issue": 76,
+      "expected": "known_fail"
+    },
+    "full_backward_cycle": {
+      "stage": "R5.4",
+      "issue": 76,
+      "expected": "known_fail"
+    }
+  }
+}

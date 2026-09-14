@@ -1,3 +1,7 @@
+# Recovery Definition of Done
+
+> **R5 release-readiness supersession (2026-09-14):** R4 remains the durable architectural/runtime qualification for issue #62, but manual Windows comparison exposed release-blocking behavior that R4 did not model. Therefore `0.2.0-alpha.22` is an architectural baseline, **not a release-qualified build**. Release readiness is now governed by `docs/R5_RELEASE_QUALITY_CONTRACT.md` and umbrella issue #71. R5 must complete through R5.5 before an RC is allowed.
+
 # R4 — Recovery Definition of Done
 
 This document is the durable acceptance map for issue #62. Recovery is complete only when the executable evidence below is green on the exact pull-request head and again on the merged `main` commit, together with CodeQL, the large-record contracts, and the staged Windows startup smoke test.
@@ -85,4 +89,4 @@ R4 is not complete on compilation alone. The exact PR head and the merged `main`
 8. packaged `ardirec.exe` startup smoke;
 9. portable ZIP construction and artifact upload.
 
-The R4 candidate is `0.2.0-alpha.22`. Issue #62 may be closed as completed only after the post-merge `main` evidence above is green.
+The R4 candidate is `0.2.0-alpha.22`. Issue #62 may be closed as completed only after the post-merge `main` evidence above is green. That R4 completion is historical architectural qualification only; R5 now controls release readiness.
