@@ -39,6 +39,9 @@ endif()
 
 if(ARDIREC_BUILD_TESTS)
     add_subdirectory(tests)
+    if(TARGET Qt6::Quick AND TARGET Qt6::Qml AND TARGET Qt6::Concurrent)
+        include(tests/R5LocusParity.cmake)
+    endif()
 endif()
 
 if(ARDIREC_BUILD_BENCHMARKS)

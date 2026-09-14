@@ -59,6 +59,8 @@ Rectangle {
     readonly property var earthZones: distanceMode ? zonesForFamily(earthLoops) : []
     readonly property var phaseZones: distanceMode ? zonesForFamily(phaseLoops) : []
 
+    LocusFitPolicy { id: fitPolicy }
+
     function snapshotMatches(snapshot, timeSeconds) {
         return snapshot && snapshot.valid && Number.isFinite(snapshot.time)
                && Math.abs(Number(snapshot.time) - Number(timeSeconds)) <= 1.0e-10
@@ -154,38 +156,6 @@ Rectangle {
         return result
     }
 
-    function zoneMagnitude(zones) {
-        let r = 0.0, x = 0.0
-        for (let zone of zones) {
-            if (zone.kind === "circle") {
-                r = Math.max(r, Math.abs(zone.centerR) + Math.abs(zone.radius))
-                x = Math.max(x, Math.abs(zone.centerX) + Math.abs(zone.radius))
-            } else if (zone.kind === "polygon" && zone.points) {
-                for (let point of zone.points) {
-                    if (!Number.isFinite(point.r) || !Number.isFinite(point.x)) continue
-                    r = Math.max(r, Math.abs(point.r))
-                    x = Math.max(x, Math.abs(point.x))
-                }
-            }
-        }
-        return {r:r, x:x}
-    }
-
-    function cursorExtent(loops) {
-        let r = 0.0, x = 0.0
-        for (let loop of loops) {
-            const a = cursorAValues[loop] || ({valid:false})
-            const b = cursorBValues[loop] || ({valid:false})
-            if (a.valid && Number.isFinite(a.r) && Number.isFinite(a.x)) {
-                r = Math.max(r, Math.abs(a.r)); x = Math.max(x, Math.abs(a.x))
-            }
-            if (b.valid && Number.isFinite(b.r) && Number.isFinite(b.x)) {
-                r = Math.max(r, Math.abs(b.r)); x = Math.max(x, Math.abs(b.x))
-            }
-        }
-        return {r:r, x:x}
-    }
-
     function niceCeil(value) {
         if (!Number.isFinite(value) || value <= 0) return 1.0
         const exponent = Math.floor(Math.log(value) / Math.LN10)
@@ -208,23 +178,12 @@ Rectangle {
         return 10 * base
     }
 
-    // Relevant fit is family-local and uses protection zones, committed cursors,
-    // and the robust 99th-percentile valid trajectory extent. This avoids both
-    // clipping the meaningful path and letting rare forensic outliers dominate.
-    // Fit All remains the exact finite family extent with no numerical clipping.
-    function distanceTarget(zones, loops, fullR, fullX, relevantR, relevantX) {
-        const zone = zoneMagnitude(zones)
-        if (fitMode === "all") {
-            return {
-                r: niceCeil(Math.max(3.0, zone.r, Number(fullR)) * 1.08),
-                x: niceCeil(Math.max(3.0, zone.x, Number(fullX)) * 1.08)
-            }
-        }
-        const cursor = cursorExtent(loops)
-        return {
-            r: niceCeil(Math.max(3.0, zone.r, cursor.r, Number(relevantR)) * 1.12),
-            x: niceCeil(Math.max(3.0, zone.x, cursor.x, Number(relevantX)) * 1.12)
-        }
+    // Fit Relevant deliberately follows protection context when zones are loaded.
+    // Cursor markers and remote finite poles never resize the investigation view.
+    // With no protection zones the controller's robust trajectory extents provide
+    // the fallback. Fit All always exposes the complete finite forensic trajectory.
+    function distanceTarget(zones, fullR, fullX, relevantR, relevantX) {
+        return fitPolicy.distanceTarget(zones, fullR, fullX, relevantR, relevantX, fitMode)
     }
 
     function rawTarget() {
@@ -242,7 +201,7 @@ Rectangle {
         const bottom = py + ph - 34
         const plotW = Math.max(20, right - left)
         const plotH = Math.max(20, bottom - top)
-        const autoScale = Math.max(1e-9, Math.min(plotW / (2 * target.r), plotH / (2 * target.x)))
+        const autoScale = fitPolicy.scaleFor(plotW, plotH, target.r, target.x)
         const scale = autoScale * locusZoom
         return {valid:true, px:px, py:py, pw:pw, ph:ph,
                 left:left, right:right, top:top, bottom:bottom,
@@ -255,7 +214,7 @@ Rectangle {
     readonly property real panelHeight: Math.max(1, (graphSurface.height - panelGap) * 0.5)
     readonly property var earthTransform: distanceMode
                                           ? panelTransform(0, 0, graphSurface.width, panelHeight,
-                                                           distanceTarget(earthZones, earthLoops,
+                                                           distanceTarget(earthZones,
                                                                           locusSnapshotController.earthMaxAbsR,
                                                                           locusSnapshotController.earthMaxAbsX,
                                                                           locusSnapshotController.earthRelevantMaxAbsR,
@@ -263,7 +222,7 @@ Rectangle {
                                           : ({valid:false})
     readonly property var phaseTransform: distanceMode
                                           ? panelTransform(0, panelHeight + panelGap, graphSurface.width, panelHeight,
-                                                           distanceTarget(phaseZones, phaseLoops,
+                                                           distanceTarget(phaseZones,
                                                                           locusSnapshotController.phaseMaxAbsR,
                                                                           locusSnapshotController.phaseMaxAbsX,
                                                                           locusSnapshotController.phaseRelevantMaxAbsR,
@@ -378,7 +337,7 @@ Rectangle {
                     checked: root.fitMode === "relevant"
                     onClicked: { root.fitMode = "relevant"; root.setLocusZoom(1.0) }
                     ToolTip.visible:hovered
-                    ToolTip.text:"Family-local fit of valid trajectory, protection zones and C1/C2; every finite point remains available in Fit All"
+                    ToolTip.text:"Protection-context fit; remote finite trajectory remains available in Fit All and C1/C2 never resize the viewport"
                 }
                 ToolButton {
                     text:"Fit All"
@@ -418,7 +377,7 @@ Rectangle {
                 }
                 Label {
                     visible: root.distanceMode
-                    text: root.fitMode === "all" ? "ALL FINITE LOCUS" : "RELEVANT FIT"
+                    text: root.fitMode === "all" ? "ALL FINITE LOCUS" : "PROTECTION FIT"
                     color: root.fitMode === "all" ? "#735f43" : "#587064"
                     font.pixelSize: 8
                     font.weight: Font.DemiBold

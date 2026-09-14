@@ -65,6 +65,7 @@ qt_add_qml_module(ardirec
         qml/PhasorView.qml
         qml/SequenceSummary.qml
         qml/LocusAnalysisProxy.qml
+        qml/LocusFitPolicy.qml
         qml/LocusView.qml
         qml/HarmonicDiagram.qml
         qml/HarmonicsView.qml

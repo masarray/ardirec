@@ -31,7 +31,7 @@ A later R5 stage may change a locked numerical anchor only when its issue contai
 
 The repository currently contains the deterministic `distance_sigra_parity` CFG/DAT/RIO fixture and the `ligne_1_sigra.rio` protection reference. The original complete `ligne_1` CFG/DAT/HDR set used for manual SIGRA comparison is not versioned in the repository. R5.0 therefore does not invent or synthesize that missing raw reference.
 
-R5.4 must either add an appropriately redistributable canonical full record with traceable expected values or keep the original record as an explicit manual Windows/SIGRA qualification input. Release qualification must state which path was used.
+R5.4 keeps the original user-supplied `ligne_1` record and SIGRA screenshots as explicit manual qualification inputs rather than silently committing private/raw field material. Issue #85 records the provenance. The repository-side executable qualification uses the locked `ligne_1_sigra.rio` protection model plus deterministic COMTRADE fixtures; final R5.5 Windows/SIGRA comparison still uses the original full record.
 
 ## Release-blocking contracts
 
@@ -96,6 +96,14 @@ Required behavior:
 - complete finite trajectory remains available through a forensic Fit All path;
 - trajectory, zones, orientation, C1/C2 markers and default viewport are compared against the SIGRA reference.
 
+R5.4 keeps the frozen Siemens/SIGRA classical earth-loop equation and all locked distance blobs unchanged. `trailing_cycle_window()` now rejects beginning-of-record requests until the complete backward period exists; it still uses timestamp-cell weighting and therefore remains valid across COMTRADE sample-rate section boundaries.
+
+Default Locus scaling is separated into `LocusFitPolicy.qml`. When protection zones are present, **Fit Relevant is protection-context driven**: the zone family defines the target engineering range and finite remote trajectory poles are allowed to clip, matching the supplied SIGRA Circle Diagrams reference. C1/C2 are overlay markers only and never participate in auto-fit. When zones are absent, the existing robust trajectory extent remains the fallback. **Fit All** still uses the complete finite family extent, so no numerical trajectory point is discarded merely to obtain a readable default view.
+
+The locked `ligne_1_sigra.rio` has an outer protection characteristic near `R = ±13.05 Ω`, `X = ±12 Ω`. With the production nice-range policy this becomes a 15 Ω target. Because the plot uses one common pixel-per-ohm scale on both axes, the wide SIGRA-like panel naturally exposes about `±100 Ω` horizontally while holding `±15 Ω` vertically—the same investigation framing seen in the supplied SIGRA screenshot, without altering impedance mathematics.
+
+`ardirec_r5_locus_parity_tests` executes three layers of evidence: complete-cycle rejection/acceptance including a multi-rate timestamp window; the production `LocusSnapshotController` on `distance_p1` proving pre-cycle points become invalid while the qualified 100+j0 Ω golden point stays unchanged; and the production `LocusFitPolicy.qml` against `ligne_1_sigra.rio`, proving protection-context Fit Relevant remains stable despite large finite trajectory outliers while Fit All still expands to expose them.
+
 ### R5.5 — release gate (#77)
 
 The strict gate is:
@@ -115,6 +123,6 @@ R5.0 intentionally records alpha.22 defects as `known_fail`; it does not hide th
 This gives R5 two useful modes:
 
 - normal CI: prove the repository and manifest agree about remaining blockers;
-- `--require-release-ready`: prove there are **zero** remaining blockers.
+- `--require-release-ready`: prove there are **zero** remaining blocker contracts, before the additional R5.5 packaging/manual gates are applied.
 
 A stage is not complete because documentation says so. Each R5.1–R5.4 implementation PR must promote its own contract(s) to `pass`, add runtime/numerical tests where appropriate, pass exact-head gates, merge, and pass the same gates again on `main`.
