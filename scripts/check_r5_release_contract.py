@@ -45,30 +45,67 @@ def git_blob_sha(relative: str) -> str:
 
 
 def probe_linked_local_cursors() -> bool:
-    main = read_text("apps/desktop/qml/Main.qml")
-    views = {
-        name: read_text(f"apps/desktop/qml/{name}")
-        for name in (
-            "TimeSignalsView.qml",
-            "PhasorView.qml",
-            "LocusView.qml",
-            "HarmonicsView.qml",
-            "ValueTableView.qml",
-        )
-    }
+    main = compact(read_text("apps/desktop/qml/Main.qml"))
+    host = compact(read_text("apps/desktop/qml/AnalysisViewHost.qml"))
+    workspace = compact(read_text("apps/desktop/qml/MdiWorkspace.qml"))
+    cmake = read_text("tests/CMakeLists.txt")
+    runtime = read_text("tests/test_r5_linked_cursors.cpp")
+
+    # R5.1 deliberately places the controls in AnalysisViewHost rather than in
+    # each heavy analysis component. AnalysisViewHost is instantiated once per
+    # MDI child, so the presentation is child-local while the state remains
+    # linked through MdiWorkspace -> Main. This also keeps cursor plumbing out of
+    # Phasor/Table/Locus calculation components.
     no_global_substitute = (
         "CursorNavigator {" not in main
         and "HarmonicCursorNavigator {" not in main
     )
-    dual_local = all(
-        "CursorNavigator {" in views[name]
-        for name in ("TimeSignalsView.qml", "PhasorView.qml", "LocusView.qml")
+    dual_local = (
+        'readonly property bool dualCursorView: viewType === "time" || viewType === "phasor" || viewType === "locus"'
+        in host
+        and 'objectName: "localDualCursorNavigator"' in host
+        and "CursorNavigator {" in host
+        and "onCursorARequested: timeSeconds => root.cursorARequested(timeSeconds)" in host
+        and "onCursorBRequested: timeSeconds => root.cursorBRequested(timeSeconds)" in host
     )
-    single_local = all(
-        "HarmonicCursorNavigator {" in views[name]
-        for name in ("HarmonicsView.qml", "ValueTableView.qml")
+    single_local = (
+        'readonly property bool singleCursorView: viewType === "harmonics" || viewType === "table"'
+        in host
+        and 'objectName: "localSingleCursorNavigator"' in host
+        and "HarmonicCursorNavigator {" in host
+        and "onCursorRequested: timeSeconds => root.cursorARequested(timeSeconds)" in host
     )
-    return no_global_substitute and dual_local and single_local
+    shared_link = all(
+        token in workspace
+        for token in (
+            "cursorATime: root.cursorATime",
+            "cursorBTime: root.cursorBTime",
+            "onCursorARequested: timeSeconds => root.cursorARequested(timeSeconds)",
+            "onCursorBRequested: timeSeconds => root.cursorBRequested(timeSeconds)",
+        )
+    ) and all(
+        token in main
+        for token in (
+            "cursorATime: window.cursorATime",
+            "cursorBTime: window.cursorBTime",
+            "onCursorARequested: timeSeconds => window.cursorATime = timeSeconds",
+            "onCursorBRequested: timeSeconds => window.cursorBTime = timeSeconds",
+        )
+    )
+    runtime_regression = (
+        "ardirec_r5_linked_cursor_tests" in cmake
+        and "localCursorCount" in runtime
+        and "shared C1 update fans out" in runtime
+        and "shared C2 update fans out" in runtime
+        and "Harmonics/Table remain C1-only" in runtime
+    )
+    return (
+        no_global_substitute
+        and dual_local
+        and single_local
+        and shared_link
+        and runtime_regression
+    )
 
 
 def probe_phasor_committed_frame() -> bool:

@@ -228,5 +228,19 @@ if(TARGET Qt6::Core)
         ardirec_enable_sanitizers(ardirec_r4_qml_runtime_tests)
         add_test(NAME ardirec_r4_qml_runtime_tests COMMAND ardirec_r4_qml_runtime_tests)
         set_tests_properties(ardirec_r4_qml_runtime_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+        qt_add_executable(ardirec_r5_linked_cursor_tests
+            test_r5_linked_cursors.cpp
+        )
+        set_target_properties(ardirec_r5_linked_cursor_tests PROPERTIES AUTOMOC ON)
+        target_link_libraries(ardirec_r5_linked_cursor_tests PRIVATE Qt6::Core Qt6::Qml Qt6::Quick Qt6::QuickControls2)
+        target_compile_definitions(ardirec_r5_linked_cursor_tests PRIVATE
+            ARDIREC_QML_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../apps/desktop/qml"
+            ARDIREC_TEST_QML_DIR="${CMAKE_CURRENT_SOURCE_DIR}/qml"
+        )
+        ardirec_set_warnings(ardirec_r5_linked_cursor_tests)
+        ardirec_enable_sanitizers(ardirec_r5_linked_cursor_tests)
+        add_test(NAME ardirec_r5_linked_cursor_tests COMMAND ardirec_r5_linked_cursor_tests)
+        set_tests_properties(ardirec_r5_linked_cursor_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
     endif()
 endif()

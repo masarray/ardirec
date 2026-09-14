@@ -37,6 +37,12 @@ Item {
     property real analogTrackHeight: 148
     property real digitalTrackHeight: 28
 
+    readonly property bool dualCursorView: viewType === "time" || viewType === "phasor" || viewType === "locus"
+    readonly property bool singleCursorView: viewType === "harmonics" || viewType === "table"
+    readonly property bool localCursorVisible: hasRecord && live && (dualCursorView || singleCursorView)
+    readonly property int localCursorCount: dualCursorView ? 2 : (singleCursorView ? 1 : 0)
+    readonly property real localCursorHeight: !localCursorVisible ? 0 : (dualCursorView ? 32 : 36)
+
     signal cursorARequested(real timeSeconds)
     signal cursorBRequested(real timeSeconds)
     signal panRequested(real panFraction)
@@ -44,20 +50,68 @@ Item {
     signal digitalDisplayModeRequested(string mode)
     signal signalActivated(int channelIndex)
 
-    // Retain the QML view instance so child-local visual state survives minimize,
-    // but freeze/remove expensive inputs while the child is minimized. Closing a
-    // child destroys this host through the workspace delegate lifetime.
-    Loader {
-        id: viewLoader
+    // R5.1: cursor state remains globally linked, but every MDI child owns its
+    // presentation and interaction surface. This host lives inside each child,
+    // so duplicate analysis windows receive independent local controls backed by
+    // the same cursorATime/cursorBTime values from MdiWorkspace/Main.
+    Column {
+        id: hostColumn
         anchors.fill: parent
-        active: root.hasRecord
-        asynchronous: root.viewType !== "time"
-        visible: root.live && status === Loader.Ready
-        sourceComponent: root.viewType === "time" ? timeComponent
-                       : root.viewType === "phasor" ? phasorComponent
-                       : root.viewType === "locus" ? locusComponent
-                       : root.viewType === "harmonics" ? harmonicsComponent
-                       : tableComponent
+        spacing: 0
+
+        CursorNavigator {
+            id: dualCursorNavigator
+            objectName: "localDualCursorNavigator"
+            width: parent.width
+            height: root.localCursorVisible && root.dualCursorView ? 32 : 0
+            visible: height > 0
+            document: root.document
+            viewStart: root.viewStart
+            visibleDuration: root.visibleDuration
+            cursorATime: root.cursorATime
+            cursorBTime: root.cursorBTime
+            axisWidth: root.viewType === "time" ? root.axisWidth : 120
+            onCursorARequested: timeSeconds => root.cursorARequested(timeSeconds)
+            onCursorBRequested: timeSeconds => root.cursorBRequested(timeSeconds)
+        }
+
+        HarmonicCursorNavigator {
+            id: singleCursorNavigator
+            objectName: "localSingleCursorNavigator"
+            width: parent.width
+            height: root.localCursorVisible && root.singleCursorView ? 36 : 0
+            visible: height > 0
+            document: root.document
+            viewStart: root.viewStart
+            visibleDuration: root.visibleDuration
+            cursorTime: root.cursorATime
+            axisWidth: 170
+            labelText: root.viewType === "table" ? "TABLE CURSOR" : "HARMONIC CURSOR"
+            detailText: root.viewType === "table" ? "1-cycle engineering snapshot" : "1-cycle trailing DFT"
+            onCursorRequested: timeSeconds => root.cursorARequested(timeSeconds)
+        }
+
+        Item {
+            id: viewFrame
+            width: hostColumn.width
+            height: Math.max(0, hostColumn.height - root.localCursorHeight)
+
+            // Retain the QML view instance so child-local visual state survives minimize,
+            // but freeze/remove expensive inputs while the child is minimized. Closing a
+            // child destroys this host through the workspace delegate lifetime.
+            Loader {
+                id: viewLoader
+                anchors.fill: parent
+                active: root.hasRecord
+                asynchronous: root.viewType !== "time"
+                visible: root.live && status === Loader.Ready
+                sourceComponent: root.viewType === "time" ? timeComponent
+                               : root.viewType === "phasor" ? phasorComponent
+                               : root.viewType === "locus" ? locusComponent
+                               : root.viewType === "harmonics" ? harmonicsComponent
+                               : tableComponent
+            }
+        }
     }
 
     Component {
@@ -146,7 +200,7 @@ Item {
     }
 
     Rectangle {
-        anchors.centerIn: parent
+        anchors.centerIn: viewFrame
         width: 240
         height: 58
         radius: 3

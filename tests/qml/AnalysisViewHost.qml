@@ -36,6 +36,13 @@ Item {
     property real analogTrackHeight: 148
     property real digitalTrackHeight: 28
 
+    readonly property bool dualCursorView: viewType === "time" || viewType === "phasor" || viewType === "locus"
+    readonly property bool singleCursorView: viewType === "harmonics" || viewType === "table"
+    readonly property bool localCursorVisible: hasRecord && live && (dualCursorView || singleCursorView)
+    readonly property int localCursorCount: dualCursorView ? 2 : (singleCursorView ? 1 : 0)
+    readonly property int presentedCursorCount: localCursorVisible ? localCursorCount : 0
+    readonly property bool presentsCursorA: localCursorCount >= 1
+    readonly property bool presentsCursorB: localCursorCount === 2
     readonly property bool heavyActive: hasRecord && live && requestOwner
 
     signal cursorARequested(real timeSeconds)
@@ -44,4 +51,7 @@ Item {
     signal zoomRequested(real factor, real anchorFraction)
     signal digitalDisplayModeRequested(string mode)
     signal signalActivated(int channelIndex)
+
+    function requestCursorA(timeSeconds) { cursorARequested(timeSeconds) }
+    function requestCursorB(timeSeconds) { cursorBRequested(timeSeconds) }
 }

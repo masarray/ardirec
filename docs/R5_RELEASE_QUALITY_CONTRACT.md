@@ -47,6 +47,8 @@ Cursor **state** is shared globally, but cursor **presentation and interaction**
 
 Moving C1 or C2 in any applicable child updates the same cursor in every other applicable child. A single global cursor strip above the MDI workspace is not an acceptable substitute.
 
+R5.1 implements the presentation at the `AnalysisViewHost` boundary. That host exists once inside every MDI child, so duplicate windows each own a local interaction surface while `MdiWorkspace` and `Main` retain the single linked C1/C2 state. This avoids copying cursor plumbing into the heavy Phasor/Locus/Table calculation views and preserves one shared analysis state. Minimized children hide their local cursor surface with the rest of the non-live host. `ardirec_r5_linked_cursor_tests` executes the MDI signal path and proves C1/C2 fan-out plus the C1-only Harmonics/Table contract.
+
 ### R5.2 — Phasor committed-frame continuity (#74)
 
 Cursor scrubbing must never clear a previously committed valid Phasor frame merely because a newer asynchronous result is pending.
