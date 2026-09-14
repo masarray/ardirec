@@ -211,8 +211,8 @@ void verify_qml_stale_while_revalidate() {
     require(view != nullptr, "PhasorView runtime component is created");
     pump_events(80);
 
-    // Component completion may request the already-seeded times. Resolve that
-    // startup work first and use the resulting counts as the scrub baseline.
+    // Normalize any construction-time request behavior, then use the resulting
+    // counts as the scrub baseline. The seeded committed frame must be visible.
     probe.commitA(make_snapshot(0.020, 80.0, 0.0));
     probe.commitB(make_snapshot(0.030, 75.0, -120.0));
     pump_events(60);
@@ -251,17 +251,20 @@ void verify_qml_stale_while_revalidate() {
     require_active_vectors_stay_committed(activeVectors,
         "coalesced scrub keeps vector and legend inputs committed");
 
+    // The in-flight 0.025 result is now stale because the requested cursor is at
+    // 0.027. It must release the worker and launch the coalesced target, but it
+    // must NOT replace the frame on screen. Display goes directly 0.020 -> 0.027.
     probe.commitA(make_snapshot(0.025, 82.0, 5.0));
     pump_events(60);
     require(probe.requestsA() == baselineRequestsA + 2,
             "completion launches exactly one coalesced latest C1 request");
     QVariantMap intermediateDisplay = view->property("displaySnapshotA").toMap();
     require(intermediateDisplay.value(QStringLiteral("valid")).toBool(),
-            "intermediate atomic commit remains a valid rendered frame");
-    require_near(intermediateDisplay.value(QStringLiteral("time")).toDouble(), 0.025, 1.0e-12,
-                 "completed in-flight frame commits atomically before latest revalidation");
+            "intermediate completion cannot invalidate the rendered frame");
+    require_near(intermediateDisplay.value(QStringLiteral("time")).toDouble(), 0.020, 1.0e-12,
+                 "intermediate completed frame is skipped when a newer scrub target is pending");
     require_active_vectors_stay_committed(activeVectors,
-        "atomic commit does not blank retained vector items");
+        "skipped intermediate result does not blank retained vector items");
 
     probe.commitA(make_snapshot(0.027, 84.0, 9.0));
     pump_events(50);
