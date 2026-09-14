@@ -74,6 +74,16 @@ During pending work:
 - scroll position is preserved;
 - optional calculated/sequence information cannot create a mandatory height-changing block.
 
+R5.3 moves the Table calculation boundary into `TableSnapshotController::requestFrame()`. The controller captures immutable DAT/time/channel metadata on the GUI thread and computes the complete row set, harmonic metrics, summary, sorting and abnormal-only filtering in a `QtConcurrent` worker. Requests are bounded to one in-flight calculation plus one latest pending target. An intermediate completed calculation is not published when a newer scrub position is waiting; only the final desired result becomes the next committed `frame`.
+
+`ValueTableView.qml` consumes only the committed immutable frame. It no longer calls `snapshotAt()`, `sortedChannels()` or `summaryAt()` from bindings or delegates. The previous rows and summary stay visible with an explicit `UPDATING` state until `frameChanged` swaps the complete row model and summary together. The Table's C1 label uses the committed frame timestamp while a separate target indication can show the newer requested C1 position.
+
+The former mandatory `SequenceSummary` block is removed from the Table layout. Sequence/calculated information is not allowed to create a `hasData ? 92 : 0` vertical jump. The table header and summary strip therefore keep fixed vertical geometry, and the `ListView` restores its previous `contentY` across atomic model commits so scrubbing cannot jump the user back to the top.
+
+`ardirec_r5_table_zero_flicker_tests` qualifies both layers: with the real deterministic COMTRADE fixture it proves async row values retain the previous Table numerical semantics, a burst of cursor positions produces exactly one latest atomic publication, pending work never clears the committed rows, and close cancels worker state. Its offscreen QML runtime test proves pending/commit transitions keep row count, vertical geometry and scroll position stable.
+
+R5.3 deliberately does **not** change the Table's existing beginning-of-record measurement-window policy. Complete backward-cycle qualification remains owned by R5.4 so the zero-flicker refactor cannot silently change numerical validity rules.
+
 ### R5.4 — SIGRA Locus parity (#76)
 
 Qualified DFT/distance equations are not changed merely to make a plot look familiar. R5.4 first corrects measurement-window validity and view policy, then changes mathematics only if a golden test proves it necessary.
