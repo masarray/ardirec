@@ -117,24 +117,25 @@ int main(int argc, char* argv[]) {
         require_analysis_invalidated(cursor, locus);
 
         // R4 worker-lifetime qualification: start real cursor and locus jobs, then
-        // close immediately before either queued result can be published. Both
-        // workers must retire and their old-generation results must stay discarded.
+        // close immediately before either queued result can be published. The close
+        // itself legitimately increments the locus revision to publish invalidation;
+        // no older worker may increment it again afterward.
         document.openCfg(cfgUrl);
         wait_for_document(document);
         cursor.requestCursorA(0.040);
         cursor.requestCursorB(0.055);
-        const int locusRevisionBefore = locus.revision();
         locus.request(document.dataStartSeconds(), document.durationSeconds(), 4000, 0.0, 0.0);
         require(cursor.busyA() || cursor.busyB() || locus.busy(),
                 "at least one asynchronous analysis worker is active before close");
         document.closeDocument();
+        const int locusRevisionAfterClose = locus.revision();
         require_closed_state(document);
         require_analysis_invalidated(cursor, locus);
         pump_events(350);
         require_closed_state(document);
         require_analysis_invalidated(cursor, locus);
-        require(locus.revision() == locusRevisionBefore,
-                "stale pre-close locus callback cannot publish a new revision after document close");
+        require(locus.revision() == locusRevisionAfterClose,
+                "stale pre-close locus callback cannot publish after the close invalidation revision");
 
         std::cout << "ardirec document lifecycle tests: PASS\n";
         return 0;
