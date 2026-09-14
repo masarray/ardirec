@@ -9,6 +9,7 @@
 #include <QQmlEngine>
 #include <QQuickItem>
 #include <QQuickWindow>
+#include <QSize>
 #include <QString>
 #include <QThread>
 #include <QUrl>
@@ -18,7 +19,9 @@
 
 #include <cmath>
 #include <iostream>
+#include <memory>
 #include <stdexcept>
+#include <utility>
 
 namespace {
 void require(bool condition, const char* message) {
@@ -153,7 +156,7 @@ private:
     QUrl m_stubUrl;
 };
 
-class StubPhasorVectorItem final : public QQuickItem {
+class StubPhasorVectorItem : public QQuickItem {
     Q_OBJECT
     Q_PROPERTY(QVariant vectors READ vectors WRITE setVectors)
     Q_PROPERTY(double scaleMagnitude READ scaleMagnitude WRITE setScaleMagnitude)
@@ -211,7 +214,7 @@ void verify_mdi_runtime() {
     const QString qmlDir = QStringLiteral(ARDIREC_QML_DIR);
     const QString testQmlDir = QStringLiteral(ARDIREC_TEST_QML_DIR);
     AnalysisHostInterceptor interceptor(QUrl::fromLocalFile(testQmlDir + QStringLiteral("/AnalysisViewHost.qml")));
-    engine.setUrlInterceptor(&interceptor);
+    engine.addUrlInterceptor(&interceptor);
 
     QObject documentProbe;
     QObject analysisProbe;
