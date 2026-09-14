@@ -114,9 +114,9 @@ int main(int argc, char* argv[]) {
             wait_for_cursor(cursor, false);
             require(cursor.cursorB().value(QStringLiteral("valid")).toBool(), "swept C2 snapshot is valid");
 
-            const QVariantMap currentA = cursor.cursorA();
-            require(currentA == frozenA,
+            require(cursor.cursorA() == frozenA,
                     "sweeping C2 cannot mutate any numeric field in the committed C1 snapshot");
+            const QVariantMap currentA = cursor.cursorA();
             const ScreenVector currentScreen = screen_vector(currentA, document, 0, stableScale);
             require_near(currentScreen.fraction, frozenScreen.fraction, 1.0e-15,
                          "C2 sweep cannot change C1 normalized radial magnitude");
