@@ -46,7 +46,7 @@ signals:
 private:
     void rebuildSource();
     void request(int cursor, double absoluteTimeSeconds);
-    void cancel(int cursor) noexcept;
+    void cancel(int cursor, bool clearBusy = false) noexcept;
     void publish(int cursor, quint64 generation, const QVariantMap& snapshot);
 
     QPointer<DocumentController> m_document;
