@@ -332,34 +332,6 @@ ApplicationWindow {
             hasRecord: window.hasRecord
         }
 
-        CursorNavigator {
-            Layout.fillWidth: true
-            Layout.preferredHeight: visible ? 32 : 0
-            visible: window.hasRecord && window.viewMode !== "harmonics" && window.viewMode !== "table"
-            document: documentController
-            viewStart: window.viewStart
-            visibleDuration: window.visibleDuration
-            cursorATime: window.cursorATime
-            cursorBTime: window.cursorBTime
-            axisWidth: window.axisWidth
-            onCursorARequested: timeSeconds => window.cursorATime = timeSeconds
-            onCursorBRequested: timeSeconds => window.cursorBTime = timeSeconds
-        }
-
-        HarmonicCursorNavigator {
-            Layout.fillWidth: true
-            Layout.preferredHeight: visible ? 36 : 0
-            visible: window.hasRecord && (window.viewMode === "harmonics" || window.viewMode === "table")
-            document: documentController
-            viewStart: window.viewStart
-            visibleDuration: window.visibleDuration
-            cursorTime: window.cursorATime
-            axisWidth: window.axisWidth
-            labelText: window.viewMode === "table" ? "TABLE CURSOR" : "HARMONIC CURSOR"
-            detailText: window.viewMode === "table" ? "1-cycle engineering snapshot" : "1-cycle trailing DFT"
-            onCursorRequested: timeSeconds => window.cursorATime = timeSeconds
-        }
-
         Rectangle {
             id: workspace
             Layout.fillWidth: true

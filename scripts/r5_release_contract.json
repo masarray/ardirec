@@ -18,7 +18,7 @@
     "linked_local_cursors": {
       "stage": "R5.1",
       "issue": 73,
-      "expected": "known_fail"
+      "expected": "pass"
     },
     "phasor_committed_frame": {
       "stage": "R5.2",
