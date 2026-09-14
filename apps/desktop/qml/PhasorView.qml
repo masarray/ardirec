@@ -18,11 +18,13 @@ Rectangle {
 
     readonly property var snapshotA: cursorSnapshotController.cursorA
     readonly property var snapshotB: cursorSnapshotController.cursorB
-    // R5.2 stale-while-revalidate: the last committed immutable frame remains
-    // visible while a newer cursor request is pending. A frame is replaced only
-    // when CursorSnapshotController atomically publishes the next result.
-    readonly property var displaySnapshotA: snapshotA && snapshotA.valid ? snapshotA : ({valid:false})
-    readonly property var displaySnapshotB: snapshotB && snapshotB.valid ? snapshotB : ({valid:false})
+    // R5.2 keeps a child-local committed presentation frame. Controller results
+    // that finish for an intermediate scrub position are not allowed to replace
+    // this frame when a newer cursor target is already queued.
+    property var committedSnapshotA: ({valid:false})
+    property var committedSnapshotB: ({valid:false})
+    readonly property var displaySnapshotA: committedSnapshotA
+    readonly property var displaySnapshotB: committedSnapshotB
     property real pendingCursorATime: cursorATime
     property real pendingCursorBTime: cursorBTime
     property bool cursorARequestQueued: false
@@ -97,6 +99,30 @@ Rectangle {
         return maximum > 0.0 ? maximum * 1.02 : 0.0
     }
 
+    function acceptSnapshotA() {
+        const candidate = root.snapshotA
+        if (candidate && candidate.valid) {
+            if (!root.committedSnapshotA.valid || root.snapshotMatches(candidate, root.cursorATime))
+                root.committedSnapshotA = candidate
+            return
+        }
+        // A final invalid result may clear the display. An invalid intermediate
+        // completion cannot blank the last valid frame if a newer target exists.
+        if (!cursorSnapshotController.busyA && !root.cursorARequestQueued)
+            root.committedSnapshotA = ({valid:false})
+    }
+
+    function acceptSnapshotB() {
+        const candidate = root.snapshotB
+        if (candidate && candidate.valid) {
+            if (!root.committedSnapshotB.valid || root.snapshotMatches(candidate, root.cursorBTime))
+                root.committedSnapshotB = candidate
+            return
+        }
+        if (!cursorSnapshotController.busyB && !root.cursorBRequestQueued)
+            root.committedSnapshotB = ({valid:false})
+    }
+
     // R5.2 bounds scrub work to one in-flight request plus one coalesced latest
     // target per cursor. Intermediate mouse positions do not fan out unbounded
     // QtConcurrent work; the last requested position is launched when the active
@@ -105,6 +131,7 @@ Rectangle {
         root.pendingCursorATime = timeSeconds
         if (!root.requestOwner || !root.document || !root.visible) return
         if (root.snapshotMatches(root.snapshotA, timeSeconds)) {
+            root.committedSnapshotA = root.snapshotA
             root.cursorARequestQueued = false
             return
         }
@@ -120,6 +147,7 @@ Rectangle {
         root.pendingCursorBTime = timeSeconds
         if (!root.requestOwner || !root.document || !root.visible) return
         if (root.snapshotMatches(root.snapshotB, timeSeconds)) {
+            root.committedSnapshotB = root.snapshotB
             root.cursorBRequestQueued = false
             return
         }
@@ -142,6 +170,8 @@ Rectangle {
 
     Connections {
         target: cursorSnapshotController
+        function onCursorAChanged() { root.acceptSnapshotA() }
+        function onCursorBChanged() { root.acceptSnapshotB() }
         function onBusyAChanged() {
             if (cursorSnapshotController.busyA || !root.cursorARequestQueued
                     || !root.requestOwner || !root.visible) return
@@ -176,7 +206,11 @@ Rectangle {
             cursorBRequestQueued = false
         }
     }
-    Component.onCompleted: if (visible && requestOwner) Qt.callLater(requestSnapshots)
+    Component.onCompleted: {
+        root.acceptSnapshotA()
+        root.acceptSnapshotB()
+        if (visible && requestOwner) Qt.callLater(requestSnapshots)
+    }
 
     ColumnLayout {
         anchors.fill: parent
@@ -205,7 +239,7 @@ Rectangle {
                         font.weight: Font.DemiBold
                     }
                     Label {
-                        text: "Committed-frame one-cycle DFT · stale frame remains visible while the latest cursor calculation is pending"
+                        text: "Committed-frame one-cycle DFT · stale frame remains visible until the latest cursor result commits"
                         color: "#778087"
                         font.pixelSize: 8
                     }
