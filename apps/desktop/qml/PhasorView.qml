@@ -18,8 +18,21 @@ Rectangle {
 
     readonly property var snapshotA: cursorSnapshotController.cursorA
     readonly property var snapshotB: cursorSnapshotController.cursorB
-    readonly property var displaySnapshotA: snapshotMatches(snapshotA, cursorATime) ? snapshotA : ({valid:false})
-    readonly property var displaySnapshotB: snapshotMatches(snapshotB, cursorBTime) ? snapshotB : ({valid:false})
+    // R5.2 stale-while-revalidate: the last committed immutable frame remains
+    // visible while a newer cursor request is pending. A frame is replaced only
+    // when CursorSnapshotController atomically publishes the next result.
+    readonly property var displaySnapshotA: snapshotA && snapshotA.valid ? snapshotA : ({valid:false})
+    readonly property var displaySnapshotB: snapshotB && snapshotB.valid ? snapshotB : ({valid:false})
+    property real pendingCursorATime: cursorATime
+    property real pendingCursorBTime: cursorBTime
+    property bool cursorARequestQueued: false
+    property bool cursorBRequestQueued: false
+    readonly property bool refreshingA: displaySnapshotA.valid
+                                        && !snapshotMatches(displaySnapshotA, cursorATime)
+                                        && (cursorSnapshotController.busyA || cursorARequestQueued)
+    readonly property bool refreshingB: displaySnapshotB.valid
+                                        && !snapshotMatches(displaySnapshotB, cursorBTime)
+                                        && (cursorSnapshotController.busyB || cursorBRequestQueued)
     readonly property var residualVoltageChannels: filterRole(residualChannels, "Voltage")
     readonly property var residualCurrentChannels: filterRole(residualChannels, "Current")
     readonly property var residualOtherChannels: filterRole(residualChannels, "Other")
@@ -39,6 +52,11 @@ Rectangle {
 
     function relativeMs(timeSeconds) {
         return root.document ? (timeSeconds - root.document.triggerOffsetSeconds) * 1000.0 : 0.0
+    }
+
+    function committedTime(snapshot, fallbackTime) {
+        return snapshot && snapshot.valid && Number.isFinite(snapshot.time)
+               ? Number(snapshot.time) : Number(fallbackTime)
     }
 
     function snapshotMatches(snapshot, timeSeconds) {
@@ -79,19 +97,85 @@ Rectangle {
         return maximum > 0.0 ? maximum * 1.02 : 0.0
     }
 
+    // R5.2 bounds scrub work to one in-flight request plus one coalesced latest
+    // target per cursor. Intermediate mouse positions do not fan out unbounded
+    // QtConcurrent work; the last requested position is launched when the active
+    // frame finishes, while the previous committed frame remains on screen.
+    function queueCursorA(timeSeconds) {
+        root.pendingCursorATime = timeSeconds
+        if (!root.requestOwner || !root.document || !root.visible) return
+        if (root.snapshotMatches(root.snapshotA, timeSeconds)) {
+            root.cursorARequestQueued = false
+            return
+        }
+        if (cursorSnapshotController.busyA) {
+            root.cursorARequestQueued = true
+            return
+        }
+        root.cursorARequestQueued = false
+        cursorSnapshotController.requestCursorA(timeSeconds)
+    }
+
+    function queueCursorB(timeSeconds) {
+        root.pendingCursorBTime = timeSeconds
+        if (!root.requestOwner || !root.document || !root.visible) return
+        if (root.snapshotMatches(root.snapshotB, timeSeconds)) {
+            root.cursorBRequestQueued = false
+            return
+        }
+        if (cursorSnapshotController.busyB) {
+            root.cursorBRequestQueued = true
+            return
+        }
+        root.cursorBRequestQueued = false
+        cursorSnapshotController.requestCursorB(timeSeconds)
+    }
+
     // Multiple visible MDI Phasor children consume the same global immutable
     // cursor snapshots. Exactly one child of this view type owns requests so
     // duplicate windows never launch duplicate one-cycle DFT jobs.
     function requestSnapshots() {
         if (!root.requestOwner || !root.document || !root.visible) return
-        cursorSnapshotController.requestCursorA(root.cursorATime)
-        cursorSnapshotController.requestCursorB(root.cursorBTime)
+        root.queueCursorA(root.cursorATime)
+        root.queueCursorB(root.cursorBTime)
     }
 
-    onCursorATimeChanged: if (visible && requestOwner) cursorSnapshotController.requestCursorA(cursorATime)
-    onCursorBTimeChanged: if (visible && requestOwner) cursorSnapshotController.requestCursorB(cursorBTime)
-    onVisibleChanged: if (visible && requestOwner) Qt.callLater(requestSnapshots)
-    onRequestOwnerChanged: if (visible && requestOwner) Qt.callLater(requestSnapshots)
+    Connections {
+        target: cursorSnapshotController
+        function onBusyAChanged() {
+            if (cursorSnapshotController.busyA || !root.cursorARequestQueued
+                    || !root.requestOwner || !root.visible) return
+            Qt.callLater(function() {
+                if (root.requestOwner && root.visible)
+                    root.queueCursorA(root.pendingCursorATime)
+            })
+        }
+        function onBusyBChanged() {
+            if (cursorSnapshotController.busyB || !root.cursorBRequestQueued
+                    || !root.requestOwner || !root.visible) return
+            Qt.callLater(function() {
+                if (root.requestOwner && root.visible)
+                    root.queueCursorB(root.pendingCursorBTime)
+            })
+        }
+    }
+
+    onCursorATimeChanged: queueCursorA(cursorATime)
+    onCursorBTimeChanged: queueCursorB(cursorBTime)
+    onVisibleChanged: {
+        if (visible && requestOwner) Qt.callLater(requestSnapshots)
+        else if (!visible) {
+            cursorARequestQueued = false
+            cursorBRequestQueued = false
+        }
+    }
+    onRequestOwnerChanged: {
+        if (visible && requestOwner) Qt.callLater(requestSnapshots)
+        else if (!requestOwner) {
+            cursorARequestQueued = false
+            cursorBRequestQueued = false
+        }
+    }
     Component.onCompleted: if (visible && requestOwner) Qt.callLater(requestSnapshots)
 
     ColumnLayout {
@@ -121,7 +205,7 @@ Rectangle {
                         font.weight: Font.DemiBold
                     }
                     Label {
-                        text: "Shared async one-cycle DFT snapshot · stable record-based radial scale keeps C1/C2 visually independent"
+                        text: "Committed-frame one-cycle DFT · stale frame remains visible while the latest cursor calculation is pending"
                         color: "#778087"
                         font.pixelSize: 8
                     }
@@ -142,6 +226,13 @@ Rectangle {
                         spacing: 6
                         Rectangle { width: 8; height: 8; radius: 4; color: "#244f9e" }
                         Label { text: "C1"; color: "#244f9e"; font.pixelSize: 9; font.weight: Font.Bold }
+                        Label {
+                            visible: root.refreshingA
+                            text: "UPDATING"
+                            color: "#6b7f9a"
+                            font.pixelSize: 7
+                            font.weight: Font.DemiBold
+                        }
                         Item { Layout.fillWidth: true }
                         Label {
                             text: root.relativeMs(root.cursorATime).toFixed(3) + " ms"
@@ -163,6 +254,13 @@ Rectangle {
                         spacing: 6
                         Rectangle { width: 8; height: 8; radius: 4; color: "#b77900" }
                         Label { text: "C2"; color: "#9b6900"; font.pixelSize: 9; font.weight: Font.Bold }
+                        Label {
+                            visible: root.refreshingB
+                            text: "UPDATING"
+                            color: "#9a7b42"
+                            font.pixelSize: 7
+                            font.weight: Font.DemiBold
+                        }
                         Item { Layout.fillWidth: true }
                         Label {
                             text: root.relativeMs(root.cursorBTime).toFixed(3) + " ms"
@@ -231,7 +329,7 @@ Rectangle {
                             Layout.fillWidth: true; Layout.fillHeight: true
                             document: root.document
                             snapshot: root.displaySnapshotA
-                            cursorLabel: "C1 · " + root.relativeMs(root.cursorATime).toFixed(3) + " ms"
+                            cursorLabel: "C1 · " + root.relativeMs(root.committedTime(root.displaySnapshotA, root.cursorATime)).toFixed(3) + " ms"
                             cursorAccent: "#244f9e"
                             angleOffsetDegrees: 90.0
                         }
@@ -239,7 +337,7 @@ Rectangle {
                             Layout.fillWidth: true; Layout.fillHeight: true
                             document: root.document
                             snapshot: root.displaySnapshotB
-                            cursorLabel: "C2 · " + root.relativeMs(root.cursorBTime).toFixed(3) + " ms"
+                            cursorLabel: "C2 · " + root.relativeMs(root.committedTime(root.displaySnapshotB, root.cursorBTime)).toFixed(3) + " ms"
                             cursorAccent: "#b77900"
                             angleOffsetDegrees: 90.0
                         }
