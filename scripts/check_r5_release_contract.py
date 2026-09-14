@@ -188,18 +188,72 @@ def probe_phasor_retained_qsg() -> bool:
 
 
 def probe_table_async_atomic_frame() -> bool:
-    text = read_text("apps/desktop/qml/ValueTableView.qml")
+    qml = compact(read_text("apps/desktop/qml/ValueTableView.qml"))
+    header = read_text("apps/desktop/table_snapshot_controller.hpp")
+    controller = read_text("apps/desktop/table_snapshot_controller.cpp")
+    cmake = read_text("tests/CMakeLists.txt")
+    runtime = read_text("tests/test_r5_table_zero_flicker.cpp")
     forbidden = (
         "snapshot.sortedChannels(",
         "snapshot.summaryAt(",
         "snapshot.snapshotAt(",
     )
-    return not any(token in text for token in forbidden)
+    qml_committed_only = (
+        not any(token in qml for token in forbidden)
+        and "property var committedFrame:" in qml
+        and "property var displayedRows: []" in qml
+        and "root.snapshot.requestFrame(root.scopedChannels, root.cursorTime, root.sortMode, root.abnormalOnly)" in qml
+        and "model: root.displayedRows" in qml
+        and "readonly property var rowSnapshot: modelData" in qml
+    )
+    controller_contract = all(
+        token in header
+        for token in (
+            "Q_PROPERTY(QVariantMap frame READ frame NOTIFY frameChanged)",
+            "Q_PROPERTY(bool busy READ busy NOTIFY busyChanged)",
+            "Q_INVOKABLE void requestFrame",
+            "std::optional<FrameRequest> m_pendingFrameRequest",
+        )
+    ) and all(
+        token in controller
+        for token in (
+            "QtConcurrent::run",
+            "m_pendingFrameRequest = request;",
+            "if (m_pendingFrameRequest)",
+            "launchFrameRequest(pending);",
+            "m_frame = result;",
+            "emit frameChanged();",
+        )
+    )
+    runtime_regression = (
+        "ardirec_r5_table_zero_flicker_tests" in cmake
+        and "previous committed table frame remains visible while scrub calculation is pending" in runtime
+        and "pending and intermediate Table work cannot publish partial frames" in runtime
+        and "latest queued table request wins after bounded revalidation" in runtime
+        and "scrub burst produces exactly one new atomic Table publication" in runtime
+    )
+    return qml_committed_only and controller_contract and runtime_regression
 
 
 def probe_table_stable_geometry() -> bool:
-    text = compact(read_text("apps/desktop/qml/ValueTableView.qml"))
-    return "Layout.preferredHeight: hasData ? 92 : 0" not in text
+    qml = compact(read_text("apps/desktop/qml/ValueTableView.qml"))
+    cmake = read_text("tests/CMakeLists.txt")
+    runtime = read_text("tests/test_r5_table_zero_flicker.cpp")
+    stable_layout = (
+        "Layout.preferredHeight: hasData ? 92 : 0" not in qml
+        and "SequenceSummary {" not in qml
+        and 'objectName: "engineeringTableRows"' in qml
+        and "root.preservedTableContentY" in qml
+        and "tableRows.contentY = Math.max(0.0, Math.min(root.preservedTableContentY, maxY))" in qml
+    )
+    runtime_regression = (
+        "ardirec_r5_table_zero_flicker_tests" in cmake
+        and "pending scrub never clears the committed Table rows" in runtime
+        and "pending Table work cannot change the view vertical geometry" in runtime
+        and "pending Table work preserves scroll position" in runtime
+        and "Table commit restores the user's scroll position" in runtime
+    )
+    return stable_layout and runtime_regression
 
 
 def probe_locus_cursor_independent_viewport() -> bool:
