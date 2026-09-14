@@ -1,5 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+#include "cursor_snapshot_controller.hpp"
 #include "document_controller.hpp"
+#include "harmonic_snapshot_controller.hpp"
+#include "locus_snapshot_controller.hpp"
+#include "table_snapshot_controller.hpp"
 
 #include <QCoreApplication>
 #include <QElapsedTimer>
@@ -60,6 +64,14 @@ void require_closed_state(const DocumentController& document) {
     require(document.digitalEdgeTimes().empty(), "closed document exposes no stale event edges");
     require(document.error().isEmpty(), "normal close is not reported as an error");
 }
+
+void require_analysis_invalidated(const CursorSnapshotController& cursor,
+                                  const LocusSnapshotController& locus) {
+    require(!cursor.busyA() && !cursor.busyB(), "close cancels active cursor snapshot workers");
+    require(cursor.cursorA().isEmpty() && cursor.cursorB().isEmpty(), "close clears committed cursor snapshots");
+    require(!locus.busy(), "close cancels active locus worker");
+    require(locus.nativeSnapshot() == nullptr, "close clears native locus snapshot ownership");
+}
 } // namespace
 
 int main(int argc, char* argv[]) {
@@ -69,6 +81,11 @@ int main(int argc, char* argv[]) {
         const QUrl cfgUrl = QUrl::fromLocalFile(QString::fromStdString(cfgPath.string()));
 
         DocumentController document;
+        CursorSnapshotController cursor(&document);
+        LocusSnapshotController locus(&document);
+        HarmonicSnapshotController harmonic(&document);
+        TableSnapshotController table(&document);
+
         document.openCfg(cfgUrl);
         wait_for_document(document);
         require(document.sampleCount() == 80, "lifecycle fixture opens before close");
@@ -77,8 +94,16 @@ int main(int argc, char* argv[]) {
         require(document.rmsTileCacheSnapshot() != nullptr, "open document owns an RMS cache");
         require(!document.distanceZonePath().isEmpty(), "lifecycle fixture discovers its RIO sidecar");
 
+        // Warm the bounded scalar caches before close. They are synchronously tied to
+        // documentChanged and must never preserve values from a closed record.
+        require(!harmonic.spectrumAt(0, 0.025, 15).isEmpty(), "harmonic cache is populated before close");
+        require(!table.snapshotAt(0, 0.025).isEmpty(), "engineering table cache is populated before close");
+
         document.closeDocument();
         require_closed_state(document);
+        require_analysis_invalidated(cursor, locus);
+        require(harmonic.spectrumAt(0, 0.025, 15).isEmpty(), "harmonic cache cannot serve a closed document");
+        require(table.snapshotAt(0, 0.025).isEmpty(), "table cache cannot serve a closed document");
 
         // Generation invalidation is deterministic even if close happens before the
         // background load callback gets an event-loop turn. A stale loader result
@@ -89,6 +114,27 @@ int main(int argc, char* argv[]) {
         require_closed_state(document);
         pump_events(250);
         require_closed_state(document);
+        require_analysis_invalidated(cursor, locus);
+
+        // R4 worker-lifetime qualification: start real cursor and locus jobs, then
+        // close immediately before either queued result can be published. Both
+        // workers must retire and their old-generation results must stay discarded.
+        document.openCfg(cfgUrl);
+        wait_for_document(document);
+        cursor.requestCursorA(0.040);
+        cursor.requestCursorB(0.055);
+        const int locusRevisionBefore = locus.revision();
+        locus.request(document.dataStartSeconds(), document.durationSeconds(), 4000, 0.0, 0.0);
+        require(cursor.busyA() || cursor.busyB() || locus.busy(),
+                "at least one asynchronous analysis worker is active before close");
+        document.closeDocument();
+        require_closed_state(document);
+        require_analysis_invalidated(cursor, locus);
+        pump_events(350);
+        require_closed_state(document);
+        require_analysis_invalidated(cursor, locus);
+        require(locus.revision() == locusRevisionBefore,
+                "stale pre-close locus callback cannot publish a new revision after document close");
 
         std::cout << "ardirec document lifecycle tests: PASS\n";
         return 0;
