@@ -9,6 +9,9 @@ on:
 permissions:
   contents: read
 
+env:
+  ARDIREC_PACKAGE_VERSION: 0.2.0-alpha.23
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
@@ -19,7 +22,7 @@ jobs:
     # currently selects VS 2026 while Qt is the MSVC 2022 build, which can leave
     # the portable folder without the VC runtime DLLs needed on a clean PC.
     runs-on: windows-2022
-    timeout-minutes: 30
+    timeout-minutes: 35
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -46,11 +49,17 @@ jobs:
         shell: pwsh
         run: ctest --test-dir build -C Release --output-on-failure
 
+      - name: R5.5 repeated interaction and lifecycle stress
+        shell: pwsh
+        run: >-
+          ctest --test-dir build -C Release --output-on-failure --repeat until-fail:3
+          -R 'ardirec_(document_lifecycle_tests|r4_qml_runtime_tests|r5_linked_cursor_tests|r5_phasor_zero_flicker_tests|r5_table_zero_flicker_tests|r5_locus_parity_tests)'
+
       - name: Stage Qt application and VC runtime
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $folder = 'ardirec-v0.2.0-alpha.22-windows-x64'
+          $folder = "ardirec-v$env:ARDIREC_PACKAGE_VERSION-windows-x64"
           New-Item -ItemType Directory -Force -Path $folder | Out-Null
           Copy-Item build/apps/desktop/Release/ardirec.exe "$folder/ardirec.exe"
           windeployqt --release --compiler-runtime --no-translations --qmldir apps/desktop/qml "$folder/ardirec.exe"
@@ -91,7 +100,7 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $folder = Resolve-Path 'ardirec-v0.2.0-alpha.22-windows-x64'
+          $folder = Resolve-Path "ardirec-v$env:ARDIREC_PACKAGE_VERSION-windows-x64"
           $exe = Join-Path $folder 'ardirec.exe'
           $stdout = Join-Path $env:RUNNER_TEMP 'ardirec-startup.stdout.log'
           $stderr = Join-Path $env:RUNNER_TEMP 'ardirec-startup.stderr.log'
@@ -118,8 +127,8 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $folder = 'ardirec-v0.2.0-alpha.22-windows-x64'
-          $zip = 'ardirec-v0.2.0-alpha.22-windows-x64-portable.zip'
+          $folder = "ardirec-v$env:ARDIREC_PACKAGE_VERSION-windows-x64"
+          $zip = "ardirec-v$env:ARDIREC_PACKAGE_VERSION-windows-x64-portable.zip"
           if (Test-Path $zip) { Remove-Item $zip -Force }
           Compress-Archive -Path $folder -DestinationPath $zip -CompressionLevel Optimal
           Get-FileHash $zip -Algorithm SHA256 | Format-List
@@ -128,6 +137,6 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: ardirec-windows-x64-portable-zip
-          path: ardirec-v0.2.0-alpha.22-windows-x64-portable.zip
+          path: ardirec-v${{ env.ARDIREC_PACKAGE_VERSION }}-windows-x64-portable.zip
           if-no-files-found: error
           retention-days: 14
