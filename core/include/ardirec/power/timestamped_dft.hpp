@@ -29,7 +29,9 @@ struct TimestampWindow final {
 
 // Build a one-cycle backward-looking window from the actual COMTRADE timestamp
 // index. No global sample interval is inferred, so a window can cross sample-rate
-// section boundaries without changing its time span.
+// section boundaries without changing its time span. A calculated phasor is valid
+// only after a complete backward cycle exists in the record; beginning-of-record
+// partial windows are deliberately rejected instead of being silently shortened.
 inline TimestampWindow trailing_cycle_window(const std::vector<double>& times,
                                               double absolute_time_seconds,
                                               double frequency_hz) noexcept {
@@ -41,8 +43,11 @@ inline TimestampWindow trailing_cycle_window(const std::vector<double>& times,
 
     const double period = 1.0 / frequency_hz;
     const double finish = std::clamp(absolute_time_seconds, times.front(), times.back());
-    const double start = std::max(times.front(), finish - period);
-    if (!(finish > start)) return window;
+    double start = finish - period;
+    const double tolerance = std::max(1.0e-12, period * 1.0e-9);
+    if (start < times.front() - tolerance) return window;
+    if (start < times.front()) start = times.front();
+    if (!(finish > start) || finish - start < period - tolerance) return window;
 
     auto first_it = std::lower_bound(times.begin(), times.end(), start);
     std::size_t first = static_cast<std::size_t>(std::distance(times.begin(), first_it));
