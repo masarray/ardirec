@@ -313,8 +313,8 @@ CursorSnapshotController::~CursorSnapshotController() {
 }
 
 void CursorSnapshotController::rebuildSource() {
-    cancel(1);
-    cancel(2);
+    cancel(1, true);
+    cancel(2, true);
     if (!m_document || !m_document->dataStoreSnapshot() || !m_document->timeIndexSnapshot()
         || m_document->analogCount() <= 0) {
         m_source.reset();
@@ -372,10 +372,20 @@ void CursorSnapshotController::rebuildSource() {
     m_source = std::move(source);
 }
 
-void CursorSnapshotController::cancel(int cursor) noexcept {
+void CursorSnapshotController::cancel(int cursor, bool clearBusy) noexcept {
     auto& token = cursor == 1 ? m_cancelA : m_cancelB;
     if (token) token->store(true, std::memory_order_relaxed);
     token.reset();
+    if (!clearBusy) return;
+    if (cursor == 1) {
+        if (m_busyA) {
+            m_busyA = false;
+            emit busyAChanged();
+        }
+    } else if (m_busyB) {
+        m_busyB = false;
+        emit busyBChanged();
+    }
 }
 
 void CursorSnapshotController::requestCursorA(double absoluteTimeSeconds) {
