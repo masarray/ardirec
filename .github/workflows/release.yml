@@ -8,12 +8,15 @@ on:
 permissions:
   contents: write
 
+env:
+  ARDIREC_RELEASE_VERSION: 0.2.0-alpha.23
+
 jobs:
   release-windows:
     if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[release]')
     # Pin to VS 2022 to match the Qt MSVC 2022 binary package.
     runs-on: windows-2022
-    timeout-minutes: 35
+    timeout-minutes: 40
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -40,11 +43,17 @@ jobs:
         shell: pwsh
         run: ctest --test-dir build -C Release --output-on-failure
 
+      - name: R5.5 repeated interaction and lifecycle stress
+        shell: pwsh
+        run: >-
+          ctest --test-dir build -C Release --output-on-failure --repeat until-fail:3
+          -R 'ardirec_(document_lifecycle_tests|r4_qml_runtime_tests|r5_linked_cursor_tests|r5_phasor_zero_flicker_tests|r5_table_zero_flicker_tests|r5_locus_parity_tests)'
+
       - name: Stage Qt application and VC runtime
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $folder = 'ardirec-v0.2.0-alpha.14-windows-x64'
+          $folder = "ardirec-v$env:ARDIREC_RELEASE_VERSION-windows-x64"
           New-Item -ItemType Directory -Force -Path $folder | Out-Null
           Copy-Item build/apps/desktop/Release/ardirec.exe "$folder/ardirec.exe"
           windeployqt --release --compiler-runtime --no-translations --qmldir apps/desktop/qml "$folder/ardirec.exe"
@@ -76,12 +85,31 @@ jobs:
             }
           }
 
+      - name: Smoke test packaged application startup
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $folder = Resolve-Path "ardirec-v$env:ARDIREC_RELEASE_VERSION-windows-x64"
+          $exe = Join-Path $folder 'ardirec.exe'
+          $stdout = Join-Path $env:RUNNER_TEMP 'ardirec-release-startup.stdout.log'
+          $stderr = Join-Path $env:RUNNER_TEMP 'ardirec-release-startup.stderr.log'
+          $env:QT_QPA_PLATFORM = 'offscreen'
+          $process = Start-Process -FilePath $exe -WorkingDirectory $folder -PassThru `
+            -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+          Start-Sleep -Seconds 5
+          if ($process.HasExited) {
+            if (Test-Path $stdout) { Get-Content $stdout }
+            if (Test-Path $stderr) { Get-Content $stderr }
+            throw "Packaged release executable exited during startup smoke with code $($process.ExitCode)."
+          }
+          Stop-Process -Id $process.Id -Force
+
       - name: Build portable ZIP
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $folder = 'ardirec-v0.2.0-alpha.14-windows-x64'
-          $zip = 'ardirec-v0.2.0-alpha.14-windows-x64-portable.zip'
+          $folder = "ardirec-v$env:ARDIREC_RELEASE_VERSION-windows-x64"
+          $zip = "ardirec-v$env:ARDIREC_RELEASE_VERSION-windows-x64-portable.zip"
           if (Test-Path $zip) { Remove-Item $zip -Force }
           Compress-Archive -Path $folder -DestinationPath $zip -CompressionLevel Optimal
           (Get-FileHash $zip -Algorithm SHA256).Hash + '  ' + $zip | Set-Content SHA256SUMS.txt
@@ -89,26 +117,20 @@ jobs:
       - name: Publish GitHub prerelease
         uses: softprops/action-gh-release@v3
         with:
-          tag_name: v0.2.0-alpha.14
-          name: ardirec v0.2.0-alpha.14 — Table UX Finalization
+          tag_name: v${{ env.ARDIREC_RELEASE_VERSION }}
+          name: ardirec v${{ env.ARDIREC_RELEASE_VERSION }} — R5.5 qualification candidate
           prerelease: true
           make_latest: false
           generate_release_notes: true
           body: |
-            alpha.14 finalizes the Engineering Table UX after alpha.13 achieved numerical parity with the SIGRA line1.CFG reference.
+            R5.5 qualification candidate after linked local cursors, Phasor zero-flicker,
+            Table zero-flicker and SIGRA-oriented Locus parity recovery.
 
-            Table UX changes:
-            - Record sorting now preserves the actual COMTRADE CFG analog-channel order instead of silently grouping voltage before current.
-            - Table-specific top chrome is collapsed so more engineering rows remain visible while Open, Signals, view switching and Primary/Secondary remain accessible.
-            - Analysis rows are denser and use one-decimal percentages for fast scanning; Detailed mode and hover tooltips preserve additional precision.
-            - Column semantics are explicit: DC/H1 and THD H2-Hn make the percentage reference and Nyquist-safe THD range unambiguous.
-            - Abnormal investigation cues use restrained amber markers instead of large filled warning cells; they remain heuristics, not relay-operate verdicts.
-            - Summary wording is more direct: Worst THD, Highest DC/H1, Max V RMS and Max I RMS.
-            - Detailed mode keeps nearest sample, true RMS, crest factor and signed DC without changing the single-cursor investigation context.
+            This candidate must pass the documented manual Windows/SIGRA comparison
+            before the project is promoted to 0.2.0-rc.1.
 
-            Calculation behavior from alpha.13 is intentionally unchanged: cursor-referenced phase, Last extremum, DC/H1, Nyquist-safe harmonics and THD remain the validated baseline.
-
-            Windows development distribution remains a portable ZIP folder. The executable is unsigned, so Windows SmartScreen may show a warning.
+            Windows development distribution remains a portable ZIP folder. The
+            executable is unsigned, so Windows SmartScreen may show a warning.
           files: |
-            ardirec-v0.2.0-alpha.14-windows-x64-portable.zip
+            ardirec-v${{ env.ARDIREC_RELEASE_VERSION }}-windows-x64-portable.zip
             SHA256SUMS.txt
