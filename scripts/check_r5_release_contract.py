@@ -110,6 +110,8 @@ def probe_linked_local_cursors() -> bool:
 
 def probe_phasor_committed_frame() -> bool:
     text = compact(read_text("apps/desktop/qml/PhasorView.qml"))
+    cmake = read_text("tests/CMakeLists.txt")
+    runtime = read_text("tests/test_r5_phasor_zero_flicker.cpp")
     clears_a = (
         "displaySnapshotA: snapshotMatches(snapshotA, cursorATime) ? snapshotA : ({valid:false})"
         in text
@@ -118,12 +120,71 @@ def probe_phasor_committed_frame() -> bool:
         "displaySnapshotB: snapshotMatches(snapshotB, cursorBTime) ? snapshotB : ({valid:false})"
         in text
     )
-    return not (clears_a or clears_b)
+    committed_display = all(
+        token in text
+        for token in (
+            "property var committedSnapshotA: ({valid:false})",
+            "property var committedSnapshotB: ({valid:false})",
+            "readonly property var displaySnapshotA: committedSnapshotA",
+            "readonly property var displaySnapshotB: committedSnapshotB",
+            "function onCursorAChanged() { root.acceptSnapshotA() }",
+            "function onCursorBChanged() { root.acceptSnapshotB() }",
+        )
+    )
+    latest_only = all(
+        token in text
+        for token in (
+            "if (!root.committedSnapshotA.valid || root.snapshotMatches(candidate, root.cursorATime)) root.committedSnapshotA = candidate",
+            "if (!root.committedSnapshotB.valid || root.snapshotMatches(candidate, root.cursorBTime)) root.committedSnapshotB = candidate",
+            "if (!cursorSnapshotController.busyA && !root.cursorARequestQueued) root.committedSnapshotA = ({valid:false})",
+            "if (!cursorSnapshotController.busyB && !root.cursorBRequestQueued) root.committedSnapshotB = ({valid:false})",
+        )
+    )
+    bounded_latest = all(
+        token in text
+        for token in (
+            "property bool cursorARequestQueued: false",
+            "property bool cursorBRequestQueued: false",
+            "if (cursorSnapshotController.busyA) { root.cursorARequestQueued = true return }",
+            "if (cursorSnapshotController.busyB) { root.cursorBRequestQueued = true return }",
+            "root.queueCursorA(root.pendingCursorATime)",
+            "root.queueCursorB(root.pendingCursorBTime)",
+        )
+    )
+    runtime_regression = (
+        "ardirec_r5_phasor_zero_flicker_tests" in cmake
+        and "committed C1 frame remains valid while a newer calculation is pending" in runtime
+        and "continuous scrub coalesces intermediate C1 positions" in runtime
+        and "intermediate completed frame is skipped when a newer scrub target is pending" in runtime
+        and "latest queued scrub target wins after bounded revalidation" in runtime
+    )
+    return (
+        not clears_a
+        and not clears_b
+        and committed_display
+        and latest_only
+        and bounded_latest
+        and runtime_regression
+    )
 
 
 def probe_phasor_retained_qsg() -> bool:
     text = read_text("apps/desktop/phasor_vector_item.cpp")
-    return "delete oldNode;" not in text
+    cmake = read_text("tests/CMakeLists.txt")
+    runtime = read_text("tests/test_r5_phasor_zero_flicker.cpp")
+    retained = (
+        "delete oldNode;" not in text
+        and "oldNode ? static_cast<VectorRootNode*>(oldNode) : new VectorRootNode()" in text
+        and "node->markDirty(QSGNode::DirtyGeometry);" in text
+        and "root->appendChildNode(new VectorNode());" in text
+    )
+    runtime_regression = (
+        "ardirec_r5_phasor_zero_flicker_tests" in cmake
+        and "secondRoot == firstRoot" in runtime
+        and "secondRoot->firstChild() == firstVectorNode" in runtime
+        and "growing vector count preserves already-existing vector geometry" in runtime
+    )
+    return retained and runtime_regression
 
 
 def probe_table_async_atomic_frame() -> bool:

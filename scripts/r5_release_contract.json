@@ -23,12 +23,12 @@
     "phasor_committed_frame": {
       "stage": "R5.2",
       "issue": 74,
-      "expected": "known_fail"
+      "expected": "pass"
     },
     "phasor_retained_qsg": {
       "stage": "R5.2",
       "issue": 74,
-      "expected": "known_fail"
+      "expected": "pass"
     },
     "table_async_atomic_frame": {
       "stage": "R5.3",
