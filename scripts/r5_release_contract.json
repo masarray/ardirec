@@ -33,12 +33,12 @@
     "table_async_atomic_frame": {
       "stage": "R5.3",
       "issue": 75,
-      "expected": "known_fail"
+      "expected": "pass"
     },
     "table_stable_geometry": {
       "stage": "R5.3",
       "issue": 75,
-      "expected": "known_fail"
+      "expected": "pass"
     },
     "locus_cursor_independent_viewport": {
       "stage": "R5.4",
