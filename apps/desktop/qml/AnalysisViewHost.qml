@@ -200,7 +200,7 @@ Item {
     }
 
     Rectangle {
-        anchors.centerIn: viewFrame
+        anchors.centerIn: parent
         width: 240
         height: 58
         radius: 3
