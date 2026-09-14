@@ -43,12 +43,12 @@
     "locus_cursor_independent_viewport": {
       "stage": "R5.4",
       "issue": 76,
-      "expected": "known_fail"
+      "expected": "pass"
     },
     "full_backward_cycle": {
       "stage": "R5.4",
       "issue": 76,
-      "expected": "known_fail"
+      "expected": "pass"
     }
   }
 }
