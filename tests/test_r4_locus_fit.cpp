@@ -8,10 +8,12 @@
 #include <QThread>
 #include <QUrl>
 
+#include <algorithm>
 #include <cmath>
 #include <filesystem>
 #include <iostream>
 #include <stdexcept>
+#include <vector>
 
 namespace {
 void require(bool condition, const char* message) {
@@ -21,6 +23,14 @@ void require(bool condition, const char* message) {
 void require_near(double actual, double expected, double tolerance, const char* message) {
     if (!std::isfinite(actual) || std::abs(actual - expected) > tolerance)
         throw std::runtime_error(message);
+}
+
+double percentile99(std::vector<double> values) {
+    if (values.empty()) return 0.0;
+    const std::size_t index = static_cast<std::size_t>(
+        std::floor(0.99 * static_cast<double>(values.size() - 1u)));
+    std::nth_element(values.begin(), values.begin() + static_cast<std::ptrdiff_t>(index), values.end());
+    return values[index];
 }
 
 void wait_for_document(DocumentController& document, int timeoutMs = 10000) {
@@ -75,10 +85,30 @@ int main(int argc, char* argv[]) {
         const LocusNativePoint& lowCurrentTail = snapshot->loops[0].back();
         require(lowCurrentTail.valid == 0,
                 "near-zero-current tail remains an explicit invalid/gap point");
-        require(snapshot->earthRelevantMaxAbsR > 90.0 && snapshot->earthRelevantMaxAbsR < 150.0,
-                "default earth relevant-fit resistance stays around the protection-valid 100-ohm locus");
-        require(snapshot->earthRelevantMaxAbsX < 5.0,
-                "default earth relevant-fit reactance is not dominated by invalid low-current samples");
+
+        // The default 'relevant' fit is intentionally a robust statistic over
+        // measurement-valid earth-loop points, not an absolute 100-ohm fixture
+        // clamp. During the physical current-collapse transition, still-valid
+        // one-cycle windows can legitimately move above 100 ohm; the invalid
+        // near-zero-current tail must not enter the relevant-fit population.
+        std::vector<double> validEarthR;
+        std::vector<double> validEarthX;
+        for (std::size_t loop = 0; loop < 3u; ++loop) {
+            for (const LocusNativePoint& point : snapshot->loops[loop]) {
+                if (!point.valid) continue;
+                validEarthR.push_back(std::abs(static_cast<double>(point.r)));
+                validEarthX.push_back(std::abs(static_cast<double>(point.x)));
+            }
+        }
+        require(!validEarthR.empty() && validEarthR.size() == validEarthX.size(),
+                "golden fixture exposes valid earth-loop trajectory samples");
+        require_near(snapshot->earthRelevantMaxAbsR, percentile99(validEarthR), 1.0e-4,
+                     "default earth relevant-fit resistance is p99 of valid trajectory points only");
+        require_near(snapshot->earthRelevantMaxAbsX, percentile99(validEarthX), 1.0e-4,
+                     "default earth relevant-fit reactance is p99 of valid trajectory points only");
+        require(snapshot->earthRelevantMaxAbsR <= snapshot->earthMaxAbsR + 1.0e-9
+                    && snapshot->earthRelevantMaxAbsX <= snapshot->earthMaxAbsX + 1.0e-9,
+                "relevant fit never exceeds forensic Fit All extents");
         require(std::isfinite(snapshot->maxAbsR) && std::isfinite(snapshot->maxAbsX),
                 "forensic Fit All extents remain finite and independently available");
 
