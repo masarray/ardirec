@@ -138,10 +138,13 @@ for action in ("closeAnalysisWindow", "nextAnalysisWindow", "previousAnalysisWin
     require("apps/desktop/qml/WorkstationMenuBar.qml", f"root.actions?.{action}",
             f"Window menu must expose {action}")
 
-# Candidate identity stays distinguishable from the frozen R2 build.
-require("apps/desktop/main.cpp", "0.2.0-alpha.21", "R3 candidate must have its own application version")
-require(".github/workflows/windows-build.yml", "ardirec-v0.2.0-alpha.21-windows-x64",
-        "Windows packaged artifact must match the R3 candidate version")
+# R3's permanent invariant is the MDI architecture above, not the historical
+# alpha.21 label. Cross-milestone executable/artifact version alignment is owned
+# by the generalized R2 contract, while the current milestone owns its candidate.
+require("apps/desktop/main.cpp", "setApplicationVersion",
+        "desktop application must keep an explicit build identity")
+require(".github/workflows/windows-build.yml", "ardirec-v",
+        "Windows packaging must keep an explicit versioned artifact identity")
 
 if FAILURES:
     print("ArdIREC R3 internal MDI contract: FAIL", file=sys.stderr)
