@@ -258,5 +258,28 @@ if(TARGET Qt6::Core)
         ardirec_enable_sanitizers(ardirec_r5_phasor_zero_flicker_tests)
         add_test(NAME ardirec_r5_phasor_zero_flicker_tests COMMAND ardirec_r5_phasor_zero_flicker_tests)
         set_tests_properties(ardirec_r5_phasor_zero_flicker_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+        qt_add_executable(ardirec_r5_table_zero_flicker_tests
+            test_r5_table_zero_flicker.cpp
+            ../apps/desktop/table_snapshot_controller.cpp
+            ../apps/desktop/table_snapshot_controller.hpp
+            ../apps/desktop/document_loader.cpp
+            ../apps/desktop/document_loader.hpp
+            ../apps/desktop/document_controller.cpp
+            ../apps/desktop/document_controller.hpp
+            ${ARDIREC_DOCUMENT_DERIVED_SOURCES}
+        )
+        set_target_properties(ardirec_r5_table_zero_flicker_tests PROPERTIES AUTOMOC ON)
+        target_include_directories(ardirec_r5_table_zero_flicker_tests PRIVATE ../apps/desktop)
+        target_link_libraries(ardirec_r5_table_zero_flicker_tests PRIVATE
+            ardirec::core Qt6::Core Qt6::Concurrent Qt6::Qml Qt6::Quick Qt6::QuickControls2)
+        target_compile_definitions(ardirec_r5_table_zero_flicker_tests PRIVATE
+            ARDIREC_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data"
+            ARDIREC_QML_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../apps/desktop/qml"
+        )
+        ardirec_set_warnings(ardirec_r5_table_zero_flicker_tests)
+        ardirec_enable_sanitizers(ardirec_r5_table_zero_flicker_tests)
+        add_test(NAME ardirec_r5_table_zero_flicker_tests COMMAND ardirec_r5_table_zero_flicker_tests)
+        set_tests_properties(ardirec_r5_table_zero_flicker_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
     endif()
 endif()

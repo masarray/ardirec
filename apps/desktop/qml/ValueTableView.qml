@@ -19,6 +19,17 @@ Rectangle {
     property bool abnormalOnly: false
     property int selectedChannel: document ? document.selectedAnalogIndex : -1
 
+    // R5.3: Table never binds delegates to synchronous calculations. The
+    // controller publishes one complete immutable frame; this view swaps the
+    // frame, row model and summary together only after that frame is complete.
+    property var committedFrame: ({valid:false, time:0.0, rows:[], displayedChannels:[], summary:({})})
+    property var displayedRows: []
+    property var displayedChannels: []
+    property var summaryData: emptySummary()
+    property real preservedTableContentY: 0.0
+    property bool restoringTableScroll: false
+    readonly property bool refreshing: !!snapshot && !!snapshot.busy
+
     signal signalActivated(int channelIndex)
 
     readonly property int signalWidth: 190
@@ -50,17 +61,40 @@ Rectangle {
         return result
     }
 
-    readonly property var displayedChannels: snapshot
-        ? snapshot.sortedChannels(scopedChannels, cursorTime, sortMode, abnormalOnly)
-        : scopedChannels
+    function emptySummary() {
+        return ({count:0, abnormalCount:0, maxThdChannel:-1, maxThd:0,
+                 maxDcChannel:-1, maxDcPercent:0, maxCrestChannel:-1, maxCrestFactor:0,
+                 maxVoltageRmsChannel:-1, maxVoltageRms:0,
+                 maxCurrentRmsChannel:-1, maxCurrentRms:0,
+                 maxHarmonicOrder:0, sampleRate:0})
+    }
 
-    readonly property var summaryData: snapshot
-        ? snapshot.summaryAt(scopedChannels, cursorTime)
-        : ({count:0, abnormalCount:0, maxThdChannel:-1, maxThd:0,
-            maxDcChannel:-1, maxDcPercent:0, maxCrestChannel:-1, maxCrestFactor:0,
-            maxVoltageRmsChannel:-1, maxVoltageRms:0,
-            maxCurrentRmsChannel:-1, maxCurrentRms:0,
-            maxHarmonicOrder:0, sampleRate:0})
+    function requestTableFrame() {
+        if (!root.visible || !root.document || !root.snapshot) return
+        root.snapshot.requestFrame(root.scopedChannels, root.cursorTime,
+                                   root.sortMode, root.abnormalOnly)
+    }
+
+    function applyCommittedFrame() {
+        if (!root.snapshot || !root.snapshot.frame || !root.snapshot.frame.valid) return
+        const nextFrame = root.snapshot.frame
+        const oldY = tableRows ? tableRows.contentY : 0.0
+        root.restoringTableScroll = true
+        root.preservedTableContentY = oldY
+
+        // These assignments intentionally happen in one signal handler. QML
+        // delegates only observe complete rows belonging to the same frame.
+        root.committedFrame = nextFrame
+        root.displayedRows = nextFrame.rows ? nextFrame.rows : []
+        root.displayedChannels = nextFrame.displayedChannels ? nextFrame.displayedChannels : []
+        root.summaryData = nextFrame.summary ? nextFrame.summary : root.emptySummary()
+
+        Qt.callLater(function() {
+            const maxY = Math.max(0.0, tableRows.contentHeight - tableRows.height)
+            tableRows.contentY = Math.max(0.0, Math.min(root.preservedTableContentY, maxY))
+            root.restoringTableScroll = false
+        })
+    }
 
     function formatValue(channelIndex, value) {
         return document && Number.isFinite(value) ? document.formatChannelValue(channelIndex, value) : "—"
@@ -74,7 +108,10 @@ Rectangle {
         const number = root.formatPercentNumber(value)
         return number === "—" ? number : number + "%"
     }
-    function relativeMs() { return document ? (cursorTime - document.triggerOffsetSeconds) * 1000.0 : 0 }
+    function relativeMs(timeSeconds) {
+        const time = Number.isFinite(timeSeconds) ? timeSeconds : root.cursorTime
+        return document ? (time - document.triggerOffsetSeconds) * 1000.0 : 0
+    }
     function scopeLabel() {
         if (scopeMode === "voltage") return "Voltage"
         if (scopeMode === "current") return "Current"
@@ -85,6 +122,21 @@ Rectangle {
     function channelSummary(channelIndex, value, suffix) {
         if (channelIndex < 0 || !document) return "—"
         return document.channelName(channelIndex) + "  " + value + suffix
+    }
+
+    onCursorTimeChanged: requestTableFrame()
+    onScopedChannelsChanged: requestTableFrame()
+    onSortModeChanged: requestTableFrame()
+    onAbnormalOnlyChanged: requestTableFrame()
+    onVisibleChanged: if (visible) Qt.callLater(requestTableFrame)
+    Component.onCompleted: {
+        applyCommittedFrame()
+        Qt.callLater(requestTableFrame)
+    }
+
+    Connections {
+        target: root.snapshot
+        function onFrameChanged() { root.applyCommittedFrame() }
     }
 
     component HeaderCell: Label {
@@ -128,17 +180,32 @@ Rectangle {
                     ColumnLayout {
                         spacing: 0
                         Label { text: "ENGINEERING TABLE"; color: "#29333a"; font.pixelSize: 13; font.weight: Font.DemiBold; font.letterSpacing: 0.5 }
-                        Label {
-                            text: root.scopeLabel() + " · " + root.displayedChannels.length
-                                  + (root.abnormalOnly ? " abnormal signals" : " signals")
-                            color: "#657078"; font.pixelSize: 10
+                        RowLayout {
+                            spacing: 6
+                            Label {
+                                text: root.scopeLabel() + " · " + root.displayedRows.length
+                                      + (root.abnormalOnly ? " abnormal signals" : " signals")
+                                color: "#657078"; font.pixelSize: 10
+                            }
+                            Label {
+                                visible: root.refreshing
+                                text: "UPDATING"
+                                color: "#6b7f9a"
+                                font.pixelSize: 8
+                                font.weight: Font.DemiBold
+                            }
                         }
                     }
                     Item { Layout.fillWidth: true }
                     Label {
                         text: (root.valueRepresentation === "primary" ? "PRIMARY" : "SECONDARY")
-                              + " · C1 " + root.relativeMs().toFixed(3) + " ms"
+                              + " · C1 " + root.relativeMs(root.committedFrame.valid ? Number(root.committedFrame.time) : root.cursorTime).toFixed(3) + " ms"
                         color: "#4d5c66"; font.pixelSize: 11; font.weight: Font.DemiBold
+                    }
+                    Label {
+                        visible: root.refreshing && root.committedFrame.valid
+                        text: "→ " + root.relativeMs(root.cursorTime).toFixed(3) + " ms"
+                        color: "#7a8791"; font.pixelSize: 9
                     }
                 }
 
@@ -223,17 +290,9 @@ Rectangle {
             }
         }
 
-        SequenceSummary {
-            Layout.fillWidth: true
-            Layout.preferredHeight: hasData ? 92 : 0
-            visible: hasData
-            document: root.document
-            analysis: root.analysis
-            cursorTime: root.cursorTime
-            cursorLabel: "C1 · SEQUENCE COMPONENTS · " + root.relativeMs().toFixed(3) + " ms"
-            cursorAccent: "#244f9e"
-        }
-
+        // Sequence Components are intentionally not a mandatory Table panel.
+        // They remain available as calculated signals elsewhere; removing the
+        // former hasData ? 92 : 0 block guarantees stable vertical geometry.
         Flickable {
             id: horizontalPan
             Layout.fillWidth: true
@@ -280,28 +339,31 @@ Rectangle {
 
                 ListView {
                     id: tableRows
+                    objectName: "engineeringTableRows"
                     anchors.left: parent.left
                     anchors.right: parent.right
                     anchors.top: header.bottom
                     anchors.bottom: parent.bottom
                     clip: true
-                    model: root.displayedChannels
+                    model: root.displayedRows
                     reuseItems: true
                     cacheBuffer: height * 0.7
                     boundsBehavior: Flickable.StopAtBounds
                     ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded; width: 13 }
+                    onContentYChanged: {
+                        if (!root.restoringTableScroll)
+                            root.preservedTableContentY = contentY
+                    }
 
                     delegate: Rectangle {
                         required property int index
-                        required property int modelData
+                        required property var modelData
+                        readonly property var rowSnapshot: modelData
+                        readonly property int channelIndex: Number(rowSnapshot.channelIndex)
                         width: tableRows.width
                         height: 46
-                        readonly property var rowSnapshot: {
-                            const representationDependency = root.valueRepresentation
-                            return root.snapshot ? root.snapshot.snapshotAt(modelData, root.cursorTime) : ({valid:false})
-                        }
-                        readonly property color phaseColor: root.analysis ? root.analysis.phaseColor(modelData) : "#6f7780"
-                        readonly property bool selected: root.selectedChannel === modelData
+                        readonly property color phaseColor: root.analysis ? root.analysis.phaseColor(channelIndex) : "#6f7780"
+                        readonly property bool selected: root.selectedChannel === channelIndex
                         readonly property bool abnormal: rowSnapshot.valid && rowSnapshot.abnormal
                         color: selected ? "#e5f0f8" : rowMouse.containsMouse ? "#f0f5f8" : (index % 2 ? "#fafbfc" : "#ffffff")
                         border.color: selected ? "#9ebcd2" : "#dfe4e7"
@@ -313,15 +375,15 @@ Rectangle {
                             anchors.fill: parent
                             anchors.leftMargin: 9
                             spacing: 0
-                            DataCell { width: root.signalWidth; text: root.document ? root.document.channelName(modelData) : "—"; font.weight: Font.DemiBold }
+                            DataCell { width: root.signalWidth; text: rowSnapshot.name || (root.document ? root.document.channelName(channelIndex) : "—"); font.weight: Font.DemiBold }
                             DataCell { width: root.phaseWidth; text: rowSnapshot.phase || "—"; color: phaseColor; font.weight: Font.DemiBold }
-                            DataCell { width: root.h1Width; text: rowSnapshot.valid ? root.formatValue(modelData, rowSnapshot.fundamental) : "—" }
+                            DataCell { width: root.h1Width; text: rowSnapshot.valid ? root.formatValue(channelIndex, rowSnapshot.fundamental) : "—" }
                             DataCell { width: root.angleWidth; text: rowSnapshot.valid ? rowSnapshot.angle.toFixed(1) + "°" : "—" }
-                            DataCell { width: root.extremumWidth; text: rowSnapshot.valid ? root.formatValue(modelData, rowSnapshot.extremum) : "—" }
-                            DataCell { visible: root.detailed; width: visible ? root.instantWidth : 0; text: rowSnapshot.valid ? root.formatValue(modelData, rowSnapshot.instant) : "—" }
-                            DataCell { visible: root.detailed; width: visible ? root.rmsWidth : 0; text: rowSnapshot.valid ? root.formatValue(modelData, rowSnapshot.rms) : "—" }
+                            DataCell { width: root.extremumWidth; text: rowSnapshot.valid ? root.formatValue(channelIndex, rowSnapshot.extremum) : "—" }
+                            DataCell { visible: root.detailed; width: visible ? root.instantWidth : 0; text: rowSnapshot.valid ? root.formatValue(channelIndex, rowSnapshot.instant) : "—" }
+                            DataCell { visible: root.detailed; width: visible ? root.rmsWidth : 0; text: rowSnapshot.valid ? root.formatValue(channelIndex, rowSnapshot.rms) : "—" }
                             DataCell { visible: root.detailed; width: visible ? root.crestWidth : 0; text: rowSnapshot.valid ? rowSnapshot.crestFactor.toFixed(2) : "—"; color: rowSnapshot.valid && rowSnapshot.crestFactor >= 2.0 ? "#8a5b00" : "#273139" }
-                            DataCell { visible: root.detailed; width: visible ? root.dcAbsWidth : 0; text: rowSnapshot.valid ? root.formatValue(modelData, rowSnapshot.dc) : "—"; color: "#536069" }
+                            DataCell { visible: root.detailed; width: visible ? root.dcAbsWidth : 0; text: rowSnapshot.valid ? root.formatValue(channelIndex, rowSnapshot.dc) : "—"; color: "#536069" }
 
                             Rectangle {
                                 width: root.percentWidth; height: parent.height; color: "transparent"
@@ -341,8 +403,8 @@ Rectangle {
                         ToolTip.visible: rowMouse.containsMouse
                         ToolTip.delay: 300
                         ToolTip.text: rowSnapshot.valid
-                            ? (root.document.channelName(modelData) + " · " + rowSnapshot.role
-                               + "\nC1 " + root.relativeMs().toFixed(3) + " ms · H1 " + root.formatValue(modelData, rowSnapshot.fundamental)
+                            ? ((rowSnapshot.name || root.document.channelName(channelIndex)) + " · " + rowSnapshot.role
+                               + "\nC1 " + root.relativeMs(Number(root.committedFrame.time)).toFixed(3) + " ms · H1 " + root.formatValue(channelIndex, rowSnapshot.fundamental)
                                + " · ∠" + rowSnapshot.angle.toFixed(2) + "°"
                                + "\nDC/H1 " + rowSnapshot.dcPercent.toFixed(3) + "% · THD " + rowSnapshot.thd.toFixed(3) + "%")
                             : "No valid trailing-cycle snapshot"
@@ -353,8 +415,8 @@ Rectangle {
                             hoverEnabled: true
                             acceptedButtons: Qt.LeftButton
                             onClicked: {
-                                if (root.document) root.document.selectChannel(modelData)
-                                root.signalActivated(modelData)
+                                if (root.document) root.document.selectChannel(channelIndex)
+                                root.signalActivated(channelIndex)
                             }
                         }
                     }
@@ -363,7 +425,7 @@ Rectangle {
         }
 
         Label {
-            visible: root.displayedChannels.length === 0
+            visible: root.displayedRows.length === 0 && !root.refreshing
             Layout.fillWidth: true
             Layout.fillHeight: true
             horizontalAlignment: Text.AlignHCenter
