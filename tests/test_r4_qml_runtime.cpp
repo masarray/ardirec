@@ -101,20 +101,32 @@ QVariant invoke(QObject* object, const char* method,
     return result;
 }
 
+QObject* find_window_item(QQuickItem* item, int windowId) {
+    if (!item) return nullptr;
+    const QVariant id = item->property("windowId");
+    if (id.isValid() && id.toInt() == windowId && item->property("windowState").isValid())
+        return item;
+    for (QQuickItem* child : item->childItems()) {
+        if (QObject* found = find_window_item(child, windowId)) return found;
+    }
+    return nullptr;
+}
+
 QObject* find_window(QObject* root, int windowId) {
-    const auto objects = root->findChildren<QObject*>();
-    for (QObject* object : objects) {
-        const QVariant id = object->property("windowId");
-        if (id.isValid() && id.toInt() == windowId && object->property("windowState").isValid())
-            return object;
+    return find_window_item(qobject_cast<QQuickItem*>(root), windowId);
+}
+
+QObject* find_named_item(QQuickItem* item, const QString& objectName) {
+    if (!item) return nullptr;
+    if (item->objectName() == objectName) return item;
+    for (QQuickItem* child : item->childItems()) {
+        if (QObject* found = find_named_item(child, objectName)) return found;
     }
     return nullptr;
 }
 
 QObject* find_host(QObject* childWindow) {
-    if (!childWindow) return nullptr;
-    const auto objects = childWindow->findChildren<QObject*>(QStringLiteral("r4AnalysisHost"));
-    return objects.isEmpty() ? nullptr : objects.front();
+    return find_named_item(qobject_cast<QQuickItem*>(childWindow), QStringLiteral("r4AnalysisHost"));
 }
 
 QObject* find_open_popup(QObject* root) {
