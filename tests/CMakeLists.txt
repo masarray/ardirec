@@ -134,6 +134,14 @@ if(TARGET Qt6::Core)
 
     qt_add_executable(ardirec_document_lifecycle_tests
         test_document_lifecycle.cpp
+        ../apps/desktop/cursor_snapshot_controller.cpp
+        ../apps/desktop/cursor_snapshot_controller.hpp
+        ../apps/desktop/locus_snapshot_controller.cpp
+        ../apps/desktop/locus_snapshot_controller.hpp
+        ../apps/desktop/harmonic_snapshot_controller.cpp
+        ../apps/desktop/harmonic_snapshot_controller.hpp
+        ../apps/desktop/table_snapshot_controller.cpp
+        ../apps/desktop/table_snapshot_controller.hpp
         ../apps/desktop/document_loader.cpp
         ../apps/desktop/document_loader.hpp
         ../apps/desktop/document_controller.cpp
@@ -167,4 +175,58 @@ if(TARGET Qt6::Core)
     ardirec_set_warnings(ardirec_locus_snapshot_tests)
     ardirec_enable_sanitizers(ardirec_locus_snapshot_tests)
     add_test(NAME ardirec_locus_snapshot_tests COMMAND ardirec_locus_snapshot_tests)
+
+    qt_add_executable(ardirec_r4_cursor_isolation_tests
+        test_r4_cursor_isolation.cpp
+        ../apps/desktop/cursor_snapshot_controller.cpp
+        ../apps/desktop/cursor_snapshot_controller.hpp
+        ../apps/desktop/document_loader.cpp
+        ../apps/desktop/document_loader.hpp
+        ../apps/desktop/document_controller.cpp
+        ../apps/desktop/document_controller.hpp
+        ${ARDIREC_DOCUMENT_DERIVED_SOURCES}
+    )
+    set_target_properties(ardirec_r4_cursor_isolation_tests PROPERTIES AUTOMOC ON)
+    target_include_directories(ardirec_r4_cursor_isolation_tests PRIVATE ../apps/desktop)
+    target_link_libraries(ardirec_r4_cursor_isolation_tests PRIVATE ardirec::core Qt6::Core Qt6::Concurrent)
+    target_compile_definitions(ardirec_r4_cursor_isolation_tests PRIVATE ARDIREC_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
+    ardirec_set_warnings(ardirec_r4_cursor_isolation_tests)
+    ardirec_enable_sanitizers(ardirec_r4_cursor_isolation_tests)
+    add_test(NAME ardirec_r4_cursor_isolation_tests COMMAND ardirec_r4_cursor_isolation_tests)
+
+    qt_add_executable(ardirec_r4_locus_fit_tests
+        test_r4_locus_fit.cpp
+        ../apps/desktop/cursor_snapshot_controller.cpp
+        ../apps/desktop/cursor_snapshot_controller.hpp
+        ../apps/desktop/locus_snapshot_controller.cpp
+        ../apps/desktop/locus_snapshot_controller.hpp
+        ../apps/desktop/document_loader.cpp
+        ../apps/desktop/document_loader.hpp
+        ../apps/desktop/document_controller.cpp
+        ../apps/desktop/document_controller.hpp
+        ${ARDIREC_DOCUMENT_DERIVED_SOURCES}
+    )
+    set_target_properties(ardirec_r4_locus_fit_tests PROPERTIES AUTOMOC ON)
+    target_include_directories(ardirec_r4_locus_fit_tests PRIVATE ../apps/desktop)
+    target_link_libraries(ardirec_r4_locus_fit_tests PRIVATE ardirec::core Qt6::Core Qt6::Concurrent)
+    target_compile_definitions(ardirec_r4_locus_fit_tests PRIVATE ARDIREC_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
+    ardirec_set_warnings(ardirec_r4_locus_fit_tests)
+    ardirec_enable_sanitizers(ardirec_r4_locus_fit_tests)
+    add_test(NAME ardirec_r4_locus_fit_tests COMMAND ardirec_r4_locus_fit_tests)
+
+    if(TARGET Qt6::Quick AND TARGET Qt6::Qml AND TARGET Qt6::QuickControls2)
+        qt_add_executable(ardirec_r4_qml_runtime_tests
+            test_r4_qml_runtime.cpp
+        )
+        set_target_properties(ardirec_r4_qml_runtime_tests PROPERTIES AUTOMOC ON)
+        target_link_libraries(ardirec_r4_qml_runtime_tests PRIVATE Qt6::Core Qt6::Qml Qt6::Quick Qt6::QuickControls2)
+        target_compile_definitions(ardirec_r4_qml_runtime_tests PRIVATE
+            ARDIREC_QML_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../apps/desktop/qml"
+            ARDIREC_TEST_QML_DIR="${CMAKE_CURRENT_SOURCE_DIR}/qml"
+        )
+        ardirec_set_warnings(ardirec_r4_qml_runtime_tests)
+        ardirec_enable_sanitizers(ardirec_r4_qml_runtime_tests)
+        add_test(NAME ardirec_r4_qml_runtime_tests COMMAND ardirec_r4_qml_runtime_tests)
+        set_tests_properties(ardirec_r4_qml_runtime_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+    endif()
 endif()
