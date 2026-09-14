@@ -242,5 +242,21 @@ if(TARGET Qt6::Core)
         ardirec_enable_sanitizers(ardirec_r5_linked_cursor_tests)
         add_test(NAME ardirec_r5_linked_cursor_tests COMMAND ardirec_r5_linked_cursor_tests)
         set_tests_properties(ardirec_r5_linked_cursor_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+        qt_add_executable(ardirec_r5_phasor_zero_flicker_tests
+            test_r5_phasor_zero_flicker.cpp
+            ../apps/desktop/phasor_vector_item.cpp
+            ../apps/desktop/phasor_vector_item.hpp
+        )
+        set_target_properties(ardirec_r5_phasor_zero_flicker_tests PROPERTIES AUTOMOC ON)
+        target_include_directories(ardirec_r5_phasor_zero_flicker_tests PRIVATE ../apps/desktop)
+        target_link_libraries(ardirec_r5_phasor_zero_flicker_tests PRIVATE Qt6::Core Qt6::Qml Qt6::Quick Qt6::QuickControls2)
+        target_compile_definitions(ardirec_r5_phasor_zero_flicker_tests PRIVATE
+            ARDIREC_QML_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../apps/desktop/qml"
+        )
+        ardirec_set_warnings(ardirec_r5_phasor_zero_flicker_tests)
+        ardirec_enable_sanitizers(ardirec_r5_phasor_zero_flicker_tests)
+        add_test(NAME ardirec_r5_phasor_zero_flicker_tests COMMAND ardirec_r5_phasor_zero_flicker_tests)
+        set_tests_properties(ardirec_r5_phasor_zero_flicker_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
     endif()
 endif()
