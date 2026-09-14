@@ -175,7 +175,7 @@ for needle, reason in (
 require("tests/data/distance_sigra_parity.rio", "RE/RL", "SIGRA fixture must carry resistance compensation ratio")
 require("tests/data/distance_sigra_parity.rio", "XE/XL", "SIGRA fixture must carry reactance compensation ratio")
 require("tests/CMakeLists.txt", "ardirec_locus_snapshot_tests", "production-path Locus golden must run under CTest")
-require("tests/CMakeLists.txt", "ardirec_r5_locus_parity_tests", "R5.4 SIGRA viewport/full-cycle qualification must run under CTest")
+require("tests/R5LocusParity.cmake", "ardirec_r5_locus_parity_tests", "R5.4 SIGRA viewport/full-cycle qualification must run under CTest")
 
 
 # R1.2/R5.4 frequency + multi-rate DFT: calculation frequency is estimated once
@@ -184,7 +184,8 @@ require("tests/CMakeLists.txt", "ardirec_r5_locus_parity_tests", "R5.4 SIGRA vie
 for needle, reason in (
     ("trailing_cycle_window", "Cursor and Locus require one shared causal timestamp window"),
     ("timestamp_cell_weight", "multi-rate DFT requires actual-time quadrature weights"),
-    ("if (finish - times.front() + tolerance < period) return window;", "partial beginning-of-record cycles must be rejected"),
+    ("if (start < times.front() - tolerance) return window;", "partial beginning-of-record cycles must be rejected"),
+    ("finish - start < period - tolerance", "valid windows must span one complete backward period"),
 ):
     require("core/include/ardirec/power/timestamped_dft.hpp", needle, reason)
 for needle, reason in (
