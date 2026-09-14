@@ -120,9 +120,25 @@ def probe_phasor_committed_frame() -> bool:
         "displaySnapshotB: snapshotMatches(snapshotB, cursorBTime) ? snapshotB : ({valid:false})"
         in text
     )
-    committed_display = (
-        "displaySnapshotA: snapshotA && snapshotA.valid ? snapshotA : ({valid:false})" in text
-        and "displaySnapshotB: snapshotB && snapshotB.valid ? snapshotB : ({valid:false})" in text
+    committed_display = all(
+        token in text
+        for token in (
+            "property var committedSnapshotA: ({valid:false})",
+            "property var committedSnapshotB: ({valid:false})",
+            "readonly property var displaySnapshotA: committedSnapshotA",
+            "readonly property var displaySnapshotB: committedSnapshotB",
+            "function onCursorAChanged() { root.acceptSnapshotA() }",
+            "function onCursorBChanged() { root.acceptSnapshotB() }",
+        )
+    )
+    latest_only = all(
+        token in text
+        for token in (
+            "if (!root.committedSnapshotA.valid || root.snapshotMatches(candidate, root.cursorATime)) root.committedSnapshotA = candidate",
+            "if (!root.committedSnapshotB.valid || root.snapshotMatches(candidate, root.cursorBTime)) root.committedSnapshotB = candidate",
+            "if (!cursorSnapshotController.busyA && !root.cursorARequestQueued) root.committedSnapshotA = ({valid:false})",
+            "if (!cursorSnapshotController.busyB && !root.cursorBRequestQueued) root.committedSnapshotB = ({valid:false})",
+        )
     )
     bounded_latest = all(
         token in text
@@ -139,12 +155,14 @@ def probe_phasor_committed_frame() -> bool:
         "ardirec_r5_phasor_zero_flicker_tests" in cmake
         and "committed C1 frame remains valid while a newer calculation is pending" in runtime
         and "continuous scrub coalesces intermediate C1 positions" in runtime
+        and "intermediate completed frame is skipped when a newer scrub target is pending" in runtime
         and "latest queued scrub target wins after bounded revalidation" in runtime
     )
     return (
         not clears_a
         and not clears_b
         and committed_display
+        and latest_only
         and bounded_latest
         and runtime_regression
     )
