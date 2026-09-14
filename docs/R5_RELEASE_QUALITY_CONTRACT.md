@@ -59,6 +59,10 @@ Required model:
 
 The display must not use `valid -> empty -> valid` as a synchronization mechanism. Static polar grid/axis/legend geometry must remain stable while only vector data changes. QSG vector geometry must be retained and updated rather than deleting the complete old scene node on each update.
 
+R5.2 implements stale-while-revalidate directly in `PhasorView.qml`: `cursorSnapshotController.cursorA/cursorB` remain the committed immutable display frames until the controller publishes a replacement. Cursor motion is coalesced to one in-flight calculation plus one latest pending target per cursor, so continuous scrubbing does not fan out unbounded requests. The requested cursor position can advance while the last committed vectors and legend values remain visible; an `UPDATING` indicator makes that transient state explicit. Sequence labels use the committed snapshot timestamp so stale data is never mislabeled as the new cursor time.
+
+`PhasorVectorItem` now retains its QSG root and existing per-vector geometry/material nodes, mutating vertex and material data in place and allocating/removing nodes only when vector cardinality changes. `ardirec_r5_phasor_zero_flicker_tests` executes the pending/commit pipeline, proves intermediate scrub positions are coalesced, verifies vectors never blank during pending work, and asserts QSG root/vector-node identity survives updates.
+
 ### R5.3 — Table atomic-frame stability (#75)
 
 Heavy per-channel table analysis must not execute synchronously from QML bindings or delegates during scrub. One complete immutable table frame is calculated away from the GUI path and committed atomically. The previous committed frame remains visible until the new frame is complete.
