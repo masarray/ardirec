@@ -96,14 +96,21 @@ int main(int argc, char* argv[]) {
 
         // Warm the bounded scalar caches before close. They are synchronously tied to
         // documentChanged and must never preserve values from a closed record.
-        require(!harmonic.spectrumAt(0, 0.025, 15).isEmpty(), "harmonic cache is populated before close");
-        require(!table.snapshotAt(0, 0.025).isEmpty(), "engineering table cache is populated before close");
+        const QVariantMap harmonicBeforeClose = harmonic.spectrumAt(0, 0.025, 15);
+        const QVariantMap tableBeforeClose = table.snapshotAt(0, 0.025);
+        require(harmonicBeforeClose.value(QStringLiteral("valid")).toBool(), "harmonic cache is populated before close");
+        require(tableBeforeClose.value(QStringLiteral("valid")).toBool(), "engineering table cache is populated before close");
 
         document.closeDocument();
         require_closed_state(document);
         require_analysis_invalidated(cursor, locus);
-        require(harmonic.spectrumAt(0, 0.025, 15).isEmpty(), "harmonic cache cannot serve a closed document");
-        require(table.snapshotAt(0, 0.025).isEmpty(), "table cache cannot serve a closed document");
+        const QVariantMap harmonicAfterClose = harmonic.spectrumAt(0, 0.025, 15);
+        const QVariantMap tableAfterClose = table.snapshotAt(0, 0.025);
+        require(!harmonicAfterClose.value(QStringLiteral("valid")).toBool()
+                    && harmonicAfterClose.value(QStringLiteral("bins")).toList().isEmpty(),
+                "harmonic cache cannot serve stale engineering data after close");
+        require(!tableAfterClose.value(QStringLiteral("valid")).toBool(),
+                "table cache cannot serve stale engineering data after close");
 
         // Generation invalidation is deterministic even if close happens before the
         // background load callback gets an event-loop turn. A stale loader result
