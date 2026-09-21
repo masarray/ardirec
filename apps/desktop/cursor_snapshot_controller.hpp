@@ -47,7 +47,8 @@ private:
     void rebuildSource();
     void request(int cursor, double absoluteTimeSeconds);
     void cancel(int cursor, bool clearBusy = false) noexcept;
-    void publish(int cursor, quint64 generation, const QVariantMap& snapshot);
+    void publish(int cursor, quint64 generation, quint64 sourceRevision,
+                 const QVariantMap& snapshot);
 
     QPointer<DocumentController> m_document;
     std::shared_ptr<const CursorSnapshotSource> m_source;
@@ -57,10 +58,19 @@ private:
     QVariantMap m_cursorB;
     quint64 m_generationA{0};
     quint64 m_generationB{0};
+    quint64 m_sourceRevision{0};
+    quint64 m_snapshotSourceRevisionA{0};
+    quint64 m_snapshotSourceRevisionB{0};
+    quint64 m_inFlightSourceRevisionA{0};
+    quint64 m_inFlightSourceRevisionB{0};
     double m_lastTimeA{0.0};
     double m_lastTimeB{0.0};
+    double m_inFlightTimeA{0.0};
+    double m_inFlightTimeB{0.0};
     bool m_haveLastA{false};
     bool m_haveLastB{false};
+    bool m_haveInFlightA{false};
+    bool m_haveInFlightB{false};
     bool m_busyA{false};
     bool m_busyB{false};
 };
