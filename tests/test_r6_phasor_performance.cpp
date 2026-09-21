@@ -17,6 +17,7 @@
 #include <QVariantMap>
 #include <QtQml/qqml.h>
 
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <filesystem>
