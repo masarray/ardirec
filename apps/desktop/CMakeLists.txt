@@ -105,6 +105,8 @@ qt_add_qml_module(ardirec
         qml/icons/shield-check.svg
         qml/icons/minus.svg
         qml/icons/plus.svg
+        qml/icons/copy.svg
+        qml/icons/x.svg
 )
 
 target_link_libraries(ardirec PRIVATE
