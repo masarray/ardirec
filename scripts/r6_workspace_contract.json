@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "baseline": {
+    "main_commit": "af54b9122928c2e6cc03243b95ba93aed2e93087",
+    "observed_r5_candidate_pr": 90,
+    "observed_r5_candidate_head": "88202432e376eef0be739df26fe250e7f4935f27",
+    "rc_qualified": false,
+    "umbrella_issue": 91,
+    "contract_issue": 92
+  },
+  "contracts": {
+    "lucide_child_chrome": {
+      "stage": "R6.1",
+      "issue": 93,
+      "expected": "known_fail"
+    },
+    "tile_shared_edge_resize": {
+      "stage": "R6.2",
+      "issue": 94,
+      "expected": "known_fail"
+    },
+    "virtual_workspace_scroll": {
+      "stage": "R6.3",
+      "issue": 95,
+      "expected": "known_fail"
+    },
+    "free_drag_direct_manipulation": {
+      "stage": "R6.3",
+      "issue": 95,
+      "expected": "known_fail"
+    },
+    "phasor_latency_budget": {
+      "stage": "R6.4",
+      "issue": 96,
+      "expected": "known_fail"
+    }
+  }
+}
