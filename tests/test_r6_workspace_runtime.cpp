@@ -226,16 +226,112 @@ void verify_shared_tile_boundaries() {
                  1200.0, 0.75,
                  "tile resize preserves the occupied workspace extent");
 }
+
+void verify_virtual_workspace_and_direct_drag() {
+    QQmlEngine engine;
+    AnalysisHostInterceptor interceptor(
+        QUrl::fromLocalFile(QStringLiteral(ARDIREC_TEST_QML_DIR)
+                            + QStringLiteral("/AnalysisViewHost.qml")));
+    engine.addUrlInterceptor(&interceptor);
+
+    QQmlComponent component(
+        &engine,
+        QUrl::fromLocalFile(QStringLiteral(ARDIREC_QML_DIR)
+                            + QStringLiteral("/MdiWorkspace.qml")));
+    if (component.status() != QQmlComponent::Ready)
+        throw std::runtime_error(component_errors(component).toStdString());
+
+    std::unique_ptr<QObject> workspace(component.create());
+    require(workspace != nullptr, "R6.3 workspace runtime component is created");
+    workspace->setProperty("width", 1000.0);
+    workspace->setProperty("height", 700.0);
+    workspace->setProperty("hasRecord", true);
+    invoke(workspace.get(), "resetForRecord");
+    pump_events();
+
+    const int windowId = workspace->property("activeWindowId").toInt();
+    require(windowId > 0, "free workspace has an active child");
+
+    // Free geometry is logical desktop geometry: right/bottom motion must not
+    // be clamped merely because the current viewport ends.
+    require(QMetaObject::invokeMethod(
+                workspace.get(), "updateGeometry",
+                Q_ARG(QVariant, windowId), Q_ARG(QVariant, 1250.0),
+                Q_ARG(QVariant, 920.0), Q_ARG(QVariant, 520.0),
+                Q_ARG(QVariant, 360.0)),
+            "free geometry update succeeds");
+    pump_events();
+
+    QObject* child = find_window(workspace.get(), windowId);
+    require(child != nullptr, "free child delegate remains alive");
+    require_near(child->property("x").toDouble(), 1250.0, 0.75,
+                 "free drag follows every pointer update without viewport clamp");
+    require_near(child->property("y").toDouble(), 920.0, 0.75,
+                 "free drag follows every pointer update without viewport clamp");
+    require(workspace->property("workspaceContentWidth").toDouble() > 1770.0,
+            "moving a child beyond the viewport expands logical workspace width");
+    require(workspace->property("workspaceContentHeight").toDouble() > 1280.0,
+            "moving a child beyond the viewport expands logical workspace height");
+    require(workspace->property("horizontalScrollRange").toDouble() > 0.0
+            && workspace->property("verticalScrollRange").toDouble() > 0.0,
+            "workspace exposes scroll range instead of clamping the child");
+
+    // Pointer updates continue to write their exact requested logical position.
+    require(QMetaObject::invokeMethod(
+                workspace.get(), "updateGeometry",
+                Q_ARG(QVariant, windowId), Q_ARG(QVariant, 1315.0),
+                Q_ARG(QVariant, 955.0), Q_ARG(QVariant, 520.0),
+                Q_ARG(QVariant, 360.0)),
+            "second direct free geometry update succeeds");
+    child = find_window(workspace.get(), windowId);
+    require_near(child->property("x").toDouble(), 1315.0, 0.75,
+                 "free drag follows every pointer update without viewport clamp");
+    require_near(child->property("y").toDouble(), 955.0, 0.75,
+                 "free drag follows every pointer update without viewport clamp");
+
+    const double screenXBefore =
+        child->property("x").toDouble() - workspace->property("workspaceScrollX").toDouble();
+    const double screenYBefore =
+        child->property("y").toDouble() - workspace->property("workspaceScrollY").toDouble();
+
+    require(QMetaObject::invokeMethod(
+                workspace.get(), "beginFreeDrag",
+                Q_ARG(QVariant, windowId), Q_ARG(QVariant, 998.0),
+                Q_ARG(QVariant, 698.0)),
+            "edge auto-scroll drag begins");
+    const bool advanced = invoke(workspace.get(), "stepAutoScroll").toBool();
+    require(QMetaObject::invokeMethod(
+                workspace.get(), "endFreeDrag", Q_ARG(QVariant, windowId)),
+            "edge auto-scroll drag ends");
+
+    require(advanced, "edge drag advances workspace scroll while preserving pointer-relative position");
+    require(workspace->property("workspaceScrollX").toDouble() > 0.0
+            && workspace->property("workspaceScrollY").toDouble() > 0.0,
+            "edge drag advances workspace scroll while preserving pointer-relative position");
+
+    child = find_window(workspace.get(), windowId);
+    require(child != nullptr, "auto-scrolled child remains alive");
+    const double screenXAfter =
+        child->property("x").toDouble() - workspace->property("workspaceScrollX").toDouble();
+    const double screenYAfter =
+        child->property("y").toDouble() - workspace->property("workspaceScrollY").toDouble();
+    require_near(screenXAfter, screenXBefore, 0.75,
+                 "edge drag advances workspace scroll while preserving pointer-relative position");
+    require_near(screenYAfter, screenYBefore, 0.75,
+                 "edge drag advances workspace scroll while preserving pointer-relative position");
+}
+
 } // namespace
 
 int main(int argc, char* argv[]) {
     QGuiApplication app(argc, argv);
     try {
         verify_shared_tile_boundaries();
-        std::cout << "ArDiRec R6.2 workspace runtime qualification: PASS\n";
+        verify_virtual_workspace_and_direct_drag();
+        std::cout << "ArDiRec R6.3 workspace runtime qualification: PASS\n";
         return 0;
     } catch (const std::exception& ex) {
-        std::cerr << "ArDiRec R6.2 workspace runtime qualification: FAIL: "
+        std::cerr << "ArDiRec R6.3 workspace runtime qualification: FAIL: "
                   << ex.what() << '\n';
         return 1;
     }
