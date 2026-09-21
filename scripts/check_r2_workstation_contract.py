@@ -72,22 +72,27 @@ require("tests/test_document_lifecycle.cpp", "rmsTileCacheSnapshot() == nullptr"
 require("tests/test_document_lifecycle.cpp", "pump_events(250)", "test must give the cancelled loader callback a chance to publish stale data")
 require("tests/CMakeLists.txt", "ardirec_document_lifecycle_tests", "close lifecycle regression must run under CTest")
 
-# R2 discovered that the executable version and Windows artifact identity could
-# drift. Preserve that invariant across later milestones instead of pinning the
-# repository forever to the historical R2 alpha.20 candidate.
-main_cpp = text("apps/desktop/main.cpp")
-windows_workflow = text(".github/workflows/windows-build.yml")
-version_match = re.search(r'setApplicationVersion\(QStringLiteral\("([^\"]+)"\)\)', main_cpp)
-if not version_match:
-    FAILURES.append("apps/desktop/main.cpp: application version declaration not found")
-else:
-    version = version_match.group(1)
-    staging = f"ardirec-v{version}-windows-x64"
-    archive = f"ardirec-v{version}-windows-x64-portable.zip"
-    if staging not in windows_workflow:
-        FAILURES.append(f".github/workflows/windows-build.yml: staging folder does not match application version {version!r}")
-    if archive not in windows_workflow:
-        FAILURES.append(f".github/workflows/windows-build.yml: portable ZIP does not match application version {version!r}")
+# R2 discovered that executable and artifact identity could drift. Later milestones
+# must preserve one canonical source instead of copying a version literal across
+# C++, CI, packaging, and release workflows.
+version = text("VERSION").strip()
+if not version:
+    FAILURES.append("VERSION: canonical application/package version must not be empty")
+elif not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?", version):
+    FAILURES.append(f"VERSION: unsupported semantic version format {version!r}")
+
+require("apps/desktop/CMakeLists.txt", 'file(READ "${CMAKE_SOURCE_DIR}/VERSION" ARDIREC_VERSION)',
+        "desktop build must read the canonical VERSION file")
+require("apps/desktop/CMakeLists.txt", 'target_compile_definitions(ardirec PRIVATE ARDIREC_VERSION="${ARDIREC_VERSION}")',
+        "canonical VERSION must become the compiled application identity")
+require("apps/desktop/main.cpp", "setApplicationVersion(QStringLiteral(ARDIREC_VERSION))",
+        "desktop runtime must expose the compiled canonical VERSION")
+require(".github/workflows/windows-build.yml", "Get-Content VERSION -Raw",
+        "Windows packaging must read the same canonical VERSION")
+require(".github/workflows/windows-build.yml", '$folder = "ardirec-v$env:ARDIREC_PACKAGE_VERSION-windows-x64"',
+        "Windows staging folder must derive from the canonical version")
+require(".github/workflows/windows-build.yml", '$zip = "ardirec-v$env:ARDIREC_PACKAGE_VERSION-windows-x64-portable.zip"',
+        "Windows portable ZIP must derive from the canonical version")
 
 if FAILURES:
     print("ArdIREC R2 workstation contract: FAIL", file=sys.stderr)
