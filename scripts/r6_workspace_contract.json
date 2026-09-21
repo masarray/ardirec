@@ -22,12 +22,12 @@
     "virtual_workspace_scroll": {
       "stage": "R6.3",
       "issue": 95,
-      "expected": "known_fail"
+      "expected": "pass"
     },
     "free_drag_direct_manipulation": {
       "stage": "R6.3",
       "issue": 95,
-      "expected": "known_fail"
+      "expected": "pass"
     },
     "phasor_latency_budget": {
       "stage": "R6.4",
