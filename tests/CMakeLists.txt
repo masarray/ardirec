@@ -296,5 +296,30 @@ if(TARGET Qt6::Core)
         ardirec_enable_sanitizers(ardirec_r6_workspace_runtime_tests)
         add_test(NAME ardirec_r6_workspace_runtime_tests COMMAND ardirec_r6_workspace_runtime_tests)
         set_tests_properties(ardirec_r6_workspace_runtime_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+        qt_add_executable(ardirec_r6_phasor_performance_tests
+            test_r6_phasor_performance.cpp
+            ../apps/desktop/cursor_snapshot_controller.cpp
+            ../apps/desktop/cursor_snapshot_controller.hpp
+            ../apps/desktop/document_loader.cpp
+            ../apps/desktop/document_loader.hpp
+            ../apps/desktop/document_controller.cpp
+            ../apps/desktop/document_controller.hpp
+            ../apps/desktop/phasor_vector_item.cpp
+            ../apps/desktop/phasor_vector_item.hpp
+            ${ARDIREC_DOCUMENT_DERIVED_SOURCES}
+        )
+        set_target_properties(ardirec_r6_phasor_performance_tests PROPERTIES AUTOMOC ON)
+        target_include_directories(ardirec_r6_phasor_performance_tests PRIVATE ../apps/desktop)
+        target_link_libraries(ardirec_r6_phasor_performance_tests PRIVATE
+            ardirec::core Qt6::Core Qt6::Concurrent Qt6::Qml Qt6::Quick Qt6::QuickControls2)
+        target_compile_definitions(ardirec_r6_phasor_performance_tests PRIVATE
+            ARDIREC_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data"
+            ARDIREC_QML_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../apps/desktop/qml"
+        )
+        ardirec_set_warnings(ardirec_r6_phasor_performance_tests)
+        ardirec_enable_sanitizers(ardirec_r6_phasor_performance_tests)
+        add_test(NAME ardirec_r6_phasor_performance_tests COMMAND ardirec_r6_phasor_performance_tests)
+        set_tests_properties(ardirec_r6_phasor_performance_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
     endif()
 endif()
