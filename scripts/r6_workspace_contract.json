@@ -32,7 +32,7 @@
     "phasor_latency_budget": {
       "stage": "R6.4",
       "issue": 96,
-      "expected": "known_fail"
+      "expected": "pass"
     }
   }
 }
