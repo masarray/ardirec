@@ -1,10 +1,10 @@
 <p align="center">
-  <img src="icon/android-chrome-192x192.png" width="128" height="128" alt="ArdIREC logo">
+  <img src="icon/android-chrome-192x192.png" width="128" height="128" alt="ArDiRec logo">
 </p>
 
-# ArdIREC
+# ArDiRec
 
-**ArdIREC** is an open-source, vendor-neutral COMTRADE workstation for protection and disturbance engineers.
+**ArDiRec** (Ari Disturbance Recorder) is an open-source, vendor-neutral COMTRADE workstation for protection and disturbance engineers.
 
 > Open any disturbance record. Understand it immediately.
 
@@ -12,7 +12,7 @@ The project is intentionally being built in layers. The first product gate is a 
 
 ## Product direction
 
-ardirec targets four qualities above feature count:
+ArDiRec targets four qualities above feature count:
 
 1. **Compatibility** — real-world COMTRADE 1991/1999/2001/2013, including ugly vendor edge cases.
 2. **Speed** — progressive loading, lazy decoding, multi-resolution waveform LOD and GPU rendering.
@@ -86,13 +86,13 @@ Viewer 1.0 does **not** include AI-generated fault conclusions. It first earns t
 
 ## Licensing
 
-ardirec is licensed under the **GNU General Public License v3.0 or later**. See [LICENSE](LICENSE).
+ArDiRec is licensed under the **GNU General Public License v3.0 or later**. See [LICENSE](LICENSE).
 
 Third-party code must be license-compatible and documented. Competitor products are used only as black-box capability/UX benchmarks; proprietary code and visual assets must not be copied.
 
 ## Trademark note
 
-SIGRA, SIPROTEC, OMICRON, TransView, SEL and other product names are trademarks of their respective owners. ardirec is not affiliated with or endorsed by those vendors.
+SIGRA, SIPROTEC, OMICRON, TransView, SEL and other product names are trademarks of their respective owners. ArDiRec is not affiliated with or endorsed by those vendors.
 
 ## Contributing
 
