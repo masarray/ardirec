@@ -47,13 +47,17 @@ Runtime regression covers width/height extent growth, visible scroll range, sequ
 
 ### R6.4 — Phasor hot-path optimization
 
-R5.2 fixed blank-frame flicker and retained QSG vector geometry. It did not establish an opening/scrub latency budget. R6.4 must add measured, deterministic performance regression using `std::chrono::steady_clock` on repository fixtures before claiming optimization.
+Implemented in R6.4. The qualified path now measures both synchronous first-open construction and real immutable fundamental-snapshot completion with `std::chrono::steady_clock`, then exercises a 250-update cursor scrub and sequential real-fixture snapshot requests under explicit latency budgets.
 
-The performance work must preserve:
-- committed-frame / stale-while-revalidate behavior;
-- one request owner for duplicate Phasor children;
+First-open work is reduced in two places. Heavy `PhasorDiagram` bodies are activated asynchronously only when their group approaches the scroll viewport; empty and distant groups no longer construct radial grids, labels and retained vector items merely because the Phasor child opened. Once a group has been activated it stays loaded, while off-screen groups detach from changing cursor snapshots so scrub updates do not rebuild invisible geometry.
+
+The fundamental snapshot controller now suppresses identical committed or already-in-flight requests at the same source revision. This prevents multiple consumers from cancelling/restarting the same one-cycle DFT during view construction. Source revision is tracked explicitly so representation/document changes still force revalidation. `SequenceSummary` is a pure consumer of the child-local committed immutable snapshot and no longer owns a fallback request path.
+
+The performance qualification also locks:
+- committed-frame / stale-while-revalidate continuity during scrub;
+- one request owner for duplicate Phasor children, with controller-level identical-request dedup as a second guard;
 - one immutable fundamental snapshot feeding sequence and vector panels;
-- retained QSG geometry;
+- retained QSG geometry from R5.2;
 - no changes to qualified DFT/distance equations solely to improve latency.
 
 ## R6.5 strict gate

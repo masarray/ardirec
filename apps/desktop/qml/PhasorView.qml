@@ -52,6 +52,19 @@ Rectangle {
         { title: "AUXILIARY VECTORS", subtitle: "custom signals assigned to the residual/vector group", channels: residualOtherChannels, scale: residualOtherScale }
     ]
 
+    // Compute group scroll positions from the stable model rather than delegate
+    // lifecycle timing. This covers both layouts: with Sequence at the top and
+    // without Sequence, where the first real group legitimately starts at y=0.
+    function groupLogicalY(groupIndex) {
+        let position = root.sequenceAvailable ? 146 : 0 // 138 px block + 8 px Column spacing
+        for (let i = 0; i < groupIndex; ++i) {
+            const group = root.groupModel[i]
+            if (group && group.channels && group.channels.length)
+                position += 400 // 392 px group + 8 px Column spacing
+        }
+        return position
+    }
+
     function relativeMs(timeSeconds) {
         return root.document ? (timeSeconds - root.document.triggerOffsetSeconds) * 1000.0 : 0.0
     }
@@ -381,8 +394,16 @@ Rectangle {
                 Repeater {
                     model: root.groupModel
                     Rectangle {
+                        id: groupCard
                         required property int index
                         required property var modelData
+                        readonly property var groupData: modelData
+                        readonly property real logicalY: root.groupLogicalY(index)
+                        readonly property bool nearViewport: visible && height > 0
+                            && logicalY + height >= scroller.contentY - 96
+                            && logicalY <= scroller.contentY + scroller.height + 96
+                        property bool bodyActivated: false
+
                         width: groupColumn.width
                         height: modelData.channels && modelData.channels.length ? 392 : 0
                         visible: height > 0
@@ -390,41 +411,60 @@ Rectangle {
                         border.color: "#c5cbd0"
                         radius: 2
 
+                        onNearViewportChanged: if (nearViewport) bodyActivated = true
+
                         Rectangle {
                             id: groupHeader
                             anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top
                             height: 34; color: "#e8ecef"; border.color: "#c9ced2"
                             RowLayout {
                                 anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10; spacing: 8
-                                Label { text: modelData.title; color: "#30383e"; font.pixelSize: 9; font.weight: Font.DemiBold; font.letterSpacing: 0.6 }
-                                Label { text: modelData.subtitle; color: "#798087"; font.pixelSize: 8 }
+                                Label { text: groupCard.groupData.title; color: "#30383e"; font.pixelSize: 9; font.weight: Font.DemiBold; font.letterSpacing: 0.6 }
+                                Label { text: groupCard.groupData.subtitle; color: "#798087"; font.pixelSize: 8 }
                                 Item { Layout.fillWidth: true }
-                                Label { text: modelData.channels.length + " signal" + (modelData.channels.length === 1 ? "" : "s"); color: "#697178"; font.pixelSize: 8 }
+                                Label { text: groupCard.groupData.channels.length + " signal" + (groupCard.groupData.channels.length === 1 ? "" : "s"); color: "#697178"; font.pixelSize: 8 }
                             }
                         }
 
-                        RowLayout {
-                            anchors.left: parent.left; anchors.right: parent.right
-                            anchors.top: groupHeader.bottom; anchors.bottom: parent.bottom
-                            anchors.margins: 6; spacing: 6
+                        // R6.4: heavy radial grids/labels/vector items are created
+                        // only when a group first approaches the viewport. Once
+                        // created they are retained, but off-screen groups detach
+                        // from changing cursor snapshots so scrubbing does not
+                        // rebuild geometry or legend bindings outside the view.
+                        Loader {
+                            id: groupBodyLoader
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.top: groupHeader.bottom
+                            anchors.bottom: parent.bottom
+                            anchors.margins: 6
+                            active: groupCard.bodyActivated
+                            asynchronous: true
+                            visible: groupCard.nearViewport && status === Loader.Ready
 
-                            PhasorDiagram {
-                                Layout.fillWidth: true; Layout.fillHeight: true; Layout.minimumWidth: 360
-                                document: root.document; analysis: root.analysis
-                                snapshot: root.displaySnapshotA
-                                channels: modelData.channels
-                                title: "C1 · " + modelData.title
-                                scaleMagnitude: modelData.scale
-                                cursorAccent: "#244f9e"
-                            }
-                            PhasorDiagram {
-                                Layout.fillWidth: true; Layout.fillHeight: true; Layout.minimumWidth: 360
-                                document: root.document; analysis: root.analysis
-                                snapshot: root.displaySnapshotB
-                                channels: modelData.channels
-                                title: "C2 · " + modelData.title
-                                scaleMagnitude: modelData.scale
-                                cursorAccent: "#b77900"
+                            sourceComponent: Component {
+                                RowLayout {
+                                    spacing: 6
+
+                                    PhasorDiagram {
+                                        Layout.fillWidth: true; Layout.fillHeight: true; Layout.minimumWidth: 360
+                                        document: root.document; analysis: root.analysis
+                                        snapshot: groupCard.nearViewport ? root.displaySnapshotA : ({valid:false})
+                                        channels: groupCard.groupData.channels
+                                        title: "C1 · " + groupCard.groupData.title
+                                        scaleMagnitude: groupCard.groupData.scale
+                                        cursorAccent: "#244f9e"
+                                    }
+                                    PhasorDiagram {
+                                        Layout.fillWidth: true; Layout.fillHeight: true; Layout.minimumWidth: 360
+                                        document: root.document; analysis: root.analysis
+                                        snapshot: groupCard.nearViewport ? root.displaySnapshotB : ({valid:false})
+                                        channels: groupCard.groupData.channels
+                                        title: "C2 · " + groupCard.groupData.title
+                                        scaleMagnitude: groupCard.groupData.scale
+                                        cursorAccent: "#b77900"
+                                    }
+                                }
                             }
                         }
                     }

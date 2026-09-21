@@ -313,6 +313,7 @@ CursorSnapshotController::~CursorSnapshotController() {
 }
 
 void CursorSnapshotController::rebuildSource() {
+    ++m_sourceRevision;
     cancel(1, true);
     cancel(2, true);
     if (!m_document || !m_document->dataStoreSnapshot() || !m_document->timeIndexSnapshot()
@@ -376,6 +377,8 @@ void CursorSnapshotController::cancel(int cursor, bool clearBusy) noexcept {
     auto& token = cursor == 1 ? m_cancelA : m_cancelB;
     if (token) token->store(true, std::memory_order_relaxed);
     token.reset();
+    if (cursor == 1) m_haveInFlightA = false;
+    else m_haveInFlightB = false;
     if (!clearBusy) return;
     if (cursor == 1) {
         if (m_busyA) {
@@ -402,43 +405,82 @@ void CursorSnapshotController::requestCursorB(double absoluteTimeSeconds) {
 
 void CursorSnapshotController::request(int cursor, double absoluteTimeSeconds) {
     if (!m_source || !std::isfinite(absoluteTimeSeconds)) return;
+
+    constexpr double sameTimeTolerance = 1.0e-10;
+    const QVariantMap& committed = cursor == 1 ? m_cursorA : m_cursorB;
+    const quint64 committedRevision = cursor == 1 ? m_snapshotSourceRevisionA : m_snapshotSourceRevisionB;
+    const double committedTime = committed.value(QStringLiteral("time"),
+                                                 std::numeric_limits<double>::quiet_NaN()).toDouble();
+    if (committedRevision == m_sourceRevision
+        && committed.value(QStringLiteral("valid")).toBool()
+        && std::isfinite(committedTime)
+        && std::abs(committedTime - absoluteTimeSeconds) <= sameTimeTolerance) {
+        return;
+    }
+
+    const bool busy = cursor == 1 ? m_busyA : m_busyB;
+    const bool haveInFlight = cursor == 1 ? m_haveInFlightA : m_haveInFlightB;
+    const double inFlightTime = cursor == 1 ? m_inFlightTimeA : m_inFlightTimeB;
+    const quint64 inFlightRevision = cursor == 1 ? m_inFlightSourceRevisionA : m_inFlightSourceRevisionB;
+    if (busy && haveInFlight && inFlightRevision == m_sourceRevision
+        && std::abs(inFlightTime - absoluteTimeSeconds) <= sameTimeTolerance) {
+        // Multiple Phasor/Sequence consumers may ask for the same immutable
+        // fundamental frame during first construction. Do not cancel and restart
+        // an identical one-cycle DFT that is already in flight.
+        return;
+    }
+
     cancel(cursor);
     auto cancelToken = std::make_shared<std::atomic_bool>(false);
     quint64 generation = 0;
+    const quint64 sourceRevision = m_sourceRevision;
     if (cursor == 1) {
         m_cancelA = cancelToken;
+        m_inFlightTimeA = absoluteTimeSeconds;
+        m_inFlightSourceRevisionA = sourceRevision;
+        m_haveInFlightA = true;
         generation = ++m_generationA;
+        ++m_launchedJobsA;
         if (!m_busyA) { m_busyA = true; emit busyAChanged(); }
     } else {
         m_cancelB = cancelToken;
+        m_inFlightTimeB = absoluteTimeSeconds;
+        m_inFlightSourceRevisionB = sourceRevision;
+        m_haveInFlightB = true;
         generation = ++m_generationB;
+        ++m_launchedJobsB;
         if (!m_busyB) { m_busyB = true; emit busyBChanged(); }
     }
     const auto source = m_source;
     auto* watcher = new QFutureWatcher<QVariantMap>(this);
     connect(watcher, &QFutureWatcher<QVariantMap>::finished, this,
-            [this, watcher, cursor, generation, cancelToken]() {
+            [this, watcher, cursor, generation, sourceRevision, cancelToken]() {
                 const QVariantMap snapshot = watcher->result();
                 watcher->deleteLater();
                 if (cancelToken->load(std::memory_order_relaxed)) return;
-                publish(cursor, generation, snapshot);
+                publish(cursor, generation, sourceRevision, snapshot);
             });
     watcher->setFuture(QtConcurrent::run([source, absoluteTimeSeconds, cancelToken]() {
         return build_cursor_snapshot(source, absoluteTimeSeconds, cancelToken);
     }));
 }
 
-void CursorSnapshotController::publish(int cursor, quint64 generation, const QVariantMap& snapshot) {
-    if (snapshot.value(QStringLiteral("cancelled")).toBool()) return;
+void CursorSnapshotController::publish(int cursor, quint64 generation, quint64 sourceRevision,
+                                       const QVariantMap& snapshot) {
+    if (snapshot.value(QStringLiteral("cancelled")).toBool() || sourceRevision != m_sourceRevision) return;
     if (cursor == 1) {
         if (generation != m_generationA) return;
         m_cursorA = snapshot;
+        m_snapshotSourceRevisionA = sourceRevision;
+        m_haveInFlightA = false;
         m_cancelA.reset();
         if (m_busyA) { m_busyA = false; emit busyAChanged(); }
         emit cursorAChanged();
     } else {
         if (generation != m_generationB) return;
         m_cursorB = snapshot;
+        m_snapshotSourceRevisionB = sourceRevision;
+        m_haveInFlightB = false;
         m_cancelB.reset();
         if (m_busyB) { m_busyB = false; emit busyBChanged(); }
         emit cursorBChanged();
