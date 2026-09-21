@@ -1,6 +1,6 @@
-# ArdIREC branding assets
+# ArDiRec branding assets
 
-The canonical visual identity lives in `/icon`. Do not create unrelated app-logo variants elsewhere in the repository.
+**ArDiRec** means **Ari Disturbance Recorder**. The canonical visual identity lives in `/icon`. Do not create unrelated app-logo variants elsewhere in the repository.
 
 | Surface | Canonical asset |
 | --- | --- |
