@@ -29,6 +29,8 @@ def compact(value: str) -> str:
 def probe_lucide_child_chrome() -> bool:
     child = compact(read_text("apps/desktop/qml/MdiChildWindow.qml"))
     cmake = read_text("apps/desktop/CMakeLists.txt")
+    runtime_path = ROOT / "tests" / "test_r6_workspace_runtime.cpp"
+    runtime = runtime_path.read_text(encoding="utf-8") if runtime_path.is_file() else ""
     glyph_free = all(token not in child for token in (
         'text: "—"', 'text: "□"', 'text: "❐"', 'text: "×"'
     ))
@@ -44,7 +46,21 @@ def probe_lucide_child_chrome() -> bool:
         'qml/icons/copy.svg',
         'qml/icons/x.svg',
     ))
-    return glyph_free and canonical_icons and packaged
+    coherent_controls = all(token in child for token in (
+        "component WindowChromeButton",
+        "Layout.preferredWidth: 28",
+        "Layout.preferredHeight: 26",
+        "control.hovered",
+        "control.down",
+        "root.activeWindow",
+    ))
+    regression = (
+        "ardirec_r6_workspace_runtime_tests" in read_text("tests/CMakeLists.txt")
+        and "Lucide child chrome keeps stable hit targets" in runtime
+        and "maximized child uses restore icon" in runtime
+        and "minimized child preserves existing chrome visibility semantics" in runtime
+    )
+    return glyph_free and canonical_icons and packaged and coherent_controls and regression
 
 
 def probe_tile_shared_edge_resize() -> bool:
