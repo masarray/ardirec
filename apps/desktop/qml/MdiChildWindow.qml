@@ -18,6 +18,10 @@ Item {
     required property bool requestOwner
 
     property bool activeWindow: false
+    // R6.2: when Tile owns geometry, title dragging must not silently break the
+    // shared split topology. Resize handles still report the dragged edge so the
+    // workspace can move one shared boundary for both adjacent panes.
+    property bool tileManaged: false
     property real workspaceWidth: parent ? parent.width : width
     property real workspaceHeight: parent ? parent.height : height
     property real minimumWindowWidth: 360
@@ -35,6 +39,7 @@ Item {
     signal restoreRequested()
     signal toggleMaximizeRequested()
     signal geometryRequested(real x, real y, real width, real height)
+    signal resizeRequested(int edgeMask, real x, real y, real width, real height)
 
     default property alias contentData: contentHost.data
 
@@ -63,7 +68,7 @@ Item {
                 anchors.fill: parent
                 acceptedButtons: Qt.LeftButton
                 hoverEnabled: true
-                cursorShape: root.windowState === "normal" ? Qt.SizeAllCursor : Qt.ArrowCursor
+                cursorShape: root.windowState === "normal" && !root.tileManaged ? Qt.SizeAllCursor : Qt.ArrowCursor
                 property real pressWorkspaceX: 0
                 property real pressWorkspaceY: 0
                 property real startX: 0
@@ -78,7 +83,7 @@ Item {
                     startY = root.y
                 }
                 onPositionChanged: mouse => {
-                    if (!pressed || root.windowState !== "normal") return
+                    if (!pressed || root.windowState !== "normal" || root.tileManaged) return
                     const p = mapToItem(root.parent, mouse.x, mouse.y)
                     const nx = root.clamp(startX + p.x - pressWorkspaceX,
                                           0, Math.max(0, root.workspaceWidth - root.width))
@@ -220,7 +225,7 @@ Item {
                 nh = root.clamp(startHeight + dy, root.minimumWindowHeight,
                                 Math.max(root.minimumWindowHeight, root.workspaceHeight - startY))
 
-            root.geometryRequested(nx, ny, nw, nh)
+            root.resizeRequested(edgeMask, nx, ny, nw, nh)
         }
     }
 
