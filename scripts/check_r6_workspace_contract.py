@@ -108,12 +108,28 @@ def probe_phasor_latency_budget() -> bool:
     cmake = read_text("tests/CMakeLists.txt")
     perf_path = ROOT / "tests" / "test_r6_phasor_performance.cpp"
     perf = perf_path.read_text(encoding="utf-8") if perf_path.is_file() else ""
+    phasor_view = compact(read_text("apps/desktop/qml/PhasorView.qml"))
+    sequence = compact(read_text("apps/desktop/qml/SequenceSummary.qml"))
+    controller = compact(read_text("apps/desktop/cursor_snapshot_controller.cpp"))
+    bounded_ui = all(token in phasor_view for token in (
+        "property bool bodyActivated",
+        "readonly property bool nearViewport",
+        "asynchronous: true",
+        "groupCard.nearViewport ? root.displaySnapshotA",
+        "groupCard.nearViewport ? root.displaySnapshotB",
+    ))
+    single_request_authority = (
+        "requestCursorA" not in sequence
+        and "identical one-cycle DFT that is already in flight" in controller
+    )
     return (
         "ardirec_r6_phasor_performance_tests" in cmake
         and "first-open latency budget" in perf
         and "cursor scrub latency budget" in perf
         and "std::chrono::steady_clock" in perf
         and "committed-frame continuity remains valid" in perf
+        and bounded_ui
+        and single_request_authority
     )
 
 
