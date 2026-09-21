@@ -53,8 +53,8 @@ int main(int argc, char* argv[]) {
 
     QGuiApplication::setApplicationName(startup.hostedByArsas
                                             ? QStringLiteral("ARSAS COMTRADE Viewer")
-                                            : QStringLiteral("ardirec"));
-    QGuiApplication::setOrganizationName(QStringLiteral("ardirec"));
+                                            : QStringLiteral("ArDiRec"));
+    QGuiApplication::setOrganizationName(QStringLiteral("ArDiRec"));
     QGuiApplication::setApplicationVersion(QStringLiteral("0.2.0-alpha.22"));
 
     qmlRegisterType<WaveformItem>("Ardirec.Render", 1, 0, "WaveformItem");
