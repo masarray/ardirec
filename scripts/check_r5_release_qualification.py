@@ -69,10 +69,16 @@ require(".github/workflows/ci.yml", "--repeat until-fail:3",
 require(".github/workflows/windows-build.yml", "--repeat until-fail:3",
         "Windows qualification must repeat the same release-blocking tests")
 for test in STRESS_TESTS:
-    require(".github/workflows/ci.yml", test,
-            "every R5.5 stress test must run in Linux desktop qualification")
-    require(".github/workflows/windows-build.yml", test,
-            "every R5.5 stress test must run in Windows packaged qualification")
+    # The workflow intentionally uses the compact regex
+    # ardirec_(foo|bar|...) to keep one repeated ctest invocation. Require each
+    # target suffix in that regex and the full target in CTest registration.
+    suffix = test.removeprefix("ardirec_")
+    require(".github/workflows/ci.yml", suffix,
+            "every R5.5 stress target must be selected by Linux qualification")
+    require(".github/workflows/windows-build.yml", suffix,
+            "every R5.5 stress target must be selected by Windows qualification")
+    require("tests/CMakeLists.txt", test,
+            "every R5.5 stress target must remain registered in CTest")
 
 # One source of truth: VERSION -> CMake compile definition -> runtime and packaging.
 require("apps/desktop/CMakeLists.txt", 'file(READ "${CMAKE_SOURCE_DIR}/VERSION" ARDIREC_VERSION)',
