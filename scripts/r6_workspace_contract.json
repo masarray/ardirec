@@ -12,7 +12,7 @@
     "lucide_child_chrome": {
       "stage": "R6.1",
       "issue": 93,
-      "expected": "known_fail"
+      "expected": "pass"
     },
     "tile_shared_edge_resize": {
       "stage": "R6.2",
