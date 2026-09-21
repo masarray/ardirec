@@ -385,7 +385,8 @@ Rectangle {
                         required property int index
                         required property var modelData
                         readonly property var groupData: modelData
-                        readonly property bool nearViewport: visible && height > 0
+                        property bool viewportReady: false
+                        readonly property bool nearViewport: viewportReady && visible && height > 0
                             && y + height >= scroller.contentY - 96
                             && y <= scroller.contentY + scroller.height + 96
                         property bool bodyActivated: false
@@ -397,8 +398,14 @@ Rectangle {
                         border.color: "#c5cbd0"
                         radius: 2
 
-                        onNearViewportChanged: if (nearViewport) bodyActivated = true
-                        Component.onCompleted: if (nearViewport) bodyActivated = true
+                        onNearViewportChanged: if (viewportReady && nearViewport) bodyActivated = true
+                        Component.onCompleted: Qt.callLater(function() {
+                            // Repeater delegates are initially created at y=0.
+                            // Wait until Column has assigned their real positions
+                            // before deciding which heavy group bodies are near.
+                            groupCard.viewportReady = true
+                            if (groupCard.nearViewport) groupCard.bodyActivated = true
+                        })
 
                         Rectangle {
                             id: groupHeader
