@@ -1,4 +1,4 @@
-; ArdIREC Windows installer
+; ArDiRec Windows installer
 ; Canonical brand identity is sourced from /icon.
 ; CI can override version/source, for example:
 ; ISCC.exe /DMyAppVersion=0.2.0-rc.1 /DMySourceDir=... installer\ardirec.iss
@@ -11,8 +11,8 @@
   #define MySourceDir "..\dist\ardirec-windows-x64"
 #endif
 
-#define MyAppName "ArdIREC"
-#define MyAppPublisher "ArdIREC contributors"
+#define MyAppName "ArDiRec"
+#define MyAppPublisher "ArDiRec contributors"
 #define MyAppURL "https://github.com/masarray/ardirec"
 #define MyAppExeName "ardirec.exe"
 
@@ -24,8 +24,8 @@ AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppURL}
 AppSupportURL={#MyAppURL}/issues
 AppUpdatesURL={#MyAppURL}/releases
-DefaultDirName={localappdata}\Programs\ArdIREC
-DefaultGroupName=ArdIREC
+DefaultDirName={localappdata}\Programs\ArDiRec
+DefaultGroupName=ArDiRec
 DisableProgramGroupPage=yes
 LicenseFile=..\LICENSE
 OutputDir=..\dist
@@ -46,8 +46,8 @@ Name: "desktopicon"; Description: "Create a &desktop shortcut"; GroupDescription
 Source: "{#MySourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{group}\ArdIREC"; Filename: "{app}\{#MyAppExeName}"
-Name: "{autodesktop}\ArdIREC"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+Name: "{group}\ArDiRec"; Filename: "{app}\{#MyAppExeName}"
+Name: "{autodesktop}\ArDiRec"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Description: "Launch ArdIREC"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#MyAppExeName}"; Description: "Launch ArDiRec"; Flags: nowait postinstall skipifsilent

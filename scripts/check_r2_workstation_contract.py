@@ -58,7 +58,7 @@ require_count("apps/desktop/qml/TopBar.qml", "Math.round((parent.width - width) 
               "both workstation dialogs must remain centered when the window/DPI changes")
 require_count("apps/desktop/qml/TopBar.qml", "Math.round((parent.height - height) / 2)", 2,
               "both workstation dialogs must remain vertically centered")
-require("apps/desktop/qml/TopBar.qml", "ArdIREC — Open-Source COMTRADE Workstation", "About must identify the application professionally")
+require("apps/desktop/qml/TopBar.qml", "ArDiRec — Ari Disturbance Recorder", "About must identify the canonical product brand professionally")
 require("apps/desktop/qml/TopBar.qml", "Developed by Ari Sulistiono", "About must carry developer attribution")
 require("apps/desktop/qml/TopBar.qml", "GNU GPL v3.0 or later", "About must expose the open-source license")
 require("apps/desktop/qml/TopBar.qml", "https://github.com/masarray/ardirec", "About must link the canonical project repository")
