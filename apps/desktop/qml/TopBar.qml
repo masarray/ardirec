@@ -174,21 +174,34 @@ Rectangle {
             spacing: 0
             Rectangle {
                 Layout.fillWidth: true
-                Layout.preferredHeight: 58
+                Layout.preferredHeight: 66
                 color: "#eef1f3"
                 border.color: "#d2d6da"
-                Column {
+                Row {
                     anchors.left: parent.left
-                    anchors.leftMargin: 16
+                    anchors.leftMargin: 14
                     anchors.verticalCenter: parent.verticalCenter
-                    spacing: 2
-                    Label {
-                        text: "ArdIREC — Open-Source COMTRADE Workstation"
-                        color: "#273139"
-                        font.pixelSize: 14
-                        font.weight: Font.DemiBold
+                    spacing: 10
+                    Image {
+                        width: 42
+                        height: 42
+                        source: "qrc:/branding/android-chrome-192x192.png"
+                        sourceSize.width: 84
+                        sourceSize.height: 84
+                        fillMode: Image.PreserveAspectFit
+                        smooth: true
                     }
-                    Label { text: "Version " + Qt.application.version; color: "#69727a"; font.pixelSize: 9 }
+                    Column {
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 2
+                        Label {
+                            text: "ArdIREC — Open-Source COMTRADE Workstation"
+                            color: "#273139"
+                            font.pixelSize: 14
+                            font.weight: Font.DemiBold
+                        }
+                        Label { text: "Version " + Qt.application.version; color: "#69727a"; font.pixelSize: 9 }
+                    }
                 }
             }
 
@@ -278,6 +291,19 @@ Rectangle {
         anchors.leftMargin: 6
         anchors.rightMargin: 8
         spacing: 2
+
+        Image {
+            Layout.preferredWidth: 28
+            Layout.preferredHeight: 28
+            Layout.alignment: Qt.AlignVCenter
+            source: "qrc:/branding/android-chrome-192x192.png"
+            sourceSize.width: 56
+            sourceSize.height: 56
+            fillMode: Image.PreserveAspectFit
+            smooth: true
+        }
+
+        Rectangle { width: 1; height: 22; color: "#c5c9cc"; Layout.leftMargin: 2; Layout.rightMargin: 4 }
 
         ToolbarIconButton {
             action: root.actions?.openRecord ?? null
