@@ -10,6 +10,7 @@
 #include <QThread>
 #include <QUrl>
 #include <QVariant>
+#include <QVariantMap>
 
 #include <cmath>
 #include <iostream>
@@ -102,6 +103,67 @@ QVariant invoke(QObject* object, const char* method,
                                       Q_ARG(QVariant, e), Q_ARG(QVariant, f)),
             "QML six-argument invocation succeeds");
     return result;
+}
+
+void verify_lucide_child_chrome() {
+    QQmlEngine engine;
+    QQmlComponent component(
+        &engine,
+        QUrl::fromLocalFile(QStringLiteral(ARDIREC_QML_DIR)
+                            + QStringLiteral("/MdiChildWindow.qml")));
+    if (component.status() != QQmlComponent::Ready)
+        throw std::runtime_error(component_errors(component).toStdString());
+
+    QVariantMap initial{
+        {QStringLiteral("windowId"), 1},
+        {QStringLiteral("windowTitle"), QStringLiteral("Time Signals")},
+        {QStringLiteral("viewType"), QStringLiteral("time")},
+        {QStringLiteral("windowX"), 0.0},
+        {QStringLiteral("windowY"), 0.0},
+        {QStringLiteral("windowWidth"), 820.0},
+        {QStringLiteral("windowHeight"), 520.0},
+        {QStringLiteral("windowState"), QStringLiteral("normal")},
+        {QStringLiteral("zOrder"), 1},
+        {QStringLiteral("requestOwner"), true},
+    };
+
+    std::unique_ptr<QObject> child(
+        component.createWithInitialProperties(initial, engine.rootContext()));
+    require(child != nullptr, "R6.1 child chrome runtime component is created");
+    child->setProperty("activeWindow", true);
+    pump_events();
+
+    QObject* minimize = child->findChild<QObject*>(QStringLiteral("mdiMinimizeButton"));
+    QObject* maximize = child->findChild<QObject*>(QStringLiteral("mdiMaximizeButton"));
+    QObject* close = child->findChild<QObject*>(QStringLiteral("mdiCloseButton"));
+    require(minimize && maximize && close, "Lucide child chrome exposes all three stable controls");
+
+    for (QObject* button : {minimize, maximize, close}) {
+        require_near(button->property("width").toDouble(), 28.0, 0.75,
+                     "Lucide child chrome keeps stable hit targets");
+        require_near(button->property("height").toDouble(), 26.0, 0.75,
+                     "Lucide child chrome keeps stable hit targets");
+    }
+
+    require(minimize->property("iconSource").toUrl().toString().endsWith(QStringLiteral("icons/minus.svg")),
+            "normal child uses Lucide minimize icon");
+    require(maximize->property("iconSource").toUrl().toString().endsWith(QStringLiteral("icons/maximize-2.svg")),
+            "normal child uses Lucide maximize icon");
+    require(close->property("iconSource").toUrl().toString().endsWith(QStringLiteral("icons/x.svg")),
+            "child uses Lucide close icon");
+
+    child->setProperty("windowState", QStringLiteral("maximized"));
+    pump_events();
+    require(maximize->property("visible").toBool(), "maximize control stays available as restore");
+    require(maximize->property("iconSource").toUrl().toString().endsWith(QStringLiteral("icons/copy.svg")),
+            "maximized child uses restore icon");
+
+    child->setProperty("windowState", QStringLiteral("minimized"));
+    pump_events();
+    require(!minimize->property("visible").toBool() && !maximize->property("visible").toBool(),
+            "minimized child preserves existing chrome visibility semantics");
+    require(close->property("visible").toBool(),
+            "minimized child preserves close control availability");
 }
 
 void verify_shared_tile_boundaries() {
@@ -326,12 +388,13 @@ void verify_virtual_workspace_and_direct_drag() {
 int main(int argc, char* argv[]) {
     QGuiApplication app(argc, argv);
     try {
+        verify_lucide_child_chrome();
         verify_shared_tile_boundaries();
         verify_virtual_workspace_and_direct_drag();
-        std::cout << "ArDiRec R6.3 workspace runtime qualification: PASS\n";
+        std::cout << "ArDiRec R6 workspace runtime qualification: PASS\n";
         return 0;
     } catch (const std::exception& ex) {
-        std::cerr << "ArDiRec R6.3 workspace runtime qualification: FAIL: "
+        std::cerr << "ArDiRec R6 workspace runtime qualification: FAIL: "
                   << ex.what() << '\n';
         return 1;
     }
