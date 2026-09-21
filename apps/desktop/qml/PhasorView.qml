@@ -52,6 +52,19 @@ Rectangle {
         { title: "AUXILIARY VECTORS", subtitle: "custom signals assigned to the residual/vector group", channels: residualOtherChannels, scale: residualOtherScale }
     ]
 
+    // Compute group scroll positions from the stable model rather than delegate
+    // lifecycle timing. This covers both layouts: with Sequence at the top and
+    // without Sequence, where the first real group legitimately starts at y=0.
+    function groupLogicalY(groupIndex) {
+        let position = root.sequenceAvailable ? 146 : 0 // 138 px block + 8 px Column spacing
+        for (let i = 0; i < groupIndex; ++i) {
+            const group = root.groupModel[i]
+            if (group && group.channels && group.channels.length)
+                position += 400 // 392 px group + 8 px Column spacing
+        }
+        return position
+    }
+
     function relativeMs(timeSeconds) {
         return root.document ? (timeSeconds - root.document.triggerOffsetSeconds) * 1000.0 : 0.0
     }
@@ -385,13 +398,10 @@ Rectangle {
                         required property int index
                         required property var modelData
                         readonly property var groupData: modelData
-                        // Every Phasor group follows the Sequence block, so y>0
-                        // is a deterministic signal that Column has assigned its
-                        // real layout position. Avoid time/event-loop guesses.
-                        readonly property bool viewportReady: y > 0
-                        readonly property bool nearViewport: viewportReady && visible && height > 0
-                            && y + height >= scroller.contentY - 96
-                            && y <= scroller.contentY + scroller.height + 96
+                        readonly property real logicalY: root.groupLogicalY(index)
+                        readonly property bool nearViewport: visible && height > 0
+                            && logicalY + height >= scroller.contentY - 96
+                            && logicalY <= scroller.contentY + scroller.height + 96
                         property bool bodyActivated: false
 
                         width: groupColumn.width
