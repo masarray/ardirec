@@ -11,7 +11,7 @@ ApplicationWindow {
     minimumWidth: 1080
     minimumHeight: 700
     visible: true
-    title: "ardirec — COMTRADE Workstation"
+    title: "ArDiRec — COMTRADE Workstation"
     color: "#eef0f2"
 
     property real waveformZoom: 1.0
