@@ -31,7 +31,11 @@ Manual movement of an individual tiled child must not silently break the topolog
 
 ### R6.1 — Child chrome / Lucide controls
 
-Current child chrome uses text glyphs for minimize/maximize/restore/close. Release acceptance requires canonical Lucide-style SVG assets, proportional icon geometry, stable hit targets, and clear hover/pressed/active states. Window-state behavior itself must remain unchanged.
+Implemented in R6.1. MDI child minimize, maximize/restore and close actions now use canonical Lucide-style SVG resources rather than font/text glyphs. The existing `minus.svg` and `maximize-2.svg` resources are joined by packaged `copy.svg` for the maximized/restore state and `x.svg` for close.
+
+All three controls share one `WindowChromeButton` implementation with a stable 28 × 26 px hit target, proportional 15 px icon geometry, explicit hover/pressed borders/backgrounds, active/inactive icon emphasis, tooltips and accessible names. Close keeps a restrained destructive hover/pressed treatment without changing the workstation title-bar palette.
+
+Window-state semantics are preserved: normal exposes minimize/maximize/close; maximized substitutes the restore icon and keeps the same maximize-toggle request; minimized continues hiding minimize/restore while retaining close and title-bar restore behavior. Runtime regression verifies the hit targets, icon state transition and minimized visibility contract.
 
 ### R6.2 — Shared-edge tile resize
 
