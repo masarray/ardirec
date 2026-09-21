@@ -195,7 +195,7 @@ Rectangle {
                         anchors.verticalCenter: parent.verticalCenter
                         spacing: 2
                         Label {
-                            text: "ArdIREC — Open-Source COMTRADE Workstation"
+                            text: "ArDiRec — Ari Disturbance Recorder"
                             color: "#273139"
                             font.pixelSize: 14
                             font.weight: Font.DemiBold
@@ -227,7 +227,7 @@ Rectangle {
                 Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: "#e1e4e7"; Layout.topMargin: 3; Layout.bottomMargin: 3 }
                 Label {
                     Layout.fillWidth: true
-                    text: "Independent open-source project. ArdIREC is not an official product of, sponsored by, or endorsed by any employer, relay manufacturer, COMTRADE tool vendor, or other third party."
+                    text: "Independent open-source project. ArDiRec is not an official product of, sponsored by, or endorsed by any employer, relay manufacturer, COMTRADE tool vendor, or other third party."
                     color: "#6b7379"
                     font.pixelSize: 9
                     wrapMode: Text.Wrap
