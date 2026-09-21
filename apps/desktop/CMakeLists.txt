@@ -1,5 +1,11 @@
 qt_standard_project_setup(REQUIRES 6.8)
 
+file(READ "${CMAKE_SOURCE_DIR}/VERSION" ARDIREC_VERSION)
+string(STRIP "${ARDIREC_VERSION}" ARDIREC_VERSION)
+if(ARDIREC_VERSION STREQUAL "")
+    message(FATAL_ERROR "VERSION must not be empty")
+endif()
+
 set(ARDIREC_BRAND_ICON_DIR "${CMAKE_SOURCE_DIR}/icon")
 
 if(WIN32)
@@ -106,6 +112,8 @@ qt_add_qml_module(ardirec
         qml/icons/minus.svg
         qml/icons/plus.svg
 )
+
+target_compile_definitions(ardirec PRIVATE ARDIREC_VERSION="${ARDIREC_VERSION}")
 
 target_link_libraries(ardirec PRIVATE
     ardirec::core

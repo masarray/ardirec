@@ -32,8 +32,10 @@ jobs:
         run: python3 scripts/check_r3_mdi_contract.py
       - name: Enforce R4 recovery Definition of Done
         run: python3 scripts/check_r4_definition_of_done.py
-      - name: Enforce R5 release-quality contract state
-        run: python3 scripts/check_r5_release_contract.py
+      - name: Enforce R5 strict release-quality contract
+        run: python3 scripts/check_r5_release_contract.py --require-release-ready
+      - name: Enforce R5.5 qualification wiring
+        run: python3 scripts/check_r5_release_qualification.py
 
   core:
     strategy:
@@ -76,3 +78,7 @@ jobs:
         run: cmake --build build --parallel 2
       - name: Test
         run: ctest --test-dir build --output-on-failure
+      - name: R5.5 repeated interaction and lifecycle stress
+        run: >-
+          ctest --test-dir build --output-on-failure --repeat until-fail:3
+          -R 'ardirec_(document_lifecycle_tests|r4_qml_runtime_tests|r5_linked_cursor_tests|r5_phasor_zero_flicker_tests|r5_table_zero_flicker_tests|r5_locus_parity_tests)'
