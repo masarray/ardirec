@@ -35,6 +35,9 @@ Item {
     property real digitalTrackHeight: 28
 
     property int activeWindowId: -1
+    // free | tile-horizontal | tile-vertical
+    // Tile is a managed split topology: adjacent panes share one boundary.
+    property string arrangementMode: "free"
     property int nextWindowId: 1
     property int nextZOrder: 1
     property var activationHistory: []
@@ -54,6 +57,27 @@ Item {
     ListModel { id: windowsModel }
 
     function clamp(value, lo, hi) { return Math.max(lo, Math.min(hi, value)) }
+
+    function leaveManagedArrangement() {
+        if (arrangementMode !== "free")
+            arrangementMode = "free"
+    }
+
+    function sortedArrangementIndices(horizontalAxis) {
+        const indices = arrangementIndices()
+        indices.sort(function(a, b) {
+            const left = windowsModel.get(a)
+            const right = windowsModel.get(b)
+            return horizontalAxis ? left.windowX - right.windowX : left.windowY - right.windowY
+        })
+        return indices
+    }
+
+    function findSlotById(indices, windowId) {
+        for (let slot = 0; slot < indices.length; ++slot)
+            if (windowsModel.get(indices[slot]).windowId === windowId) return slot
+        return -1
+    }
 
     function findIndexById(windowId) {
         for (let i = 0; i < windowsModel.count; ++i)
@@ -186,6 +210,10 @@ Item {
             }
         }
 
+        // Adding a free child changes the topology. Keep the current rectangles
+        // but explicitly leave Tile rather than silently creating an unmanaged
+        // overlapping child inside a tiled set.
+        leaveManagedArrangement()
         const serial = countType(viewType) + 1
         const geometry = defaultGeometry(windowsModel.count)
         const id = nextWindowId++
@@ -230,6 +258,7 @@ Item {
     function updateGeometry(windowId, x, y, widthValue, heightValue) {
         const index = findIndexById(windowId)
         if (index < 0 || windowsModel.get(index).windowState !== "normal") return
+        if (arrangementMode !== "free") return
         const w = clamp(widthValue, 360, Math.max(360, root.width))
         const h = clamp(heightValue, 240, Math.max(240, root.height))
         windowsModel.setProperty(index, "windowWidth", w)
@@ -238,9 +267,86 @@ Item {
         windowsModel.setProperty(index, "windowY", clamp(y, 0, Math.max(0, root.height - h)))
     }
 
+    function tileBoundaryPosition(windowId, edgeMask, x, y, widthValue, heightValue) {
+        if (arrangementMode === "tile-vertical") {
+            if (edgeMask & 1) return x
+            if (edgeMask & 2) return x + widthValue
+        } else if (arrangementMode === "tile-horizontal") {
+            if (edgeMask & 4) return y
+            if (edgeMask & 8) return y + heightValue
+        }
+        return Number.NaN
+    }
+
+    function resizeTileBoundary(windowId, edgeMask, x, y, widthValue, heightValue) {
+        if (arrangementMode === "free") {
+            updateGeometry(windowId, x, y, widthValue, heightValue)
+            return
+        }
+
+        const vertical = arrangementMode === "tile-vertical"
+        const indices = sortedArrangementIndices(vertical)
+        const slot = findSlotById(indices, windowId)
+        if (slot < 0) return
+
+        let leftSlot = -1
+        let rightSlot = -1
+        if (vertical) {
+            if ((edgeMask & 2) && slot + 1 < indices.length) {
+                leftSlot = slot
+                rightSlot = slot + 1
+            } else if ((edgeMask & 1) && slot > 0) {
+                leftSlot = slot - 1
+                rightSlot = slot
+            } else {
+                return
+            }
+        } else {
+            if ((edgeMask & 8) && slot + 1 < indices.length) {
+                leftSlot = slot
+                rightSlot = slot + 1
+            } else if ((edgeMask & 4) && slot > 0) {
+                leftSlot = slot - 1
+                rightSlot = slot
+            } else {
+                return
+            }
+        }
+
+        const firstIndex = indices[leftSlot]
+        const secondIndex = indices[rightSlot]
+        const first = windowsModel.get(firstIndex)
+        const second = windowsModel.get(secondIndex)
+        let boundary = tileBoundaryPosition(windowId, edgeMask, x, y, widthValue, heightValue)
+        if (!Number.isFinite(boundary)) return
+
+        if (vertical) {
+            const pairStart = first.windowX
+            const pairEnd = second.windowX + second.windowWidth
+            const pairSpan = Math.max(0, pairEnd - pairStart)
+            const minimum = Math.min(360, pairSpan * 0.5)
+            boundary = clamp(boundary, pairStart + minimum, pairEnd - minimum)
+            setArrangedGeometry(firstIndex, pairStart, first.windowY,
+                                boundary - pairStart, first.windowHeight)
+            setArrangedGeometry(secondIndex, boundary, second.windowY,
+                                pairEnd - boundary, second.windowHeight)
+        } else {
+            const pairStart = first.windowY
+            const pairEnd = second.windowY + second.windowHeight
+            const pairSpan = Math.max(0, pairEnd - pairStart)
+            const minimum = Math.min(240, pairSpan * 0.5)
+            boundary = clamp(boundary, pairStart + minimum, pairEnd - minimum)
+            setArrangedGeometry(firstIndex, first.windowX, pairStart,
+                                first.windowWidth, boundary - pairStart)
+            setArrangedGeometry(secondIndex, second.windowX, boundary,
+                                second.windowWidth, pairEnd - boundary)
+        }
+    }
+
     function closeWindow(windowId) {
         const index = findIndexById(windowId)
         if (index < 0) return
+        leaveManagedArrangement()
         const wasActive = activeWindowId === windowId
         windowsModel.remove(index)
         removeHistory(windowId)
@@ -256,6 +362,7 @@ Item {
     function minimizeWindow(windowId) {
         const index = findIndexById(windowId)
         if (index < 0) return
+        leaveManagedArrangement()
         const row = windowsModel.get(index)
         if (row.windowState === "minimized") return
         if (row.windowState === "normal") {
@@ -273,6 +380,7 @@ Item {
     function restoreWindow(windowId) {
         const index = findIndexById(windowId)
         if (index < 0) return
+        leaveManagedArrangement()
         const row = windowsModel.get(index)
         const w = Math.min(Math.max(360, row.restoreWidth), Math.max(360, root.width))
         const h = Math.min(Math.max(240, row.restoreHeight), Math.max(240, root.height))
@@ -288,6 +396,7 @@ Item {
     function maximizeWindow(windowId) {
         const index = findIndexById(windowId)
         if (index < 0) return
+        leaveManagedArrangement()
         for (let i = 0; i < windowsModel.count; ++i) {
             const other = windowsModel.get(i)
             if (other.windowId !== windowId && other.windowState === "maximized") {
@@ -343,6 +452,7 @@ Item {
     }
 
     function cascade() {
+        leaveManagedArrangement()
         const indices = arrangementIndices()
         if (!indices.length) return
         normalizeForArrangement(indices)
@@ -361,6 +471,7 @@ Item {
         const indices = arrangementIndices()
         if (!indices.length) return
         normalizeForArrangement(indices)
+        arrangementMode = "tile-horizontal"
         const eachHeight = root.height / indices.length
         for (let slot = 0; slot < indices.length; ++slot)
             setArrangedGeometry(indices[slot], 0, slot * eachHeight, root.width, eachHeight)
@@ -371,6 +482,7 @@ Item {
         const indices = arrangementIndices()
         if (!indices.length) return
         normalizeForArrangement(indices)
+        arrangementMode = "tile-vertical"
         const eachWidth = root.width / indices.length
         for (let slot = 0; slot < indices.length; ++slot)
             setArrangedGeometry(indices[slot], slot * eachWidth, 0, eachWidth, root.height)
@@ -428,7 +540,36 @@ Item {
         }
     }
 
+    function relayoutManagedTiles() {
+        if (arrangementMode === "free") return false
+        const vertical = arrangementMode === "tile-vertical"
+        const indices = sortedArrangementIndices(vertical)
+        if (!indices.length) return true
+
+        if (vertical) {
+            const last = windowsModel.get(indices[indices.length - 1])
+            const oldExtent = last.windowX + last.windowWidth
+            const scale = oldExtent > 0 ? root.width / oldExtent : 1.0
+            for (let index of indices) {
+                const row = windowsModel.get(index)
+                setArrangedGeometry(index, row.windowX * scale, 0,
+                                    row.windowWidth * scale, root.height)
+            }
+        } else {
+            const last = windowsModel.get(indices[indices.length - 1])
+            const oldExtent = last.windowY + last.windowHeight
+            const scale = oldExtent > 0 ? root.height / oldExtent : 1.0
+            for (let index of indices) {
+                const row = windowsModel.get(index)
+                setArrangedGeometry(index, 0, row.windowY * scale,
+                                    root.width, row.windowHeight * scale)
+            }
+        }
+        return true
+    }
+
     function relayoutSpecialWindows() {
+        if (relayoutManagedTiles()) return
         for (let i = 0; i < windowsModel.count; ++i) {
             const row = windowsModel.get(i)
             if (row.windowState === "maximized") {
@@ -449,6 +590,7 @@ Item {
     }
 
     function clearWindows() {
+        arrangementMode = "free"
         windowsModel.clear()
         activeWindowId = -1
         activationHistory = []
@@ -482,6 +624,7 @@ Item {
             workspaceWidth: root.width
             workspaceHeight: root.height
             activeWindow: root.activeWindowId === windowId
+            tileManaged: root.arrangementMode !== "free"
 
             onActivateRequested: root.activateWindow(windowId)
             onCloseRequested: root.closeWindow(windowId)
@@ -489,6 +632,8 @@ Item {
             onRestoreRequested: root.restoreWindow(windowId)
             onToggleMaximizeRequested: root.toggleMaximize(windowId)
             onGeometryRequested: (gx, gy, gw, gh) => root.updateGeometry(windowId, gx, gy, gw, gh)
+            onResizeRequested: (edgeMask, gx, gy, gw, gh) =>
+                root.resizeTileBoundary(windowId, edgeMask, gx, gy, gw, gh)
 
             AnalysisViewHost {
                 anchors.fill: parent

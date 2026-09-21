@@ -17,7 +17,7 @@
     "tile_shared_edge_resize": {
       "stage": "R6.2",
       "issue": 94,
-      "expected": "known_fail"
+      "expected": "pass"
     },
     "virtual_workspace_scroll": {
       "stage": "R6.3",

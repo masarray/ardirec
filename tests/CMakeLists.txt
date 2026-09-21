@@ -281,5 +281,20 @@ if(TARGET Qt6::Core)
         ardirec_enable_sanitizers(ardirec_r5_table_zero_flicker_tests)
         add_test(NAME ardirec_r5_table_zero_flicker_tests COMMAND ardirec_r5_table_zero_flicker_tests)
         set_tests_properties(ardirec_r5_table_zero_flicker_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+        qt_add_executable(ardirec_r6_workspace_runtime_tests
+            test_r6_workspace_runtime.cpp
+        )
+        set_target_properties(ardirec_r6_workspace_runtime_tests PROPERTIES AUTOMOC ON)
+        target_link_libraries(ardirec_r6_workspace_runtime_tests PRIVATE
+            Qt6::Core Qt6::Qml Qt6::Quick Qt6::QuickControls2)
+        target_compile_definitions(ardirec_r6_workspace_runtime_tests PRIVATE
+            ARDIREC_QML_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../apps/desktop/qml"
+            ARDIREC_TEST_QML_DIR="${CMAKE_CURRENT_SOURCE_DIR}/qml"
+        )
+        ardirec_set_warnings(ardirec_r6_workspace_runtime_tests)
+        ardirec_enable_sanitizers(ardirec_r6_workspace_runtime_tests)
+        add_test(NAME ardirec_r6_workspace_runtime_tests COMMAND ardirec_r6_workspace_runtime_tests)
+        set_tests_properties(ardirec_r6_workspace_runtime_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
     endif()
 endif()
