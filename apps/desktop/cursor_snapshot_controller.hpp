@@ -27,6 +27,8 @@ public:
     QVariantMap cursorB() const { return m_cursorB; }
     bool busyA() const { return m_busyA; }
     bool busyB() const { return m_busyB; }
+    quint64 launchedJobsA() const noexcept { return m_launchedJobsA; }
+    quint64 launchedJobsB() const noexcept { return m_launchedJobsB; }
 
     Q_INVOKABLE void requestCursorA(double absoluteTimeSeconds);
     Q_INVOKABLE void requestCursorB(double absoluteTimeSeconds);
@@ -58,6 +60,8 @@ private:
     QVariantMap m_cursorB;
     quint64 m_generationA{0};
     quint64 m_generationB{0};
+    quint64 m_launchedJobsA{0};
+    quint64 m_launchedJobsB{0};
     quint64 m_sourceRevision{0};
     quint64 m_snapshotSourceRevisionA{0};
     quint64 m_snapshotSourceRevisionB{0};
