@@ -71,13 +71,14 @@ require(".github/workflows/windows-build.yml", "--repeat until-fail:3",
 for test in STRESS_TESTS:
     # The workflow intentionally uses the compact regex
     # ardirec_(foo|bar|...) to keep one repeated ctest invocation. Require each
-    # target suffix in that regex and the full target in CTest registration.
+    # target suffix in that regex and the full target in its CTest registration.
     suffix = test.removeprefix("ardirec_")
     require(".github/workflows/ci.yml", suffix,
             "every R5.5 stress target must be selected by Linux qualification")
     require(".github/workflows/windows-build.yml", suffix,
             "every R5.5 stress target must be selected by Windows qualification")
-    require("tests/CMakeLists.txt", test,
+    registration = "tests/R5LocusParity.cmake" if test == "ardirec_r5_locus_parity_tests" else "tests/CMakeLists.txt"
+    require(registration, test,
             "every R5.5 stress target must remain registered in CTest")
 
 # One source of truth: VERSION -> CMake compile definition -> runtime and packaging.
