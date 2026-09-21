@@ -39,7 +39,7 @@ Window-state semantics are preserved: normal exposes minimize/maximize/close; ma
 
 ### R6.2 — Shared-edge tile resize
 
-Current `tileHorizontal()` / `tileVertical()` assign rectangles once. Each `MdiChildWindow` then resizes independently. Release acceptance requires a shared-boundary model with runtime regression for vertical, horizontal and multi-pane layouts.
+Implemented in R6.2. Tile mode owns a managed split topology rather than a one-time rectangle arrangement. Dragging a shared vertical or horizontal boundary updates the adjacent pair atomically, preserves their outer extent, keeps non-neighbor panes unchanged, and rejects independent free movement while Tile owns geometry. Runtime regression covers two-neighbor boundary movement, multi-pane stability, gap-free adjacency and occupied-workspace preservation.
 
 ### R6.3 — Virtual scrollable workspace and direct drag
 
@@ -66,13 +66,17 @@ The performance qualification also locks:
 
 ## R6.5 strict gate
 
-R6.5 may only pass after every R6 contract is declared and observed as `pass`, exact-head CI/CodeQL/Windows packaging is green, repeated interaction stress passes, and manual Windows acceptance confirms:
+R6.5 automation qualification makes `python3 scripts/check_r6_workspace_contract.py --require-release-ready` a permanent CI gate. The desktop runtime qualification additionally runs 24 repeated MDI interaction cycles that alternate vertical/horizontal managed Tile resize, Cascade/Free transition, off-viewport movement, edge auto-scroll, minimize/restore, maximize/restore, next/previous activation, and transient child open/close. The stress test must finish with the original child count, reachable delegates, no active edge drag, and working virtual scroll range.
 
-1. Lucide child controls are visually proportionate and behave correctly.
-2. Shared tile boundaries resize both adjacent panes.
+Automated R6.5 qualification must show every R6 contract declared and observed as `pass`, exact-head CI/CodeQL/Windows packaging green, existing R5 zero-flicker/Table/Locus/lifecycle tests intact, and the repeated interaction stress green.
+
+**Manual Windows acceptance remains intentionally human-gated** and must confirm:
+
+1. Lucide child controls are visually proportionate, readable and behave correctly at normal Windows scaling.
+2. Shared tile boundaries feel direct and resize both adjacent panes without gaps or unexpected jumps.
 3. Free-mode child movement can extend the workspace and activate scrollbars without laggy viewport clamping.
-4. Edge auto-scroll remains controllable.
+4. Edge auto-scroll remains controllable during real pointer drag.
 5. Phasor first-open and cursor scrub are materially responsive without reintroducing flicker.
-6. All R5 cursor/Table/Locus/lifecycle acceptance remains intact.
+6. Existing Time Signals, linked cursors, Table, Locus and record lifecycle behavior still feels correct in the packaged build.
 
-Only after R6.5 is complete should the project return to `0.2.0-rc.1` promotion.
+Only after that manual Windows acceptance is recorded may issue #97 be closed and the project return to `0.2.0-rc.1` promotion.

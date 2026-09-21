@@ -149,12 +149,32 @@ def probe_phasor_latency_budget() -> bool:
     )
 
 
+def probe_workspace_interaction_stress() -> bool:
+    cmake = read_text("tests/CMakeLists.txt")
+    runtime_path = ROOT / "tests" / "test_r6_workspace_runtime.cpp"
+    runtime = runtime_path.read_text(encoding="utf-8") if runtime_path.is_file() else ""
+    ci = compact(read_text(".github/workflows/ci.yml"))
+    stress_runtime = (
+        "ardirec_r6_workspace_runtime_tests" in cmake
+        and "constexpr int stressCycles = 24" in runtime
+        and "repeated workspace interaction stress preserves child count" in runtime
+        and "repeated workspace interaction stress preserves reachable delegates" in runtime
+        and "repeated workspace interaction stress keeps virtual scroll functional" in runtime
+        and "repeated workspace interaction stress keeps edge auto-scroll functional" in runtime
+    )
+    strict_ci = (
+        "scripts/check_r6_workspace_contract.py --require-release-ready" in ci
+    )
+    return stress_runtime and strict_ci
+
+
 PROBES: dict[str, Callable[[], bool]] = {
     "lucide_child_chrome": probe_lucide_child_chrome,
     "tile_shared_edge_resize": probe_tile_shared_edge_resize,
     "virtual_workspace_scroll": probe_virtual_workspace_scroll,
     "free_drag_direct_manipulation": probe_free_drag_direct_manipulation,
     "phasor_latency_budget": probe_phasor_latency_budget,
+    "workspace_interaction_stress": probe_workspace_interaction_stress,
 }
 
 

@@ -33,6 +33,11 @@
       "stage": "R6.4",
       "issue": 96,
       "expected": "pass"
+    },
+    "workspace_interaction_stress": {
+      "stage": "R6.5",
+      "issue": 97,
+      "expected": "pass"
     }
   }
 }

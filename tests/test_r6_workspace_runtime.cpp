@@ -289,6 +289,118 @@ void verify_shared_tile_boundaries() {
                  "tile resize preserves the occupied workspace extent");
 }
 
+void verify_workspace_interaction_stress() {
+    QQmlEngine engine;
+    AnalysisHostInterceptor interceptor(
+        QUrl::fromLocalFile(QStringLiteral(ARDIREC_TEST_QML_DIR)
+                            + QStringLiteral("/AnalysisViewHost.qml")));
+    engine.addUrlInterceptor(&interceptor);
+
+    QQmlComponent component(
+        &engine,
+        QUrl::fromLocalFile(QStringLiteral(ARDIREC_QML_DIR)
+                            + QStringLiteral("/MdiWorkspace.qml")));
+    if (component.status() != QQmlComponent::Ready)
+        throw std::runtime_error(component_errors(component).toStdString());
+
+    std::unique_ptr<QObject> workspace(component.create());
+    require(workspace != nullptr, "R6.5 stress workspace runtime component is created");
+    workspace->setProperty("width", 1600.0);
+    workspace->setProperty("height", 900.0);
+    workspace->setProperty("hasRecord", true);
+    invoke(workspace.get(), "resetForRecord");
+    pump_events();
+
+    const int first = workspace->property("activeWindowId").toInt();
+    const int second = invoke(workspace.get(), "openView",
+                              QStringLiteral("phasor"), true).toInt();
+    const int third = invoke(workspace.get(), "openView",
+                             QStringLiteral("locus"), true).toInt();
+    pump_events();
+    require(first > 0 && second > 0 && third > 0,
+            "repeated workspace interaction stress starts with three children");
+    require(workspace->property("childCount").toInt() == 3,
+            "repeated workspace interaction stress starts from stable child count");
+
+    constexpr int stressCycles = 24;
+    for (int cycle = 0; cycle < stressCycles; ++cycle) {
+        invoke(workspace.get(), "tileVertical");
+        const double verticalBoundary = 560.0 + static_cast<double>(cycle % 6) * 20.0;
+        invoke(workspace.get(), "resizeTileBoundary",
+               first, 2, 0.0, 0.0, verticalBoundary, 900.0);
+
+        invoke(workspace.get(), "tileHorizontal");
+        const double horizontalBoundary = 260.0 + static_cast<double>(cycle % 5) * 20.0;
+        invoke(workspace.get(), "resizeTileBoundary",
+               first, 8, 0.0, 0.0, 1600.0, horizontalBoundary);
+
+        invoke(workspace.get(), "cascade");
+
+        require(QMetaObject::invokeMethod(
+                    workspace.get(), "updateGeometry",
+                    Q_ARG(QVariant, first),
+                    Q_ARG(QVariant, 1680.0 + static_cast<double>(cycle) * 3.0),
+                    Q_ARG(QVariant, 960.0 + static_cast<double>(cycle) * 2.0),
+                    Q_ARG(QVariant, 520.0),
+                    Q_ARG(QVariant, 360.0)),
+                "repeated workspace interaction stress moves free child beyond viewport");
+
+        require(QMetaObject::invokeMethod(
+                    workspace.get(), "beginFreeDrag",
+                    Q_ARG(QVariant, first),
+                    Q_ARG(QVariant, 1598.0),
+                    Q_ARG(QVariant, 898.0)),
+                "repeated workspace interaction stress begins edge drag");
+        require(invoke(workspace.get(), "stepAutoScroll").toBool(),
+                "repeated workspace interaction stress keeps edge auto-scroll functional");
+        require(QMetaObject::invokeMethod(
+                    workspace.get(), "endFreeDrag", Q_ARG(QVariant, first)),
+                "repeated workspace interaction stress ends edge drag");
+
+        require(QMetaObject::invokeMethod(
+                    workspace.get(), "minimizeWindow", Q_ARG(QVariant, second)),
+                "repeated workspace interaction stress minimizes child");
+        require(QMetaObject::invokeMethod(
+                    workspace.get(), "restoreWindow", Q_ARG(QVariant, second)),
+                "repeated workspace interaction stress restores child");
+
+        require(QMetaObject::invokeMethod(
+                    workspace.get(), "toggleMaximize", Q_ARG(QVariant, third)),
+                "repeated workspace interaction stress maximizes child");
+        require(QMetaObject::invokeMethod(
+                    workspace.get(), "toggleMaximize", Q_ARG(QVariant, third)),
+                "repeated workspace interaction stress restores maximized child");
+
+        invoke(workspace.get(), "activateNext");
+        invoke(workspace.get(), "activatePrevious");
+
+        const int transient = invoke(workspace.get(), "openView",
+                                     QStringLiteral("table"), true).toInt();
+        require(transient > 0, "repeated workspace interaction stress opens transient child");
+        pump_events(2);
+        require(QMetaObject::invokeMethod(
+                    workspace.get(), "closeWindow", Q_ARG(QVariant, transient)),
+                "repeated workspace interaction stress closes transient child");
+        pump_events(2);
+    }
+
+    require(workspace->property("childCount").toInt() == 3,
+            "repeated workspace interaction stress preserves child count");
+    require(workspace->property("arrangementMode").toString() == QStringLiteral("free"),
+            "repeated workspace interaction stress returns to free workspace");
+    require(workspace->property("autoScrollWindowId").toInt() == -1,
+            "repeated workspace interaction stress leaves no active edge drag");
+    require(workspace->property("horizontalScrollRange").toDouble() > 0.0
+            && workspace->property("verticalScrollRange").toDouble() > 0.0,
+            "repeated workspace interaction stress keeps virtual scroll functional");
+
+    pump_events();
+    require(find_window(workspace.get(), first)
+            && find_window(workspace.get(), second)
+            && find_window(workspace.get(), third),
+            "repeated workspace interaction stress preserves reachable delegates");
+}
+
 void verify_virtual_workspace_and_direct_drag() {
     QQmlEngine engine;
     AnalysisHostInterceptor interceptor(
@@ -391,6 +503,7 @@ int main(int argc, char* argv[]) {
         verify_lucide_child_chrome();
         verify_shared_tile_boundaries();
         verify_virtual_workspace_and_direct_drag();
+        verify_workspace_interaction_stress();
         std::cout << "ArDiRec R6 workspace runtime qualification: PASS\n";
         return 0;
     } catch (const std::exception& ex) {
