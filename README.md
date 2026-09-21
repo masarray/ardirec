@@ -1,6 +1,10 @@
-# ardirec
+<p align="center">
+  <img src="icon/android-chrome-192x192.png" width="128" height="128" alt="ArdIREC logo">
+</p>
 
-**ardirec** is an open-source, vendor-neutral COMTRADE workstation for protection and disturbance engineers.
+# ArdIREC
+
+**ArdIREC** is an open-source, vendor-neutral COMTRADE workstation for protection and disturbance engineers.
 
 > Open any disturbance record. Understand it immediately.
 
@@ -47,7 +51,7 @@ During alpha/beta development, Windows builds are distributed as a transparent p
 
 Extract the archive anywhere and run `ardirec.exe` from the extracted folder. No installer is required and ardirec does not install itself into Windows. The folder intentionally contains Qt runtime DLLs/plugins produced by `windeployqt`; keeping these files visible makes development packaging fast and predictable.
 
-A proper Windows installer is planned closer to stable/final releases. The executable is currently unsigned, so Windows SmartScreen may warn on first launch.
+A proper Windows installer remains a release-stage deliverable. The repository now carries a canonical Inno Setup definition in `installer/ardirec.iss`; it uses the same `icon/favicon.ico` identity as the Windows executable. The executable is currently unsigned, so Windows SmartScreen may warn on first launch.
 
 ## Build
 

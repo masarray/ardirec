@@ -14,6 +14,7 @@
 
 #include <QFileInfo>
 #include <QGuiApplication>
+#include <QIcon>
 #include <QObject>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
@@ -47,6 +48,7 @@ StartupRequest startup_request(const QStringList& arguments) {
 
 int main(int argc, char* argv[]) {
     QGuiApplication app(argc, argv);
+    QGuiApplication::setWindowIcon(QIcon(QStringLiteral(":/branding/android-chrome-512x512.png")));
     const StartupRequest startup = startup_request(QCoreApplication::arguments());
 
     QGuiApplication::setApplicationName(startup.hostedByArsas

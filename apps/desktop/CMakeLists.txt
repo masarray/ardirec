@@ -1,5 +1,12 @@
 qt_standard_project_setup(REQUIRES 6.8)
 
+set(ARDIREC_BRAND_ICON_DIR "${CMAKE_SOURCE_DIR}/icon")
+
+if(WIN32)
+    set(ARDIREC_WINDOWS_ICON "${ARDIREC_BRAND_ICON_DIR}/favicon.ico")
+    configure_file(ardirec.rc.in "${CMAKE_CURRENT_BINARY_DIR}/ardirec.rc" @ONLY)
+endif()
+
 qt_add_executable(ardirec WIN32 MACOSX_BUNDLE
     main.cpp
     document_loader.cpp
@@ -35,6 +42,16 @@ qt_add_executable(ardirec WIN32 MACOSX_BUNDLE
     phasor_vector_item.hpp
     digital_item.cpp
     digital_item.hpp
+    $<$<BOOL:${WIN32}>:${CMAKE_CURRENT_BINARY_DIR}/ardirec.rc>
+)
+
+qt_add_resources(ardirec ardirec_branding
+    PREFIX "/branding"
+    BASE "${ARDIREC_BRAND_ICON_DIR}"
+    FILES
+        "${ARDIREC_BRAND_ICON_DIR}/android-chrome-192x192.png"
+        "${ARDIREC_BRAND_ICON_DIR}/android-chrome-512x512.png"
+        "${ARDIREC_BRAND_ICON_DIR}/favicon.ico"
 )
 
 qt_add_qml_module(ardirec
