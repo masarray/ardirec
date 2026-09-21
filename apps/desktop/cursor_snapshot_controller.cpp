@@ -440,6 +440,7 @@ void CursorSnapshotController::request(int cursor, double absoluteTimeSeconds) {
         m_inFlightSourceRevisionA = sourceRevision;
         m_haveInFlightA = true;
         generation = ++m_generationA;
+        ++m_launchedJobsA;
         if (!m_busyA) { m_busyA = true; emit busyAChanged(); }
     } else {
         m_cancelB = cancelToken;
@@ -447,6 +448,7 @@ void CursorSnapshotController::request(int cursor, double absoluteTimeSeconds) {
         m_inFlightSourceRevisionB = sourceRevision;
         m_haveInFlightB = true;
         generation = ++m_generationB;
+        ++m_launchedJobsB;
         if (!m_busyB) { m_busyB = true; emit busyBChanged(); }
     }
     const auto source = m_source;
