@@ -39,9 +39,11 @@ Current `tileHorizontal()` / `tileVertical()` assign rectangles once. Each `MdiC
 
 ### R6.3 — Virtual scrollable workspace and direct drag
 
-Current title dragging clamps X/Y to the visible workspace, and `updateGeometry()` clamps child geometry back into the current viewport. Release acceptance requires logical content extents, horizontal/vertical scroll range as needed, unclamped right/bottom free movement, and edge auto-scroll regression.
+Implemented in R6.3: Free mode now owns logical content extents independent of the visible viewport. A child may move or resize beyond the current right/bottom edge without being pulled back into view; the workspace grows around its logical rectangle and exposes horizontal/vertical scroll range through a `Flickable` viewport with attached scrollbars.
 
-Responsiveness is a correctness property: pointer motion must not wait on analysis recalculation or child-content relayout before the window frame itself follows the pointer.
+Title dragging updates the child geometry directly on every pointer event. Near a viewport edge, a bounded 16 ms auto-scroll step advances the viewport and offsets the dragged child by the exact same logical delta, preserving the pointer-relative grab point rather than making the frame lag behind the mouse. Top/left remain reachable and are still constrained at the logical origin.
+
+Runtime regression covers width/height extent growth, visible scroll range, sequential unclamped geometry updates, and edge auto-scroll that preserves screen-space pointer-relative position. The path remains UI-geometry-only and does not trigger record traversal or engineering analysis.
 
 ### R6.4 — Phasor hot-path optimization
 

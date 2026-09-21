@@ -24,6 +24,10 @@ Item {
     property bool tileManaged: false
     property real workspaceWidth: parent ? parent.width : width
     property real workspaceHeight: parent ? parent.height : height
+    // R6.3: title dragging is expressed in logical workspace coordinates while
+    // this viewport reference lets the workspace decide when edge auto-scroll
+    // should advance the visible origin.
+    property Item workspaceViewportItem: null
     property real minimumWindowWidth: 360
     property real minimumWindowHeight: 240
 
@@ -40,6 +44,7 @@ Item {
     signal toggleMaximizeRequested()
     signal geometryRequested(real x, real y, real width, real height)
     signal resizeRequested(int edgeMask, real x, real y, real width, real height)
+    signal dragViewportRequested(real viewportX, real viewportY, bool active)
 
     default property alias contentData: contentHost.data
 
@@ -68,6 +73,7 @@ Item {
                 anchors.fill: parent
                 acceptedButtons: Qt.LeftButton
                 hoverEnabled: true
+                preventStealing: true
                 cursorShape: root.windowState === "normal" && !root.tileManaged ? Qt.SizeAllCursor : Qt.ArrowCursor
                 property real pressWorkspaceX: 0
                 property real pressWorkspaceY: 0
@@ -81,16 +87,27 @@ Item {
                     pressWorkspaceY = p.y
                     startX = root.x
                     startY = root.y
+                    if (root.workspaceViewportItem) {
+                        const vp = mapToItem(root.workspaceViewportItem, mouse.x, mouse.y)
+                        root.dragViewportRequested(vp.x, vp.y, true)
+                    }
                 }
                 onPositionChanged: mouse => {
                     if (!pressed || root.windowState !== "normal" || root.tileManaged) return
                     const p = mapToItem(root.parent, mouse.x, mouse.y)
-                    const nx = root.clamp(startX + p.x - pressWorkspaceX,
-                                          0, Math.max(0, root.workspaceWidth - root.width))
-                    const ny = root.clamp(startY + p.y - pressWorkspaceY,
-                                          0, Math.max(0, root.workspaceHeight - root.height))
+                    // Free-mode motion is deliberately unclamped on the
+                    // right/bottom. The logical workspace grows around the
+                    // requested rectangle instead of resisting the pointer.
+                    const nx = Math.max(0, startX + p.x - pressWorkspaceX)
+                    const ny = Math.max(0, startY + p.y - pressWorkspaceY)
                     root.geometryRequested(nx, ny, root.width, root.height)
+                    if (root.workspaceViewportItem) {
+                        const vp = mapToItem(root.workspaceViewportItem, mouse.x, mouse.y)
+                        root.dragViewportRequested(vp.x, vp.y, true)
+                    }
                 }
+                onReleased: root.dragViewportRequested(0, 0, false)
+                onCanceled: root.dragViewportRequested(0, 0, false)
                 onClicked: {
                     if (root.windowState === "minimized") root.restoreRequested()
                     else root.activateRequested()
@@ -175,6 +192,7 @@ Item {
         visible: root.windowState === "normal"
         acceptedButtons: Qt.LeftButton
         hoverEnabled: true
+        preventStealing: true
         z: 30
 
         property real pressWorkspaceX: 0
@@ -215,15 +233,13 @@ Item {
                 nw = startWidth - (nx - startX)
             }
             if (edgeMask & 2)
-                nw = root.clamp(startWidth + dx, root.minimumWindowWidth,
-                                Math.max(root.minimumWindowWidth, root.workspaceWidth - startX))
+                nw = Math.max(root.minimumWindowWidth, startWidth + dx)
             if (edgeMask & 4) {
                 ny = root.clamp(startY + dy, 0, startY + startHeight - root.minimumWindowHeight)
                 nh = startHeight - (ny - startY)
             }
             if (edgeMask & 8)
-                nh = root.clamp(startHeight + dy, root.minimumWindowHeight,
-                                Math.max(root.minimumWindowHeight, root.workspaceHeight - startY))
+                nh = Math.max(root.minimumWindowHeight, startHeight + dy)
 
             root.resizeRequested(edgeMask, nx, ny, nw, nh)
         }
