@@ -385,7 +385,10 @@ Rectangle {
                         required property int index
                         required property var modelData
                         readonly property var groupData: modelData
-                        property bool viewportReady: false
+                        // Every Phasor group follows the Sequence block, so y>0
+                        // is a deterministic signal that Column has assigned its
+                        // real layout position. Avoid time/event-loop guesses.
+                        readonly property bool viewportReady: y > 0
                         readonly property bool nearViewport: viewportReady && visible && height > 0
                             && y + height >= scroller.contentY - 96
                             && y <= scroller.contentY + scroller.height + 96
@@ -398,14 +401,7 @@ Rectangle {
                         border.color: "#c5cbd0"
                         radius: 2
 
-                        onNearViewportChanged: if (viewportReady && nearViewport) bodyActivated = true
-                        Component.onCompleted: Qt.callLater(function() {
-                            // Repeater delegates are initially created at y=0.
-                            // Wait until Column has assigned their real positions
-                            // before deciding which heavy group bodies are near.
-                            groupCard.viewportReady = true
-                            if (groupCard.nearViewport) groupCard.bodyActivated = true
-                        })
+                        onNearViewportChanged: if (nearViewport) bodyActivated = true
 
                         Rectangle {
                             id: groupHeader
