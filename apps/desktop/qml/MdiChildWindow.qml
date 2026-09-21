@@ -50,6 +50,53 @@ Item {
 
     function clamp(value, lo, hi) { return Math.max(lo, Math.min(hi, value)) }
 
+
+    component WindowChromeButton: ToolButton {
+        id: control
+        required property url iconSource
+        required property string tipText
+        property bool destructive: false
+
+        Layout.preferredWidth: 28
+        Layout.preferredHeight: 26
+        implicitWidth: 28
+        implicitHeight: 26
+        padding: 0
+        hoverEnabled: true
+
+        contentItem: Item {
+            implicitWidth: 28
+            implicitHeight: 26
+
+            Image {
+                anchors.centerIn: parent
+                width: 15
+                height: 15
+                source: control.iconSource
+                sourceSize.width: 24
+                sourceSize.height: 24
+                fillMode: Image.PreserveAspectFit
+                smooth: true
+                opacity: control.enabled ? (root.activeWindow ? 1.0 : 0.72) : 0.35
+            }
+        }
+
+        background: Rectangle {
+            radius: 3
+            color: !control.enabled ? "transparent"
+                  : control.down ? (control.destructive ? "#e6c8c8" : "#cbd9e4")
+                  : control.hovered ? (control.destructive ? "#f1dddd" : "#e2e9ef")
+                  : "transparent"
+            border.color: !control.enabled || (!control.hovered && !control.down) ? "transparent"
+                        : control.destructive ? "#d2aaaa" : "#b5c4cf"
+        }
+
+        ToolTip.visible: hovered
+        ToolTip.delay: 300
+        ToolTip.text: tipText
+        Accessible.name: tipText
+    }
+
     Rectangle {
         id: frame
         anchors.fill: parent
@@ -139,37 +186,28 @@ Item {
                     elide: Text.ElideRight
                 }
 
-                ToolButton {
+                WindowChromeButton {
+                    objectName: "mdiMinimizeButton"
                     visible: root.windowState !== "minimized"
-                    text: "—"
-                    font.pixelSize: 11
-                    Layout.preferredWidth: 25
-                    Layout.preferredHeight: 24
-                    padding: 0
+                    iconSource: "icons/minus.svg"
+                    tipText: "Minimize analysis window"
                     onClicked: root.minimizeRequested()
-                    ToolTip.visible: hovered
-                    ToolTip.text: "Minimize analysis window"
                 }
-                ToolButton {
+                WindowChromeButton {
+                    objectName: "mdiMaximizeButton"
                     visible: root.windowState !== "minimized"
-                    text: root.windowState === "maximized" ? "❐" : "□"
-                    font.pixelSize: 11
-                    Layout.preferredWidth: 25
-                    Layout.preferredHeight: 24
-                    padding: 0
+                    iconSource: root.windowState === "maximized"
+                                ? "icons/copy.svg" : "icons/maximize-2.svg"
+                    tipText: root.windowState === "maximized"
+                             ? "Restore analysis window" : "Maximize analysis window"
                     onClicked: root.toggleMaximizeRequested()
-                    ToolTip.visible: hovered
-                    ToolTip.text: root.windowState === "maximized" ? "Restore" : "Maximize"
                 }
-                ToolButton {
-                    text: "×"
-                    font.pixelSize: 14
-                    Layout.preferredWidth: 25
-                    Layout.preferredHeight: 24
-                    padding: 0
+                WindowChromeButton {
+                    objectName: "mdiCloseButton"
+                    iconSource: "icons/x.svg"
+                    tipText: "Close analysis window"
+                    destructive: true
                     onClicked: root.closeRequested()
-                    ToolTip.visible: hovered
-                    ToolTip.text: "Close analysis window"
                 }
             }
         }
