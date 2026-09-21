@@ -42,6 +42,24 @@ Item {
     property int nextZOrder: 1
     property var activationHistory: []
 
+    // R6.3: Free mode owns a logical desktop independent of the viewport.
+    // Only UI geometry participates in this model; record/analysis work is not
+    // involved in move, scroll, or resize.
+    property real logicalContentWidth: width
+    property real logicalContentHeight: height
+    property int autoScrollWindowId: -1
+    property real dragViewportX: 0
+    property real dragViewportY: 0
+    property real autoScrollMargin: 40
+    property real autoScrollMaxStep: 18
+
+    readonly property real workspaceContentWidth: logicalContentWidth
+    readonly property real workspaceContentHeight: logicalContentHeight
+    readonly property real workspaceScrollX: workspaceFlick.contentX
+    readonly property real workspaceScrollY: workspaceFlick.contentY
+    readonly property real horizontalScrollRange: Math.max(0, logicalContentWidth - root.width)
+    readonly property real verticalScrollRange: Math.max(0, logicalContentHeight - root.height)
+
     readonly property int childCount: windowsModel.count
     readonly property string activeViewType: viewTypeForId(activeWindowId)
     readonly property string activeWindowTitle: titleForId(activeWindowId)
@@ -59,8 +77,10 @@ Item {
     function clamp(value, lo, hi) { return Math.max(lo, Math.min(hi, value)) }
 
     function leaveManagedArrangement() {
-        if (arrangementMode !== "free")
+        if (arrangementMode !== "free") {
             arrangementMode = "free"
+            recomputeWorkspaceExtents()
+        }
     }
 
     function sortedArrangementIndices(horizontalAxis) {
@@ -237,6 +257,7 @@ Item {
         activeWindowId = id
         touchHistory(id)
         recomputeRequestOwners()
+        recomputeWorkspaceExtents()
         activeWindowChanged(id, viewType)
         return id
     }
@@ -255,16 +276,115 @@ Item {
         activeWindowChanged(windowId, windowsModel.get(index).viewType)
     }
 
+    function recomputeWorkspaceExtents() {
+        if (arrangementMode !== "free") {
+            logicalContentWidth = Math.max(0, root.width)
+            logicalContentHeight = Math.max(0, root.height)
+            workspaceFlick.contentX = 0
+            workspaceFlick.contentY = 0
+            return
+        }
+
+        let right = Math.max(0, root.width)
+        let bottom = Math.max(0, root.height)
+        for (let i = 0; i < windowsModel.count; ++i) {
+            const row = windowsModel.get(i)
+            if (row.windowState === "minimized") continue
+            right = Math.max(right, Math.max(0, row.windowX) + Math.max(0, row.windowWidth))
+            bottom = Math.max(bottom, Math.max(0, row.windowY) + Math.max(0, row.windowHeight))
+        }
+
+        const margin = 24
+        logicalContentWidth = right > root.width + 0.5 ? right + margin : Math.max(0, root.width)
+        logicalContentHeight = bottom > root.height + 0.5 ? bottom + margin : Math.max(0, root.height)
+
+        const maxX = Math.max(0, logicalContentWidth - root.width)
+        const maxY = Math.max(0, logicalContentHeight - root.height)
+        workspaceFlick.contentX = clamp(workspaceFlick.contentX, 0, maxX)
+        workspaceFlick.contentY = clamp(workspaceFlick.contentY, 0, maxY)
+    }
+
     function updateGeometry(windowId, x, y, widthValue, heightValue) {
         const index = findIndexById(windowId)
         if (index < 0 || windowsModel.get(index).windowState !== "normal") return
         if (arrangementMode !== "free") return
-        const w = clamp(widthValue, 360, Math.max(360, root.width))
-        const h = clamp(heightValue, 240, Math.max(240, root.height))
+        // Keep top/left reachable, but never clamp right/bottom to the current
+        // viewport. That would make the window resist the mouse at the edge.
+        const w = Math.max(360, widthValue)
+        const h = Math.max(240, heightValue)
         windowsModel.setProperty(index, "windowWidth", w)
         windowsModel.setProperty(index, "windowHeight", h)
-        windowsModel.setProperty(index, "windowX", clamp(x, 0, Math.max(0, root.width - w)))
-        windowsModel.setProperty(index, "windowY", clamp(y, 0, Math.max(0, root.height - h)))
+        windowsModel.setProperty(index, "windowX", Math.max(0, x))
+        windowsModel.setProperty(index, "windowY", Math.max(0, y))
+        recomputeWorkspaceExtents()
+    }
+
+    function beginFreeDrag(windowId, viewportX, viewportY) {
+        const index = findIndexById(windowId)
+        if (arrangementMode !== "free" || index < 0
+                || windowsModel.get(index).windowState !== "normal") return
+        autoScrollWindowId = windowId
+        dragViewportX = viewportX
+        dragViewportY = viewportY
+    }
+
+    function updateFreeDragViewport(windowId, viewportX, viewportY, active) {
+        if (!active) {
+            endFreeDrag(windowId)
+            return
+        }
+        beginFreeDrag(windowId, viewportX, viewportY)
+    }
+
+    function endFreeDrag(windowId) {
+        if (windowId < 0 || autoScrollWindowId === windowId)
+            autoScrollWindowId = -1
+    }
+
+    function autoScrollAxisDelta(pointer, viewportExtent, currentScroll, maxScroll) {
+        if (viewportExtent <= 0 || autoScrollMargin <= 0) return 0
+        const margin = Math.min(autoScrollMargin, viewportExtent * 0.25)
+        if (pointer < margin && currentScroll > 0) {
+            const strength = clamp((margin - pointer) / margin, 0, 1)
+            return -Math.max(1, Math.round(autoScrollMaxStep * strength))
+        }
+        if (pointer > viewportExtent - margin && currentScroll < maxScroll) {
+            const strength = clamp((pointer - (viewportExtent - margin)) / margin, 0, 1)
+            return Math.max(1, Math.round(autoScrollMaxStep * strength))
+        }
+        return 0
+    }
+
+    function stepAutoScroll() {
+        if (autoScrollWindowId < 0 || arrangementMode !== "free") return false
+        const index = findIndexById(autoScrollWindowId)
+        if (index < 0 || windowsModel.get(index).windowState !== "normal") {
+            autoScrollWindowId = -1
+            return false
+        }
+
+        const oldX = workspaceFlick.contentX
+        const oldY = workspaceFlick.contentY
+        const maxX = Math.max(0, logicalContentWidth - root.width)
+        const maxY = Math.max(0, logicalContentHeight - root.height)
+        const requestDx = autoScrollAxisDelta(dragViewportX, root.width, oldX, maxX)
+        const requestDy = autoScrollAxisDelta(dragViewportY, root.height, oldY, maxY)
+        const nextX = clamp(oldX + requestDx, 0, maxX)
+        const nextY = clamp(oldY + requestDy, 0, maxY)
+        const actualDx = nextX - oldX
+        const actualDy = nextY - oldY
+        if (Math.abs(actualDx) < 0.01 && Math.abs(actualDy) < 0.01) return false
+
+        workspaceFlick.contentX = nextX
+        workspaceFlick.contentY = nextY
+
+        // Move the logical child by the same amount as the viewport origin so
+        // its screen-space grab point remains under the stationary pointer.
+        const row = windowsModel.get(index)
+        windowsModel.setProperty(index, "windowX", Math.max(0, row.windowX + actualDx))
+        windowsModel.setProperty(index, "windowY", Math.max(0, row.windowY + actualDy))
+        recomputeWorkspaceExtents()
+        return true
     }
 
     function tileBoundaryPosition(windowId, edgeMask, x, y, widthValue, heightValue) {
@@ -353,6 +473,7 @@ Item {
         if (wasActive) chooseTopmostWindow()
         else recomputeRequestOwners()
         layoutMinimized()
+        recomputeWorkspaceExtents()
     }
 
     function closeActiveWindow() {
@@ -375,6 +496,7 @@ Item {
         if (activeWindowId === windowId) chooseTopmostWindow()
         else recomputeRequestOwners()
         layoutMinimized()
+        recomputeWorkspaceExtents()
     }
 
     function restoreWindow(windowId) {
@@ -382,15 +504,16 @@ Item {
         if (index < 0) return
         leaveManagedArrangement()
         const row = windowsModel.get(index)
-        const w = Math.min(Math.max(360, row.restoreWidth), Math.max(360, root.width))
-        const h = Math.min(Math.max(240, row.restoreHeight), Math.max(240, root.height))
+        const w = Math.max(360, row.restoreWidth)
+        const h = Math.max(240, row.restoreHeight)
         windowsModel.setProperty(index, "windowState", "normal")
         windowsModel.setProperty(index, "windowWidth", w)
         windowsModel.setProperty(index, "windowHeight", h)
-        windowsModel.setProperty(index, "windowX", clamp(row.restoreX, 0, Math.max(0, root.width - w)))
-        windowsModel.setProperty(index, "windowY", clamp(row.restoreY, 0, Math.max(0, root.height - h)))
+        windowsModel.setProperty(index, "windowX", Math.max(0, row.restoreX))
+        windowsModel.setProperty(index, "windowY", Math.max(0, row.restoreY))
         activateWindow(windowId)
         layoutMinimized()
+        recomputeWorkspaceExtents()
     }
 
     function maximizeWindow(windowId) {
@@ -419,6 +542,9 @@ Item {
         windowsModel.setProperty(index, "windowY", 0)
         windowsModel.setProperty(index, "windowWidth", root.width)
         windowsModel.setProperty(index, "windowHeight", root.height)
+        workspaceFlick.contentX = 0
+        workspaceFlick.contentY = 0
+        recomputeWorkspaceExtents()
         activateWindow(windowId)
     }
 
@@ -464,7 +590,10 @@ Item {
             const y = Math.min(Math.max(0, root.height - h), 8 + (slot % 8) * offset)
             setArrangedGeometry(indices[slot], x, y, w, h)
         }
+        workspaceFlick.contentX = 0
+        workspaceFlick.contentY = 0
         recomputeRequestOwners()
+        recomputeWorkspaceExtents()
     }
 
     function tileHorizontal() {
@@ -475,7 +604,10 @@ Item {
         const eachHeight = root.height / indices.length
         for (let slot = 0; slot < indices.length; ++slot)
             setArrangedGeometry(indices[slot], 0, slot * eachHeight, root.width, eachHeight)
+        workspaceFlick.contentX = 0
+        workspaceFlick.contentY = 0
         recomputeRequestOwners()
+        recomputeWorkspaceExtents()
     }
 
     function tileVertical() {
@@ -486,7 +618,10 @@ Item {
         const eachWidth = root.width / indices.length
         for (let slot = 0; slot < indices.length; ++slot)
             setArrangedGeometry(indices[slot], slot * eachWidth, 0, eachWidth, root.height)
+        workspaceFlick.contentX = 0
+        workspaceFlick.contentY = 0
         recomputeRequestOwners()
+        recomputeWorkspaceExtents()
     }
 
     function activateNext() {
@@ -578,24 +713,30 @@ Item {
                 windowsModel.setProperty(i, "windowWidth", root.width)
                 windowsModel.setProperty(i, "windowHeight", root.height)
             } else if (row.windowState === "normal") {
-                const w = Math.min(row.windowWidth, Math.max(360, root.width))
-                const h = Math.min(row.windowHeight, Math.max(240, root.height))
-                windowsModel.setProperty(i, "windowWidth", w)
-                windowsModel.setProperty(i, "windowHeight", h)
-                windowsModel.setProperty(i, "windowX", clamp(row.windowX, 0, Math.max(0, root.width - w)))
-                windowsModel.setProperty(i, "windowY", clamp(row.windowY, 0, Math.max(0, root.height - h)))
+                // A viewport resize must not pull free children back inside the
+                // visible rectangle. Preserve their logical desktop geometry.
+                windowsModel.setProperty(i, "windowWidth", Math.max(360, row.windowWidth))
+                windowsModel.setProperty(i, "windowHeight", Math.max(240, row.windowHeight))
+                windowsModel.setProperty(i, "windowX", Math.max(0, row.windowX))
+                windowsModel.setProperty(i, "windowY", Math.max(0, row.windowY))
             }
         }
         layoutMinimized()
+        recomputeWorkspaceExtents()
     }
 
     function clearWindows() {
         arrangementMode = "free"
+        autoScrollWindowId = -1
         windowsModel.clear()
         activeWindowId = -1
         activationHistory = []
         nextWindowId = 1
         nextZOrder = 1
+        logicalContentWidth = Math.max(0, root.width)
+        logicalContentHeight = Math.max(0, root.height)
+        workspaceFlick.contentX = 0
+        workspaceFlick.contentY = 0
         activeWindowChanged(-1, "time")
     }
 
@@ -608,73 +749,110 @@ Item {
     onWidthChanged: Qt.callLater(relayoutSpecialWindows)
     onHeightChanged: Qt.callLater(relayoutSpecialWindows)
 
+    Flickable {
+        id: workspaceFlick
+        anchors.fill: parent
+        clip: true
+        interactive: false
+        boundsBehavior: Flickable.StopAtBounds
+        contentWidth: root.logicalContentWidth
+        contentHeight: root.logicalContentHeight
+
+        ScrollBar.horizontal: ScrollBar {
+            policy: ScrollBar.AsNeeded
+            interactive: true
+        }
+        ScrollBar.vertical: ScrollBar {
+            policy: ScrollBar.AsNeeded
+            interactive: true
+        }
+
+        Item {
+            id: workspaceCanvas
+            width: workspaceFlick.contentWidth
+            height: workspaceFlick.contentHeight
+
+            Repeater {
+                model: windowsModel
+
+                delegate: MdiChildWindow {
+                    id: childWindow
+                    workspaceWidth: root.logicalContentWidth
+                    workspaceHeight: root.logicalContentHeight
+                    workspaceViewportItem: workspaceFlick
+                    activeWindow: root.activeWindowId === windowId
+                    tileManaged: root.arrangementMode !== "free"
+
+                    onActivateRequested: root.activateWindow(windowId)
+                    onCloseRequested: root.closeWindow(windowId)
+                    onMinimizeRequested: root.minimizeWindow(windowId)
+                    onRestoreRequested: root.restoreWindow(windowId)
+                    onToggleMaximizeRequested: root.toggleMaximize(windowId)
+                    onGeometryRequested: (gx, gy, gw, gh) =>
+                        root.updateGeometry(windowId, gx, gy, gw, gh)
+                    onResizeRequested: (edgeMask, gx, gy, gw, gh) =>
+                        root.resizeTileBoundary(windowId, edgeMask, gx, gy, gw, gh)
+                    onDragViewportRequested: (vx, vy, active) =>
+                        root.updateFreeDragViewport(windowId, vx, vy, active)
+
+                    AnalysisViewHost {
+                        anchors.fill: parent
+                        hasRecord: root.hasRecord
+                        live: childWindow.windowState !== "minimized"
+                        requestOwner: childWindow.requestOwner
+                        viewType: childWindow.viewType
+                        document: root.document
+                        analysis: root.analysis
+                        locusAnalysis: root.locusAnalysis
+                        harmonicSnapshot: root.harmonicSnapshot
+                        tableSnapshot: root.tableSnapshot
+                        zoomFactor: root.zoomFactor
+                        panFraction: root.panFraction
+                        viewStart: root.viewStart
+                        visibleDuration: root.visibleDuration
+                        cursorATime: root.cursorATime
+                        cursorBTime: root.cursorBTime
+                        voltageChannels: root.voltageChannels
+                        currentChannels: root.currentChannels
+                        otherChannels: root.otherChannels
+                        displayedDigitalChannels: root.displayedDigitalChannels
+                        digitalDisplayMode: root.digitalDisplayMode
+                        timeDisplayMode: root.timeDisplayMode
+                        valueRepresentation: root.valueRepresentation
+                        phasorVoltageChannels: root.phasorVoltageChannels
+                        phasorCurrentChannels: root.phasorCurrentChannels
+                        residualChannels: root.residualChannels
+                        harmonicChannels: root.harmonicChannels
+                        tableChannels: root.tableChannels
+                        selectedChannel: root.selectedChannel
+                        axisWidth: root.axisWidth
+                        analogTrackHeight: root.analogTrackHeight
+                        digitalTrackHeight: root.digitalTrackHeight
+                        onCursorARequested: timeSeconds => root.cursorARequested(timeSeconds)
+                        onCursorBRequested: timeSeconds => root.cursorBRequested(timeSeconds)
+                        onPanRequested: value => root.panRequested(value)
+                        onZoomRequested: (factor, anchorFraction) => root.zoomRequested(factor, anchorFraction)
+                        onDigitalDisplayModeRequested: mode => root.digitalDisplayModeRequested(mode)
+                        onSignalActivated: channelIndex => root.signalActivated(channelIndex)
+                    }
+                }
+            }
+        }
+    }
+
+    Timer {
+        interval: 16
+        repeat: true
+        running: root.autoScrollWindowId >= 0
+        onTriggered: root.stepAutoScroll()
+    }
+
     Label {
         anchors.centerIn: parent
         visible: root.hasRecord && windowsModel.count === 0
         text: "No analysis windows open · choose Analysis or Window > New"
         color: "#7a8389"
         font.pixelSize: 10
-    }
-
-    Repeater {
-        model: windowsModel
-
-        delegate: MdiChildWindow {
-            id: childWindow
-            workspaceWidth: root.width
-            workspaceHeight: root.height
-            activeWindow: root.activeWindowId === windowId
-            tileManaged: root.arrangementMode !== "free"
-
-            onActivateRequested: root.activateWindow(windowId)
-            onCloseRequested: root.closeWindow(windowId)
-            onMinimizeRequested: root.minimizeWindow(windowId)
-            onRestoreRequested: root.restoreWindow(windowId)
-            onToggleMaximizeRequested: root.toggleMaximize(windowId)
-            onGeometryRequested: (gx, gy, gw, gh) => root.updateGeometry(windowId, gx, gy, gw, gh)
-            onResizeRequested: (edgeMask, gx, gy, gw, gh) =>
-                root.resizeTileBoundary(windowId, edgeMask, gx, gy, gw, gh)
-
-            AnalysisViewHost {
-                anchors.fill: parent
-                hasRecord: root.hasRecord
-                live: childWindow.windowState !== "minimized"
-                requestOwner: childWindow.requestOwner
-                viewType: childWindow.viewType
-                document: root.document
-                analysis: root.analysis
-                locusAnalysis: root.locusAnalysis
-                harmonicSnapshot: root.harmonicSnapshot
-                tableSnapshot: root.tableSnapshot
-                zoomFactor: root.zoomFactor
-                panFraction: root.panFraction
-                viewStart: root.viewStart
-                visibleDuration: root.visibleDuration
-                cursorATime: root.cursorATime
-                cursorBTime: root.cursorBTime
-                voltageChannels: root.voltageChannels
-                currentChannels: root.currentChannels
-                otherChannels: root.otherChannels
-                displayedDigitalChannels: root.displayedDigitalChannels
-                digitalDisplayMode: root.digitalDisplayMode
-                timeDisplayMode: root.timeDisplayMode
-                valueRepresentation: root.valueRepresentation
-                phasorVoltageChannels: root.phasorVoltageChannels
-                phasorCurrentChannels: root.phasorCurrentChannels
-                residualChannels: root.residualChannels
-                harmonicChannels: root.harmonicChannels
-                tableChannels: root.tableChannels
-                selectedChannel: root.selectedChannel
-                axisWidth: root.axisWidth
-                analogTrackHeight: root.analogTrackHeight
-                digitalTrackHeight: root.digitalTrackHeight
-                onCursorARequested: timeSeconds => root.cursorARequested(timeSeconds)
-                onCursorBRequested: timeSeconds => root.cursorBRequested(timeSeconds)
-                onPanRequested: value => root.panRequested(value)
-                onZoomRequested: (factor, anchorFraction) => root.zoomRequested(factor, anchorFraction)
-                onDigitalDisplayModeRequested: mode => root.digitalDisplayModeRequested(mode)
-                onSignalActivated: channelIndex => root.signalActivated(channelIndex)
-            }
-        }
+        z: 100
     }
 }
