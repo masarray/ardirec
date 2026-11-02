@@ -174,13 +174,13 @@ require(".github/workflows/ci.yml", "python3 scripts/check_r4_definition_of_done
 require(".github/workflows/windows-build.yml", "Smoke test packaged application startup",
         "Windows packaged startup remains a release gate")
 
-# Final recovery candidate identity must be unique and aligned with Windows artifacts.
-require("apps/desktop/main.cpp", "0.2.0-alpha.22",
-        "R4 qualification build must be distinguishable from R3")
-require(".github/workflows/windows-build.yml", "ardirec-v0.2.0-alpha.22-windows-x64",
-        "Windows staging identity must match the R4 executable")
-require(".github/workflows/windows-build.yml", "ardirec-v0.2.0-alpha.22-windows-x64-portable.zip",
-        "Windows portable ZIP identity must match R4")
+# R4's historical identity stays frozen in the R5 baseline manifest. Current
+# qualification/release candidates may advance their application/package version
+# without rewriting or weakening the already-completed R4 milestone.
+require("scripts/r5_release_contract.json", '"version": "0.2.0-alpha.22"',
+        "R5 must preserve the exact R4 qualified version as its locked baseline")
+require("scripts/r5_release_contract.json", '"commit": "0aa1c14e78e284a4224b0699621ecd939f020238"',
+        "R5 must preserve the exact R4 qualified merge commit as its locked baseline")
 
 # Durable DoD documentation maps every issue-62 requirement to executable evidence.
 require("docs/RECOVERY_DEFINITION_OF_DONE.md", "R4 — Recovery Definition of Done",
