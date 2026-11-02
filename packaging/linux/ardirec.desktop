@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=ArDiRec
+GenericName=COMTRADE Disturbance Viewer
+Comment=Investigate power-system disturbance records
+Exec=ardirec %f
+TryExec=ardirec
+Icon=ardirec
+Terminal=false
+Categories=Science;Education;Engineering;
+StartupNotify=true
