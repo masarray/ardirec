@@ -29,9 +29,9 @@ Manual movement of an individual tiled child must not silently break the topolog
 
 ## Locked release blockers
 
-### R6.1 — Child chrome / Lucide controls
+### R6.1 — Child chrome / Google Material Icons controls (R10 migration)
 
-Implemented in R6.1. MDI child minimize, maximize/restore and close actions now use canonical Lucide-style SVG resources rather than font/text glyphs. The existing `minus.svg` and `maximize-2.svg` resources are joined by packaged `copy.svg` for the maximized/restore state and `x.svg` for close.
+Implemented in R6.1 with a R10 art-system migration. MDI child minimize, maximize/restore and close actions now use bundled official Google Material Icons under Apache-2.0, without font/text fallback glyphs. `remove.svg`, `fullscreen.svg`, `content_copy.svg`, and `close.svg` are packaged with native Qt icon source and dynamic color. The 28×26 logical hit targets and state transitions remain the same; tests cover the actual asset mapping.
 
 All three controls share one `WindowChromeButton` implementation with a stable 28 × 26 px hit target, proportional 15 px icon geometry, explicit hover/pressed borders/backgrounds, active/inactive icon emphasis, tooltips and accessible names. Close keeps a restrained destructive hover/pressed treatment without changing the workstation title-bar palette.
 

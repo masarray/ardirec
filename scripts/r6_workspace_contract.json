@@ -9,7 +9,7 @@
     "contract_issue": 92
   },
   "contracts": {
-    "lucide_child_chrome": {
+    "material_child_chrome": {
       "stage": "R6.1",
       "issue": 93,
       "expected": "pass"

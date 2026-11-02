@@ -105,7 +105,7 @@ QVariant invoke(QObject* object, const char* method,
     return result;
 }
 
-void verify_lucide_child_chrome() {
+void verify_material_child_chrome() {
     QQmlEngine engine;
     QQmlComponent component(
         &engine,
@@ -136,26 +136,26 @@ void verify_lucide_child_chrome() {
     QObject* minimize = child->findChild<QObject*>(QStringLiteral("mdiMinimizeButton"));
     QObject* maximize = child->findChild<QObject*>(QStringLiteral("mdiMaximizeButton"));
     QObject* close = child->findChild<QObject*>(QStringLiteral("mdiCloseButton"));
-    require(minimize && maximize && close, "Lucide child chrome exposes all three stable controls");
+    require(minimize && maximize && close, "Material child chrome exposes all three stable controls");
 
     for (QObject* button : {minimize, maximize, close}) {
         require_near(button->property("width").toDouble(), 28.0, 0.75,
-                     "Lucide child chrome keeps stable hit targets");
+                     "Material child chrome keeps stable hit targets");
         require_near(button->property("height").toDouble(), 26.0, 0.75,
-                     "Lucide child chrome keeps stable hit targets");
+                     "Material child chrome keeps stable hit targets");
     }
 
-    require(minimize->property("iconSource").toUrl().toString().endsWith(QStringLiteral("icons/minus.svg")),
-            "normal child uses Lucide minimize icon");
-    require(maximize->property("iconSource").toUrl().toString().endsWith(QStringLiteral("icons/maximize-2.svg")),
-            "normal child uses Lucide maximize icon");
-    require(close->property("iconSource").toUrl().toString().endsWith(QStringLiteral("icons/x.svg")),
-            "child uses Lucide close icon");
+    require(minimize->property("iconSource").toUrl().toString().endsWith(QStringLiteral("material/remove.svg")),
+            "normal child uses Material minimize icon");
+    require(maximize->property("iconSource").toUrl().toString().endsWith(QStringLiteral("material/fullscreen.svg")),
+            "normal child uses Material maximize icon");
+    require(close->property("iconSource").toUrl().toString().endsWith(QStringLiteral("material/close.svg")),
+            "child uses Material close icon");
 
     child->setProperty("windowState", QStringLiteral("maximized"));
     pump_events();
     require(maximize->property("visible").toBool(), "maximize control stays available as restore");
-    require(maximize->property("iconSource").toUrl().toString().endsWith(QStringLiteral("icons/copy.svg")),
+    require(maximize->property("iconSource").toUrl().toString().endsWith(QStringLiteral("material/content_copy.svg")),
             "maximized child uses restore icon");
 
     child->setProperty("windowState", QStringLiteral("minimized"));
@@ -521,7 +521,7 @@ void verify_virtual_workspace_and_direct_drag() {
 int main(int argc, char* argv[]) {
     QGuiApplication app(argc, argv);
     try {
-        verify_lucide_child_chrome();
+        verify_material_child_chrome();
         verify_shared_tile_boundaries();
         verify_virtual_workspace_and_direct_drag();
         verify_workspace_interaction_stress();

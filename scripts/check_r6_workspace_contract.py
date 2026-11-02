@@ -26,7 +26,7 @@ def compact(value: str) -> str:
     return " ".join(value.split())
 
 
-def probe_lucide_child_chrome() -> bool:
+def probe_material_child_chrome() -> bool:
     child = compact(read_text("apps/desktop/qml/MdiChildWindow.qml"))
     cmake = read_text("apps/desktop/CMakeLists.txt")
     runtime_path = ROOT / "tests" / "test_r6_workspace_runtime.cpp"
@@ -35,19 +35,21 @@ def probe_lucide_child_chrome() -> bool:
         'text: "—"', 'text: "□"', 'text: "❐"', 'text: "×"'
     ))
     canonical_icons = all(token in child for token in (
-        'icons/minus.svg',
-        'icons/maximize-2.svg',
-        'icons/copy.svg',
-        'icons/x.svg',
+        'material/remove.svg',
+        'material/fullscreen.svg',
+        'material/content_copy.svg',
+        'material/close.svg',
     ))
     packaged = all(token in cmake for token in (
-        'qml/icons/minus.svg',
-        'qml/icons/maximize-2.svg',
-        'qml/icons/copy.svg',
-        'qml/icons/x.svg',
+        'qml/material/remove.svg',
+        'qml/material/fullscreen.svg',
+        'qml/material/content_copy.svg',
+        'qml/material/close.svg',
     ))
     coherent_controls = all(token in child for token in (
         "component WindowChromeButton",
+        "icon.source: control.iconSource",
+        "icon.color:",
         "Layout.preferredWidth: 28",
         "Layout.preferredHeight: 26",
         "control.hovered",
@@ -56,7 +58,7 @@ def probe_lucide_child_chrome() -> bool:
     ))
     regression = (
         "ardirec_r6_workspace_runtime_tests" in read_text("tests/CMakeLists.txt")
-        and "Lucide child chrome keeps stable hit targets" in runtime
+        and "Material child chrome keeps stable hit targets" in runtime
         and "maximized child uses restore icon" in runtime
         and "minimized child preserves existing chrome visibility semantics" in runtime
     )
@@ -169,7 +171,7 @@ def probe_workspace_interaction_stress() -> bool:
 
 
 PROBES: dict[str, Callable[[], bool]] = {
-    "lucide_child_chrome": probe_lucide_child_chrome,
+    "material_child_chrome": probe_material_child_chrome,
     "tile_shared_edge_resize": probe_tile_shared_edge_resize,
     "virtual_workspace_scroll": probe_virtual_workspace_scroll,
     "free_drag_direct_manipulation": probe_free_drag_direct_manipulation,
