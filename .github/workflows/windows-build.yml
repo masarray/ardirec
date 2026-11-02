@@ -5,6 +5,7 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
@@ -128,6 +129,18 @@ jobs:
           if (Test-Path $stdout) { Get-Content $stdout }
           if (Test-Path $stderr) { Get-Content $stderr }
 
+      - name: Install Inno Setup 6 (pinned compiler)
+        shell: pwsh
+        run: |
+          choco install innosetup --version=6.7.1 --yes --no-progress
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup compiler installation failed" }
+
+      - name: Compile, install, launch and uninstall Inno package
+        shell: pwsh
+        run: |
+          ./scripts/package-windows-installer.ps1 -Version $env:ARDIREC_PACKAGE_VERSION `
+            -StageDir "ardirec-v$env:ARDIREC_PACKAGE_VERSION-windows-x64" -OutputDir dist
+
       - name: Build portable ZIP
         shell: pwsh
         run: |
@@ -137,6 +150,14 @@ jobs:
           if (Test-Path $zip) { Remove-Item $zip -Force }
           Compress-Archive -Path $folder -DestinationPath $zip -CompressionLevel Optimal
           Get-FileHash $zip -Algorithm SHA256 | Format-List
+
+      - name: Upload Inno installer ZIP
+        uses: actions/upload-artifact@v7
+        with:
+          name: ardirec-windows-installer-zip
+          path: dist/ArDiRec-v${{ env.ARDIREC_PACKAGE_VERSION }}-Windows-x64-Setup.zip
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Upload portable ZIP
         uses: actions/upload-artifact@v7
