@@ -74,6 +74,7 @@ ApplicationWindow {
         onCloseAnalysisWindowRequested: mdiWorkspace.closeActiveWindow()
         onNextWindowRequested: mdiWorkspace.activateNext()
         onPreviousWindowRequested: mdiWorkspace.activatePrevious()
+        onFreeArrangementRequested: mdiWorkspace.leaveManagedArrangement()
         onCascadeRequested: mdiWorkspace.cascade()
         onTileHorizontalRequested: mdiWorkspace.tileHorizontal()
         onTileVerticalRequested: mdiWorkspace.tileVertical()

@@ -211,6 +211,27 @@ void verify_shared_tile_boundaries() {
             && c->property("tileManaged").toBool(),
             "tiled children expose managed geometry state");
 
+    // R9: the Window menu's explicit Free layout must relinquish Tile
+    // ownership without moving existing children (no destructive Cascade).
+    const double priorLeft = a->property("x").toDouble();
+    const double priorWidth = a->property("width").toDouble();
+    invoke(workspace.get(), "leaveManagedArrangement");
+    pump_events();
+    a = find_window(workspace.get(), first);
+    require(workspace->property("arrangementMode").toString() == QStringLiteral("free"),
+            "explicit Free layout releases managed Tile");
+    require(!a->property("tileManaged").toBool(),
+            "Free layout restores independent child geometry ownership");
+    require_near(a->property("x").toDouble(), priorLeft, 0.75,
+                 "Free layout preserves child x position");
+    require_near(a->property("width").toDouble(), priorWidth, 0.75,
+                 "Free layout preserves child width");
+    invoke(workspace.get(), "tileVertical");
+    pump_events();
+    a = find_window(workspace.get(), first);
+    b = find_window(workspace.get(), second);
+    c = find_window(workspace.get(), third);
+
     const double thirdXBefore = c->property("x").toDouble();
     const double thirdWidthBefore = c->property("width").toDouble();
 

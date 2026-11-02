@@ -115,6 +115,7 @@ MenuBar {
         MenuItem { action: root.actions?.nextAnalysisWindow ?? null }
         MenuItem { action: root.actions?.previousAnalysisWindow ?? null }
         MenuSeparator { }
+        MenuItem { action: root.actions?.freeArrangement ?? null }
         MenuItem { action: root.actions?.cascadeWindows ?? null }
         MenuItem { action: root.actions?.tileHorizontalWindows ?? null }
         MenuItem { action: root.actions?.tileVerticalWindows ?? null }

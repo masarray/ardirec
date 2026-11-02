@@ -29,6 +29,7 @@ QtObject {
     signal closeAnalysisWindowRequested()
     signal nextWindowRequested()
     signal previousWindowRequested()
+    signal freeArrangementRequested()
     signal cascadeRequested()
     signal tileHorizontalRequested()
     signal tileVerticalRequested()
@@ -223,6 +224,12 @@ QtObject {
         shortcut: "Ctrl+Shift+Tab"
         enabled: root.mdiChildCount > 1
         onTriggered: root.previousWindowRequested()
+    }
+    property Action freeArrangement: Action {
+        text: "&Free Window Layout"
+        shortcut: "Ctrl+Shift+F"
+        enabled: root.mdiChildCount > 0
+        onTriggered: root.freeArrangementRequested()
     }
     property Action cascadeWindows: Action {
         text: "&Cascade"
