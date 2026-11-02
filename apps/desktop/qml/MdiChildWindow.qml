@@ -64,22 +64,13 @@ Item {
         padding: 0
         hoverEnabled: true
 
-        contentItem: Item {
-            implicitWidth: 28
-            implicitHeight: 26
-
-            Image {
-                anchors.centerIn: parent
-                width: 15
-                height: 15
-                source: control.iconSource
-                sourceSize.width: 24
-                sourceSize.height: 24
-                fillMode: Image.PreserveAspectFit
-                smooth: true
-                opacity: control.enabled ? (root.activeWindow ? 1.0 : 0.72) : 0.35
-            }
-        }
+        icon.source: control.iconSource
+        icon.width: 17
+        icon.height: 17
+        icon.color: !control.enabled ? "#b8c4cc"
+                   : control.destructive && (control.hovered || control.down) ? "#b52b34"
+                   : root.activeWindow ? "#465e70" : "#7d909d"
+        display: AbstractButton.IconOnly
 
         background: Rectangle {
             radius: 3
@@ -189,7 +180,7 @@ Item {
                 WindowChromeButton {
                     objectName: "mdiMinimizeButton"
                     visible: root.windowState !== "minimized"
-                    iconSource: "icons/minus.svg"
+                    iconSource: "material/remove.svg"
                     tipText: "Minimize analysis window"
                     onClicked: root.minimizeRequested()
                 }
@@ -197,14 +188,14 @@ Item {
                     objectName: "mdiMaximizeButton"
                     visible: root.windowState !== "minimized"
                     iconSource: root.windowState === "maximized"
-                                ? "icons/copy.svg" : "icons/maximize-2.svg"
+                                ? "material/content_copy.svg" : "material/fullscreen.svg"
                     tipText: root.windowState === "maximized"
                              ? "Restore analysis window" : "Maximize analysis window"
                     onClicked: root.toggleMaximizeRequested()
                 }
                 WindowChromeButton {
                     objectName: "mdiCloseButton"
-                    iconSource: "icons/x.svg"
+                    iconSource: "material/close.svg"
                     tipText: "Close analysis window"
                     destructive: true
                     onClicked: root.closeRequested()

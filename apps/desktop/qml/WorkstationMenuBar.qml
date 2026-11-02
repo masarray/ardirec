@@ -35,7 +35,7 @@ MenuBar {
     Menu {
         title: "&File"
 
-        MenuItem { action: root.actions?.openRecord ?? null }
+        MenuItem { action: root.actions?.openRecord ?? null; icon.source: "material/folder_open.svg"; icon.color: "#337fa7" }
 
         Menu {
             id: recentMenu
@@ -85,17 +85,17 @@ MenuBar {
 
     Menu {
         title: "&Signals"
-        MenuItem { action: root.actions?.signalConfiguration ?? null }
+        MenuItem { action: root.actions?.signalConfiguration ?? null; icon.source: "material/tune.svg"; icon.color: "#5b6c7b" }
     }
 
     Menu {
         title: "&Analysis"
-        MenuItem { action: root.actions?.timeView ?? null }
+        MenuItem { action: root.actions?.timeView ?? null; icon.source: "material/show_chart.svg"; icon.color: "#287ba9" }
         MenuSeparator { }
-        MenuItem { action: root.actions?.phasorView ?? null }
-        MenuItem { action: root.actions?.locusView ?? null }
-        MenuItem { action: root.actions?.harmonicsView ?? null }
-        MenuItem { action: root.actions?.tableView ?? null }
+        MenuItem { action: root.actions?.phasorView ?? null; icon.source: "material/adjust.svg"; icon.color: "#5066b0" }
+        MenuItem { action: root.actions?.locusView ?? null; icon.source: "material/my_location.svg"; icon.color: "#2c826b" }
+        MenuItem { action: root.actions?.harmonicsView ?? null; icon.source: "material/bar_chart.svg"; icon.color: "#a0782a" }
+        MenuItem { action: root.actions?.tableView ?? null; icon.source: "material/table_chart.svg"; icon.color: "#5b657d" }
     }
 
     Menu {
@@ -126,8 +126,8 @@ MenuBar {
         MenuItem { action: root.actions?.fitRecord ?? null }
         MenuItem { action: root.actions?.focusTrigger ?? null }
         MenuSeparator { }
-        MenuItem { action: root.actions?.zoomIn ?? null }
-        MenuItem { action: root.actions?.zoomOut ?? null }
+        MenuItem { action: root.actions?.zoomIn ?? null; icon.source: "material/zoom_in.svg" }
+        MenuItem { action: root.actions?.zoomOut ?? null; icon.source: "material/zoom_out.svg" }
         MenuSeparator { }
 
         Menu {

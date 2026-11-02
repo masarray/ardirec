@@ -26,12 +26,20 @@ Rectangle {
         return "Table"
     }
 
+    function viewAccent(viewName) {
+        if (viewName === "time") return "#287ba9"
+        if (viewName === "phasor") return "#5066b0"
+        if (viewName === "locus") return "#2c826b"
+        if (viewName === "harmonics") return "#a0782a"
+        return "#5b657d"
+    }
+
     function viewIcon(viewName) {
-        if (viewName === "time") return "icons/activity.svg"
-        if (viewName === "phasor") return "icons/circle-dot.svg"
-        if (viewName === "locus") return "icons/crosshair.svg"
-        if (viewName === "harmonics") return "icons/chart-column.svg"
-        return "icons/table-2.svg"
+        if (viewName === "time") return "material/show_chart.svg"
+        if (viewName === "phasor") return "material/adjust.svg"
+        if (viewName === "locus") return "material/my_location.svg"
+        if (viewName === "harmonics") return "material/bar_chart.svg"
+        return "material/table_chart.svg"
     }
 
     function viewAction(viewName) {
@@ -51,7 +59,7 @@ Rectangle {
         action: root.viewAction(viewName)
         checkable: true
         hoverEnabled: true
-        Layout.preferredWidth: root.showViewLabels ? Math.max(80, contentRow.implicitWidth + 20) : 40
+        Layout.preferredWidth: root.showViewLabels ? Math.max(85, control.implicitContentWidth + 20) : 40
         Layout.preferredHeight: 34
         padding: 0
 
@@ -74,33 +82,16 @@ Rectangle {
             }
         }
 
-        contentItem: Item {
-            implicitWidth: contentRow.implicitWidth
-            implicitHeight: 30
-            Row {
-                id: contentRow
-                anchors.centerIn: parent
-                spacing: 6
-                Image {
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: 18
-                    height: 18
-                    source: control.iconSource
-                    sourceSize.width: 22
-                    sourceSize.height: 22
-                    fillMode: Image.PreserveAspectFit
-                    opacity: control.enabled ? 1.0 : 0.35
-                }
-                Label {
-                    visible: root.showViewLabels
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: control.labelText
-                    color: control.enabled ? "#303940" : "#93999e"
-                    font.pixelSize: 11
-                    font.weight: control.checked ? Font.DemiBold : Font.Normal
-                }
-            }
-        }
+        text: control.labelText
+        font.pixelSize: 11
+        font.weight: control.checked ? Font.DemiBold : Font.Normal
+        display: root.showViewLabels ? AbstractButton.TextBesideIcon : AbstractButton.IconOnly
+        icon.source: control.iconSource
+        icon.width: 20
+        icon.height: 20
+        icon.color: !control.enabled ? "#9eaeb9"
+                  : control.checked ? root.viewAccent(viewName)
+                  : control.hovered ? root.viewAccent(viewName) : "#526b7c"
 
         ToolTip.visible: hovered
         ToolTip.delay: 300

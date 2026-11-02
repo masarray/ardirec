@@ -33,38 +33,34 @@ Rectangle {
         padding: 0
         hoverEnabled: true
 
-        contentItem: Item {
-            implicitWidth: 32
-            implicitHeight: 30
-            Image {
+        // Qt Quick Controls IconImage tints Google's filled SVG with icon.color.
+        // No private Qt imports, runtime CDN, canvas filters, or raster swaps.
+        icon.source: control.iconSource
+        icon.width: 20
+        icon.height: 20
+        icon.color: !control.enabled ? "#aebbc5"
+                  : control.badgeText.length > 0 ? "#ba7723"
+                  : control.hovered ? "#216b9b" : "#4b6475"
+        display: AbstractButton.IconOnly
+
+        Rectangle {
+            visible: control.badgeText.length > 0
+            anchors.right: parent.right
+            anchors.top: parent.top
+            anchors.rightMargin: 1
+            anchors.topMargin: 1
+            width: Math.max(15, badgeLabel.implicitWidth + 6)
+            height: 15
+            radius: 7.5
+            color: "#a86f00"
+            border.color: "#ffffff"
+            Label {
+                id: badgeLabel
                 anchors.centerIn: parent
-                width: 18
-                height: 18
-                source: control.iconSource
-                sourceSize.width: 22
-                sourceSize.height: 22
-                fillMode: Image.PreserveAspectFit
-                opacity: control.enabled ? 1.0 : 0.38
-            }
-            Rectangle {
-                visible: control.badgeText.length > 0
-                anchors.right: parent.right
-                anchors.top: parent.top
-                anchors.rightMargin: 1
-                anchors.topMargin: 1
-                width: Math.max(15, badgeLabel.implicitWidth + 6)
-                height: 15
-                radius: 7.5
-                color: "#a86f00"
-                border.color: "#ffffff"
-                Label {
-                    id: badgeLabel
-                    anchors.centerIn: parent
-                    text: control.badgeText
-                    color: "#ffffff"
-                    font.pixelSize: 8
-                    font.weight: Font.Bold
-                }
+                text: control.badgeText
+                color: "#ffffff"
+                font.pixelSize: 8
+                font.weight: Font.Bold
             }
         }
 
@@ -316,17 +312,17 @@ Rectangle {
 
         ToolbarIconButton {
             action: root.actions?.openRecord ?? null
-            iconSource: "icons/folder-open.svg"
+            iconSource: "material/folder_open.svg"
             tipText: "Open COMTRADE… (Ctrl+O)"
         }
         ToolbarIconButton {
             action: root.actions?.signalConfiguration ?? null
-            iconSource: "icons/sliders-horizontal.svg"
+            iconSource: "material/tune.svg"
             tipText: "Signal Configuration… (Ctrl+R)"
         }
         ToolbarIconButton {
             action: root.actions?.recordProperties ?? null
-            iconSource: "icons/layers-3.svg"
+            iconSource: "material/layers.svg"
             tipText: "Record Properties… (Alt+Enter)"
         }
 
@@ -342,28 +338,28 @@ Rectangle {
 
         ToolbarIconButton {
             action: root.actions?.fitRecord ?? null
-            iconSource: "icons/maximize-2.svg"
+            iconSource: "material/fullscreen.svg"
             tipText: "Fit complete record (Ctrl+0)"
         }
         ToolbarIconButton {
             action: root.actions?.focusTrigger ?? null
-            iconSource: "icons/crosshair.svg"
+            iconSource: "material/my_location.svg"
             tipText: "Focus common time view around COMTRADE trigger"
         }
         ToolbarIconButton {
             action: root.actions?.zoomOut ?? null
-            iconSource: "icons/zoom-out.svg"
+            iconSource: "material/zoom_out.svg"
             tipText: "Zoom out"
         }
         ToolbarIconButton {
             action: root.actions?.zoomIn ?? null
-            iconSource: "icons/zoom-in.svg"
+            iconSource: "material/zoom_in.svg"
             tipText: "Zoom in"
         }
         ToolbarIconButton {
             visible: root.hasRecord && root.diagnosticCount > 0
             action: root.actions?.recordDiagnostics ?? null
-            iconSource: "icons/triangle-alert.svg"
+            iconSource: "material/warning.svg"
             badgeText: String(root.diagnosticCount)
             tipText: "Show recoverable COMTRADE diagnostics"
         }
