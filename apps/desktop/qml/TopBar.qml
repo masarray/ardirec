@@ -6,8 +6,8 @@ import QtQuick.Layouts
 Rectangle {
     id: root
     height: 40
-    color: "#f2f2f2"
-    border.color: "#b7b7b7"
+    color: "#f3f6f8"
+    border.color: "#b9c6d0"
 
     property var document
     property var actions
@@ -303,7 +303,16 @@ Rectangle {
             smooth: true
         }
 
-        Rectangle { width: 1; height: 22; color: "#c5c9cc"; Layout.leftMargin: 2; Layout.rightMargin: 4 }
+        Label {
+            visible: root.width >= 1180
+            text: "RECORD"
+            color: "#607280"
+            font.pixelSize: 9
+            font.weight: Font.DemiBold
+            Layout.leftMargin: 5
+            Layout.rightMargin: 4
+        }
+        Rectangle { width: 1; height: 22; color: "#bac7d0"; Layout.leftMargin: 2; Layout.rightMargin: 4 }
 
         ToolbarIconButton {
             action: root.actions?.openRecord ?? null
@@ -321,7 +330,15 @@ Rectangle {
             tipText: "Record Properties… (Alt+Enter)"
         }
 
-        Rectangle { width: 1; height: 22; color: "#c5c9cc"; Layout.leftMargin: 4; Layout.rightMargin: 4 }
+        Rectangle { width: 1; height: 22; color: "#bac7d0"; Layout.leftMargin: 4; Layout.rightMargin: 4 }
+        Label {
+            visible: root.width >= 1180
+            text: "NAVIGATE"
+            color: "#607280"
+            font.pixelSize: 9
+            font.weight: Font.DemiBold
+            Layout.rightMargin: 4
+        }
 
         ToolbarIconButton {
             action: root.actions?.fitRecord ?? null

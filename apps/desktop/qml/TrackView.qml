@@ -5,8 +5,9 @@ import Ardirec.Render 1.0
 
 Rectangle {
     id: root
-    color: "#fbfbfb"
-    border.color: "#c8c8c8"
+    color: "#ffffff"
+    border.color: "#bac5ce"
+    readonly property real plotZeroFraction: displayMode === "rms" ? 0.90 : 0.50
 
     property var document
     property var analysis
@@ -87,8 +88,17 @@ Rectangle {
         anchors.top: parent.top
         anchors.bottom: parent.bottom
         width: root.axisWidth
-        color: "#f4f4f4"
-        border.color: "#cccccc"
+        color: "#f4f7f9"
+        border.color: "#c5d0d9"
+
+        // A narrow phase-color key, not a thick colored separator.
+        Rectangle {
+            width: 3
+            anchors.left: parent.left
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            color: root.traceColor
+        }
 
         Label {
             anchors.left: parent.left
@@ -98,7 +108,7 @@ Rectangle {
             width: parent.width - 14
             text: root.document && root.channelIndex >= 0 ? root.document.channelName(root.channelIndex) : "—"
             color: root.traceColor
-            font.pixelSize: 10
+            font.pixelSize: 11
             font.weight: Font.DemiBold
             elide: Text.ElideRight
         }
@@ -168,30 +178,7 @@ Rectangle {
             }
         }
 
-        Label {
-            anchors.right: parent.right
-            anchors.rightMargin: 7
-            y: Math.max(112, parent.height * 0.13 - height * 0.5)
-            text: root.formatAxis(root.displayPeak)
-            color: "#656b70"
-            font.pixelSize: 8
-        }
-        Label {
-            anchors.right: parent.right
-            anchors.rightMargin: 7
-            y: parent.height * 0.55 - height * 0.5
-            text: root.displayMode === "rms" ? root.formatAxis(root.displayPeak * 0.5) : "0"
-            color: "#7a7f83"
-            font.pixelSize: 8
-        }
-        Label {
-            anchors.right: parent.right
-            anchors.rightMargin: 7
-            y: parent.height * 0.90 - height * 0.5
-            text: root.displayMode === "rms" ? "0" : root.formatAxis(-root.displayPeak)
-            color: "#656b70"
-            font.pixelSize: 8
-        }
+
     }
 
     Rectangle {
@@ -203,29 +190,14 @@ Rectangle {
         color: "#ffffff"
         clip: true
 
-        Repeater {
-            model: 11
-            Rectangle {
-                required property int index
-                x: chart.width * index / 10
-                y: 0
-                width: 1
-                height: chart.height
-                color: index === 0 || index === 10 ? "#c3c3c3" : "#e4e4e4"
-            }
+        // The guides match renderer coordinates and do no per-sample work.
+        PlotGuides {
+            id: plotGuides
+            objectName: "engineeringPlotGuides"
+            anchors.fill: parent
+            displayMode: root.displayMode
         }
 
-        Repeater {
-            model: [0.10, 0.30, 0.50, 0.70, 0.90]
-            Rectangle {
-                required property real modelData
-                x: 0
-                y: chart.height * modelData
-                width: chart.width
-                height: 1
-                color: modelData === 0.50 ? "#b8b8b8" : "#e1e1e1"
-            }
-        }
 
         Loader {
             anchors.fill: parent
@@ -257,6 +229,36 @@ Rectangle {
             }
         }
 
+        // Plot-side labels never overlap the two measurement value cells.
+        // The darker "0" belongs to the guide, not to a waveform trace.
+        Label {
+            objectName: "engineeringZeroLabel"
+            x: 6
+            y: Math.max(0, Math.min(chart.height - height, plotGuides.zeroPixel - height / 2))
+            text: "0"
+            color: "#344e62"
+            font.pixelSize: 10
+            font.weight: Font.DemiBold
+            background: Rectangle { color: "#f6f9fb"; radius: 2 }
+        }
+        Label {
+            x: 6
+            y: Math.max(0, Math.round(chart.height * plotGuides.upperFraction) - height / 2)
+            text: root.formatAxis(root.displayPeak)
+            color: "#657782"
+            font.pixelSize: 9
+            background: Rectangle { color: "#ffffff"; opacity: 0.85 }
+        }
+        Label {
+            visible: root.displayMode !== "rms"
+            x: 6
+            y: Math.max(0, Math.min(chart.height - height, Math.round(chart.height * plotGuides.lowerFraction) - height / 2))
+            text: root.formatAxis(-root.displayPeak)
+            color: "#657782"
+            font.pixelSize: 9
+            background: Rectangle { color: "#ffffff"; opacity: 0.85 }
+        }
+
         TriggerReference {
             visible: root.document && root.visibleDuration > 0
                      && root.document.triggerOffsetSeconds >= root.viewStart
@@ -286,5 +288,16 @@ Rectangle {
             color: root.cursorBColor
             opacity: 0.95
         }
+    }
+
+    // Full-width lane boundary: extends through the name/value gutter.
+    // It is deliberately a different tone/location from the ZERO reference.
+    Rectangle {
+        objectName: "phaseLaneSeparator"
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        height: 2
+        color: "#aab9c5"
     }
 }

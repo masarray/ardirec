@@ -78,6 +78,7 @@ qt_add_qml_module(ardirec
         qml/AnalysisViewHost.qml
         qml/TimeRuler.qml
         qml/TimeSignalsView.qml
+        qml/PlotGuides.qml
         qml/TrackView.qml
         qml/EventStrip.qml
         qml/TriggerReference.qml

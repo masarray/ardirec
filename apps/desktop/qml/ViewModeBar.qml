@@ -5,9 +5,9 @@ import QtQuick.Layouts
 
 Rectangle {
     id: root
-    height: 48
-    color: "#e9ecef"
-    border.color: "#c4c9ce"
+    height: 44
+    color: "#e9eff4"
+    border.color: "#b4c2cd"
 
     property var actions
     property string currentView: "time"
@@ -52,8 +52,27 @@ Rectangle {
         checkable: true
         hoverEnabled: true
         Layout.preferredWidth: root.showViewLabels ? Math.max(80, contentRow.implicitWidth + 20) : 40
-        Layout.preferredHeight: 36
+        Layout.preferredHeight: 34
         padding: 0
+
+        background: Rectangle {
+            radius: 3
+            color: !control.enabled ? "transparent"
+                  : control.checked ? "#f8fbfd"
+                  : control.down ? "#d9e5ed"
+                  : control.hovered ? "#dfe8ef" : "transparent"
+            border.color: !control.enabled ? "transparent"
+                          : control.checked ? "#9cb0c0"
+                          : control.hovered ? "#bfccd6" : "transparent"
+            Rectangle {
+                visible: control.checked && control.enabled
+                height: 3
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
+                color: "#407399"
+            }
+        }
 
         contentItem: Item {
             implicitWidth: contentRow.implicitWidth
@@ -88,6 +107,30 @@ Rectangle {
         ToolTip.text: labelText + "  ·  " + (viewName === "time" ? "1" : viewName === "phasor" ? "2" : viewName === "locus" ? "3" : viewName === "harmonics" ? "4" : "5")
     }
 
+    component EngineeringModeButton: ToolButton {
+        id: control
+        checkable: true
+        hoverEnabled: true
+        Layout.preferredHeight: 30
+        font.pixelSize: 10
+        background: Rectangle {
+            radius: 3
+            color: control.checked ? "#f8fbfe"
+                 : control.down ? "#d9e5ed"
+                 : control.hovered ? "#e0eaf1" : "transparent"
+            border.color: control.checked ? "#9eb3c3"
+                        : control.hovered ? "#c3d0da" : "transparent"
+            Rectangle {
+                visible: control.checked
+                anchors.bottom: parent.bottom
+                anchors.left: parent.left
+                anchors.right: parent.right
+                height: 2
+                color: "#407399"
+            }
+        }
+    }
+
     RowLayout {
         anchors.fill: parent
         anchors.leftMargin: 8
@@ -117,14 +160,14 @@ Rectangle {
             visible: root.currentView === "time"
             spacing: 3
             Label { text: "Waveform"; color: "#626c74"; font.pixelSize: 10; font.weight: Font.DemiBold; Layout.rightMargin: 3 }
-            ToolButton {
+            EngineeringModeButton {
                 action: root.actions?.waveformInstant ?? null
                 text: "Instant"
                 checkable: true
                 font.pixelSize: 10
                 Layout.preferredHeight: 32
             }
-            ToolButton {
+            EngineeringModeButton {
                 action: root.actions?.waveformRms ?? null
                 text: "RMS"
                 checkable: true
@@ -149,7 +192,7 @@ Rectangle {
         RowLayout {
             spacing: 3
             Label { text: "VALUES"; color: "#56616a"; font.pixelSize: 9; font.weight: Font.DemiBold; font.letterSpacing: 0.5; Layout.rightMargin: 2 }
-            ToolButton {
+            EngineeringModeButton {
                 action: root.actions?.secondaryValues ?? null
                 text: "Secondary"
                 checkable: true
@@ -158,7 +201,7 @@ Rectangle {
                 ToolTip.visible: hovered
                 ToolTip.text: root.transformerRatiosAvailable ? root.ratioSummary : "No valid CT/PT ratio metadata; values remain 1:1"
             }
-            ToolButton {
+            EngineeringModeButton {
                 action: root.actions?.primaryValues ?? null
                 text: "Primary"
                 checkable: true

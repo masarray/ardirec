@@ -5,6 +5,30 @@ import QtQuick.Controls
 MenuBar {
     id: root
     property var actions
+    implicitHeight: 30
+    background: Rectangle {
+        color: "#f7f9fb"
+        border.color: "#c5d0d8"
+    }
+
+    delegate: MenuBarItem {
+        id: menuItem
+        implicitHeight: 29
+        implicitWidth: Math.max(52, contentItem.implicitWidth + 22)
+        contentItem: Text {
+            text: menuItem.text
+            color: menuItem.highlighted ? "#173e59" : "#283b49"
+            font.pixelSize: 11
+            verticalAlignment: Text.AlignVCenter
+            horizontalAlignment: Text.AlignHCenter
+            font.weight: menuItem.highlighted ? Font.DemiBold : Font.Normal
+        }
+        background: Rectangle {
+            color: menuItem.highlighted ? "#dce8f1" : "transparent"
+            border.color: menuItem.highlighted ? "#a4b8c8" : "transparent"
+            radius: 3
+        }
+    }
 
     Menu {
         title: "&File"
@@ -65,6 +89,7 @@ MenuBar {
     Menu {
         title: "&Analysis"
         MenuItem { action: root.actions?.timeView ?? null }
+        MenuSeparator { }
         MenuItem { action: root.actions?.phasorView ?? null }
         MenuItem { action: root.actions?.locusView ?? null }
         MenuItem { action: root.actions?.harmonicsView ?? null }

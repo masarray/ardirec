@@ -297,6 +297,22 @@ if(TARGET Qt6::Core)
         add_test(NAME ardirec_r6_workspace_runtime_tests COMMAND ardirec_r6_workspace_runtime_tests)
         set_tests_properties(ardirec_r6_workspace_runtime_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
+        # R9 engineering trace hierarchy: zero/reference and lane semantics
+        # are exercised in live Qt Quick, not just inspected by source grep.
+        qt_add_executable(ardirec_r9_plot_guides_tests
+            test_r9_plot_guides.cpp
+        )
+        set_target_properties(ardirec_r9_plot_guides_tests PROPERTIES AUTOMOC ON)
+        target_link_libraries(ardirec_r9_plot_guides_tests PRIVATE
+            Qt6::Core Qt6::Qml Qt6::Quick Qt6::QuickControls2)
+        target_compile_definitions(ardirec_r9_plot_guides_tests PRIVATE
+            ARDIREC_QML_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../apps/desktop/qml"
+        )
+        ardirec_set_warnings(ardirec_r9_plot_guides_tests)
+        ardirec_enable_sanitizers(ardirec_r9_plot_guides_tests)
+        add_test(NAME ardirec_r9_plot_guides_tests COMMAND ardirec_r9_plot_guides_tests)
+        set_tests_properties(ardirec_r9_plot_guides_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
         qt_add_executable(ardirec_r6_phasor_performance_tests
             test_r6_phasor_performance.cpp
             ../apps/desktop/cursor_snapshot_controller.cpp

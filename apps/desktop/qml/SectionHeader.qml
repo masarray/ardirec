@@ -5,8 +5,18 @@ import QtQuick.Layouts
 
 Rectangle {
     id: root
-    color: "#eceff2"
-    border.color: "#c8cdd2"
+    color: "#e5ebf0"
+    border.color: "#aebcc7"
+
+    // Section divider separates Voltage / Current / Other / Digital groups,
+    // visually distinct from both per-lane boundaries and the zero baseline.
+    Rectangle {
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        height: 2
+        color: "#93a6b5"
+    }
 
     property string title: "SECTION"
     property int count: 0
@@ -21,14 +31,14 @@ Rectangle {
 
         Rectangle {
             width: 3
-            height: 13
+            height: 15
             radius: 1
             color: root.accent
         }
         Label {
             text: root.title
             color: "#30363c"
-            font.pixelSize: 9
+            font.pixelSize: 10
             font.weight: Font.DemiBold
             font.letterSpacing: 0.7
         }
