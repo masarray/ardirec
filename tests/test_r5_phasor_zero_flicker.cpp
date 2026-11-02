@@ -224,6 +224,19 @@ void verify_qml_stale_while_revalidate() {
                  "initial C1 display uses the committed frame timestamp");
     const auto activeVectors = active_vector_items(view.get());
     require(activeVectors.size() >= 2u, "C1 and C2 vector items are populated before scrub");
+    // R11 FIT vs RECORD must be explicit and measured; C1 80 V and C2 75 V
+    // must always use the SAME shared RMAX rather than independent normalization.
+    require(view->property("fitToCursors").toBool(), "C1/C2 FIT is default");
+    require_near(view->property("voltageScale").toDouble(), 80.0 * 1.12, 1.0e-5,
+                 "FIT uses maximum committed C1/C2 magnitude with twelve percent headroom");
+    view->setProperty("fitToCursors", false);
+    pump_events(10);
+    require_near(view->property("voltageScale").toDouble(), 120.0 * 1.02, 1.0e-5,
+                 "Record mode restores whole-record peak scale");
+    view->setProperty("fitToCursors", true);
+    pump_events(10);
+    require_near(view->property("voltageScale").toDouble(), 80.0 * 1.12, 1.0e-5,
+                 "returning to FIT updates both C1/C2 equally");
 
     view->setProperty("cursorATime", 0.025);
     pump_events(20);

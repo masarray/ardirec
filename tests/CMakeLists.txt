@@ -243,6 +243,23 @@ if(TARGET Qt6::Core)
         add_test(NAME ardirec_r5_linked_cursor_tests COMMAND ardirec_r5_linked_cursor_tests)
         set_tests_properties(ardirec_r5_linked_cursor_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
+        # R11 ensures one shared FIT radius, readable AA shaft and bounded
+        # triangle arrowheads even for genuine near-zero vectors.
+        qt_add_executable(ardirec_r11_phasor_geometry_tests
+            test_r11_phasor_geometry.cpp
+            ../apps/desktop/phasor_vector_item.cpp
+            ../apps/desktop/phasor_vector_item.hpp
+            ../apps/desktop/phasor_vector_geometry.hpp
+        )
+        set_target_properties(ardirec_r11_phasor_geometry_tests PROPERTIES AUTOMOC ON)
+        target_include_directories(ardirec_r11_phasor_geometry_tests PRIVATE ../apps/desktop)
+        target_link_libraries(ardirec_r11_phasor_geometry_tests PRIVATE
+            Qt6::Core Qt6::Qml Qt6::Quick Qt6::QuickControls2)
+        ardirec_set_warnings(ardirec_r11_phasor_geometry_tests)
+        ardirec_enable_sanitizers(ardirec_r11_phasor_geometry_tests)
+        add_test(NAME ardirec_r11_phasor_geometry_tests COMMAND ardirec_r11_phasor_geometry_tests)
+        set_tests_properties(ardirec_r11_phasor_geometry_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
         qt_add_executable(ardirec_r5_phasor_zero_flicker_tests
             test_r5_phasor_zero_flicker.cpp
             ../apps/desktop/phasor_vector_item.cpp
