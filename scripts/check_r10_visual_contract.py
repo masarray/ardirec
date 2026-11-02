@@ -27,7 +27,7 @@ references: set[str] = set()
 for path in QML.rglob("*.qml"):
     source = path.read_text(encoding="utf-8")
     require("icons/" not in source, f"legacy Lucide resource reference: {path}")
-    references.update(re.findall(r"material/([\\w-]+\\.svg)", source))
+    references.update(re.findall(r"material/([\w-]+\.svg)", source))
 require(references, "no Material icons referenced from UI")
 require(all((QML / "material" / icon).is_file() for icon in references),
         "Qt UI refers to a non-existing Material SVG")
