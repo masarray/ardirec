@@ -47,6 +47,7 @@ qt_add_executable(ardirec WIN32 MACOSX_BUNDLE
     rms_waveform_item.hpp
     phasor_vector_item.cpp
     phasor_vector_item.hpp
+    phasor_vector_geometry.hpp
     digital_item.cpp
     digital_item.hpp
     $<$<BOOL:${WIN32}>:${CMAKE_CURRENT_BINARY_DIR}/ardirec.rc>

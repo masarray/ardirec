@@ -15,6 +15,7 @@ Rectangle {
     property string role: "Voltage"
     property string title: "PHASORS"
     property real scaleMagnitude: 0.0
+    property string scaleMode: "fit"
     property color cursorAccent: "#244f9e"
     property string valueRepresentation: document ? document.valueRepresentation : "secondary"
 
@@ -103,7 +104,8 @@ Rectangle {
     function scaleText() {
         const list = root.effectiveChannels()
         if (!list.length || !(root.effectiveScale > 0)) return "AUTO SCALE"
-        return "RMAX " + root.formatMagnitude(list[0], root.effectiveScale)
+        return (root.scaleMode === "fit" ? "FIT C1+C2 · " : "RECORD · ")
+               + "RMAX " + root.formatMagnitude(list[0], root.effectiveScale)
     }
 
     Rectangle {
@@ -149,7 +151,8 @@ Rectangle {
 
         readonly property real cx: width * 0.5
         readonly property real cy: height * 0.5
-        readonly property real radius: Math.max(20, Math.min(width, height) * 0.40)
+        // Match project_phasor() exactly: plot ring must represent RMAX.
+        readonly property real radius: Math.max(4, Math.min(width, height) * 0.40)
 
         Repeater {
             model: 4
@@ -161,7 +164,7 @@ Rectangle {
                 x: plot.cx - width * 0.5
                 y: plot.cy - height * 0.5
                 color: "transparent"
-                border.width: index === 3 ? 1.1 : 1
+                border.width: index === 3 ? 1.4 : 1
                 border.color: index === 3 ? "#aeb7be" : "#dde3e7"
             }
         }
@@ -192,7 +195,7 @@ Rectangle {
                 y: plot.cy - Math.sin(radians) * (plot.radius + 17) - height * 0.5
                 text: signedDegree + "°"
                 color: "#4f5b64"
-                font.pixelSize: 8
+                font.pixelSize: 10
             }
         }
 
@@ -204,7 +207,7 @@ Rectangle {
                 y: plot.cy - plot.radius * (index + 1) / 4 - height * 0.5
                 text: ((index + 1) * 25) + "%"
                 color: "#7d878e"
-                font.pixelSize: 7
+                font.pixelSize: 9
             }
         }
 
@@ -220,13 +223,14 @@ Rectangle {
                 required property var modelData
                 readonly property real radians: Number(modelData.angle) * Math.PI / 180.0
                 readonly property real fraction: root.effectiveScale > 0 ? Math.min(1.0, Number(modelData.magnitude) / root.effectiveScale) : 0.0
-                readonly property real tagRadius: Math.max(22, plot.radius * 0.94 * fraction - 18)
+                readonly property real tagRadius: plot.radius * 0.90 * fraction + 8
+                visible: fraction >= 0.18 && Number(modelData.magnitude) > 0.0
                 x: plot.cx + Math.cos(radians) * tagRadius + (Math.cos(radians) >= 0 ? 4 : -width - 4)
                 y: plot.cy - Math.sin(radians) * tagRadius + (Math.sin(radians) >= 0 ? -height - 2 : 2)
                 text: modelData.phase !== "Other" ? modelData.phase
                                                    : (root.document ? root.document.channelName(modelData.index) : "")
                 color: modelData.color
-                font.pixelSize: 9
+                font.pixelSize: 11
                 font.weight: Font.DemiBold
             }
         }
@@ -268,7 +272,7 @@ Rectangle {
                     readonly property var row: root.snapshotRow(modelData)
                     spacing: 5
                     Rectangle {
-                        width: 14; height: 3
+                        width: 17; height: 4
                         anchors.verticalCenter: parent.verticalCenter
                         color: root.analysis ? root.analysis.phaseColor(modelData) : "#777"
                     }
@@ -279,7 +283,7 @@ Rectangle {
                                    + "  ∠" + root.wrapDegrees(row.angle + 90.0).toFixed(1) + "°"
                                  : "  —")
                         color: "#3f494f"
-                        font.pixelSize: 10
+                        font.pixelSize: 11
                         anchors.verticalCenter: parent.verticalCenter
                     }
                 }

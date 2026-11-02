@@ -10,6 +10,8 @@ Rectangle {
     property var document
     property var analysis
     property bool requestOwner: true
+    // Shared C1+C2 fitting is the default. Record is the original fixed range.
+    property bool fitToCursors: true
     property real cursorATime: 0.0
     property real cursorBTime: 0.0
     property var voltageChannels: []
@@ -38,11 +40,11 @@ Rectangle {
     readonly property var residualVoltageChannels: filterRole(residualChannels, "Voltage")
     readonly property var residualCurrentChannels: filterRole(residualChannels, "Current")
     readonly property var residualOtherChannels: filterRole(residualChannels, "Other")
-    readonly property real voltageScale: stableScale(voltageChannels)
-    readonly property real currentScale: stableScale(currentChannels)
-    readonly property real residualVoltageScale: stableScale(residualVoltageChannels)
-    readonly property real residualCurrentScale: stableScale(residualCurrentChannels)
-    readonly property real residualOtherScale: stableScale(residualOtherChannels)
+    readonly property real voltageScale: selectedScale(voltageChannels)
+    readonly property real currentScale: selectedScale(currentChannels)
+    readonly property real residualVoltageScale: selectedScale(residualVoltageChannels)
+    readonly property real residualCurrentScale: selectedScale(residualCurrentChannels)
+    readonly property real residualOtherScale: selectedScale(residualOtherChannels)
     readonly property bool sequenceAvailable: hasThreePhase("Voltage") || hasThreePhase("Current")
     readonly property var groupModel: [
         { title: "VOLTAGE", subtitle: "phase / neutral voltage vectors", channels: voltageChannels, scale: voltageScale },
@@ -110,6 +112,28 @@ Rectangle {
             if (Number.isFinite(peak)) maximum = Math.max(maximum, peak)
         }
         return maximum > 0.0 ? maximum * 1.02 : 0.0
+    }
+
+    function cursorMaximum(snapshot, channels) {
+        if (!snapshot || !snapshot.valid || !snapshot.channels || !channels) return 0.0
+        let maximum = 0.0
+        for (let index of channels) {
+            const row = root.snapshotRow(snapshot, index)
+            if (!row.valid) continue
+            const magnitude = Number(row.magnitude)
+            if (Number.isFinite(magnitude) && magnitude >= 0.0)
+                maximum = Math.max(maximum, magnitude)
+        }
+        return maximum
+    }
+
+    function selectedScale(channels) {
+        if (!root.fitToCursors) return root.stableScale(channels)
+        // A single maximum shared by both C1 and C2 prevents misleading
+        // independent normalization during an engineering comparison.
+        const maximum = Math.max(root.cursorMaximum(root.displaySnapshotA, channels),
+                                 root.cursorMaximum(root.displaySnapshotB, channels))
+        return maximum > 0.0 ? maximum * 1.12 : root.stableScale(channels)
     }
 
     function acceptSnapshotA() {
@@ -252,13 +276,61 @@ Rectangle {
                         font.weight: Font.DemiBold
                     }
                     Label {
-                        text: "Committed-frame one-cycle DFT · stale frame remains visible until the latest cursor result commits"
+                        text: "One-cycle DFT · C1/C2 share one amplitude scale"
+                        visible: root.width > 1250
                         color: "#778087"
                         font.pixelSize: 8
                     }
                 }
 
                 Item { Layout.fillWidth: true }
+
+                RowLayout {
+                    spacing: 3
+                    Label {
+                        text: "SCALE"
+                        color: "#607380"
+                        font.pixelSize: 9
+                        font.weight: Font.DemiBold
+                        Layout.rightMargin: 3
+                    }
+                    ToolButton {
+                        id: fitButton
+                        objectName: "phasorFitScaleButton"
+                        text: "Fit C1+C2"
+                        checkable: true
+                        checked: root.fitToCursors
+                        onClicked: root.fitToCursors = true
+                        font.pixelSize: 10
+                        padding: 6
+                        background: Rectangle {
+                            radius: 3
+                            color: fitButton.checked ? "#dceaf5"
+                                   : fitButton.hovered ? "#e9eff4" : "#f6f8fa"
+                            border.color: fitButton.checked ? "#6c99b8" : "#c5d0d8"
+                        }
+                        ToolTip.visible: hovered
+                        ToolTip.text: "Fit shared reference to committed C1 and C2 magnitudes"
+                    }
+                    ToolButton {
+                        id: recordButton
+                        objectName: "phasorRecordScaleButton"
+                        text: "Record"
+                        checkable: true
+                        checked: !root.fitToCursors
+                        onClicked: root.fitToCursors = false
+                        font.pixelSize: 10
+                        padding: 6
+                        background: Rectangle {
+                            radius: 3
+                            color: recordButton.checked ? "#dceaf5"
+                                   : recordButton.hovered ? "#e9eff4" : "#f6f8fa"
+                            border.color: recordButton.checked ? "#6c99b8" : "#c5d0d8"
+                        }
+                        ToolTip.visible: hovered
+                        ToolTip.text: "Original fixed whole-record peak reference"
+                    }
+                }
 
                 Rectangle {
                     Layout.preferredWidth: 174
@@ -453,6 +525,7 @@ Rectangle {
                                         channels: groupCard.groupData.channels
                                         title: "C1 · " + groupCard.groupData.title
                                         scaleMagnitude: groupCard.groupData.scale
+                                        scaleMode: root.fitToCursors ? "fit" : "record"
                                         cursorAccent: "#244f9e"
                                     }
                                     PhasorDiagram {
@@ -462,6 +535,7 @@ Rectangle {
                                         channels: groupCard.groupData.channels
                                         title: "C2 · " + groupCard.groupData.title
                                         scaleMagnitude: groupCard.groupData.scale
+                                        scaleMode: root.fitToCursors ? "fit" : "record"
                                         cursorAccent: "#b77900"
                                     }
                                 }
