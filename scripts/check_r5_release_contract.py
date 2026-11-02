@@ -176,7 +176,11 @@ def probe_phasor_retained_qsg() -> bool:
         "delete oldNode;" not in text
         and "oldNode ? static_cast<VectorRootNode*>(oldNode) : new VectorRootNode()" in text
         and "node->markDirty(QSGNode::DirtyGeometry);" in text
-        and "root->appendChildNode(new VectorNode());" in text
+        and "root->appendChildNode(new VectorNode" in text
+        and "while (root->childCount() > static_cast<int>(rows.size()))" in text
+        and "update_vector(vectorNode, geometry, color," in text
+        and "QSGVertexColorMaterial" in text
+        and "QSGGeometry::DrawTriangles" in text
     )
     runtime_regression = (
         "ardirec_r5_phasor_zero_flicker_tests" in cmake
