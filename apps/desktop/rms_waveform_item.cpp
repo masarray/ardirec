@@ -4,7 +4,7 @@
 #include "rms_tile_cache.hpp"
 
 #include <QFutureWatcher>
-#include <QSGFlatColorMaterial>
+#include "antialiased_trace_geometry.hpp"
 #include <QSGGeometryNode>
 #include <QtConcurrent/QtConcurrentRun>
 
@@ -282,46 +282,17 @@ void RmsWaveformItem::startRebuild() {
 }
 
 QSGNode* RmsWaveformItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*) {
-    auto* node = static_cast<QSGGeometryNode*>(oldNode);
     const auto snapshot = std::atomic_load_explicit(&m_renderSnapshot, std::memory_order_acquire);
-    const std::size_t pointCount = snapshot ? snapshot->points.size() : 0u;
-    if (pointCount < 2u || width() <= 1.0 || height() <= 1.0) {
-        delete node;
+    if (!snapshot || snapshot->points.size() < 2 || width() <= 1.0 || height() <= 1.0) {
+        delete oldNode;
         return nullptr;
     }
-
-    if (!node) {
-        node = new QSGGeometryNode;
-        auto* material = new QSGFlatColorMaterial;
-        node->setMaterial(material);
-        node->setFlag(QSGNode::OwnsMaterial);
-    }
-
-    auto* material = static_cast<QSGFlatColorMaterial*>(node->material());
-    material->setColor(m_traceColor);
-    node->markDirty(QSGNode::DirtyMaterial);
-
-    auto* geometry = node->geometry();
-    if (!geometry || static_cast<std::size_t>(geometry->vertexCount()) != pointCount) {
-        auto* replacement = new QSGGeometry(
-            QSGGeometry::defaultAttributes_Point2D(), static_cast<int>(pointCount));
-        node->setGeometry(replacement);
-        node->setFlag(QSGNode::OwnsGeometry);
-        geometry = replacement;
-    }
-    geometry->setDrawingMode(QSGGeometry::DrawLineStrip);
-
-    auto* vertices = geometry->vertexDataAsPoint2D();
     const float w = static_cast<float>(width());
     const float h = static_cast<float>(height());
-    for (std::size_t i = 0; i < pointCount; ++i) {
-        const auto& point = snapshot->points[i];
-        const float x = std::clamp(point.xFraction, 0.0F, 1.0F) * w;
-        const float normalized = std::clamp(point.normalizedRms, 0.0F, 1.0F);
-        const float y = h * (0.90F - normalized * 0.80F);
-        vertices[i].set(x, y);
-    }
-
-    node->markDirty(QSGNode::DirtyGeometry);
-    return node;
+    return ardirec::desktop::update_antialiased_trace(oldNode, snapshot->points, false,
+        m_traceColor, [w, h](const auto& point) -> QPointF {
+            const float x = std::clamp(point.xFraction, 0.0F, 1.0F) * w;
+            const float normalized = std::clamp(point.normalizedRms, 0.0F, 1.0F);
+            return {x, h * (0.90F - normalized * 0.80F)};
+        });
 }

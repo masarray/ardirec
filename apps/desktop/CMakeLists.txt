@@ -43,6 +43,7 @@ qt_add_executable(ardirec WIN32 MACOSX_BUNDLE
     rms_tile_cache.cpp
     rms_tile_cache.hpp
     rms_waveform_item.cpp
+    antialiased_trace_geometry.hpp
     rms_waveform_item.hpp
     phasor_vector_item.cpp
     phasor_vector_item.hpp

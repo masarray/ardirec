@@ -299,6 +299,17 @@ if(TARGET Qt6::Core)
 
         # R9 engineering trace hierarchy: zero/reference and lane semantics
         # are exercised in live Qt Quick, not just inspected by source grep.
+        qt_add_executable(ardirec_r10_trace_geometry_tests
+            test_r10_trace_geometry.cpp
+        )
+        set_target_properties(ardirec_r10_trace_geometry_tests PROPERTIES AUTOMOC ON)
+        target_link_libraries(ardirec_r10_trace_geometry_tests PRIVATE
+            Qt6::Core Qt6::Qml Qt6::Quick Qt6::QuickControls2)
+        ardirec_set_warnings(ardirec_r10_trace_geometry_tests)
+        ardirec_enable_sanitizers(ardirec_r10_trace_geometry_tests)
+        add_test(NAME ardirec_r10_trace_geometry_tests COMMAND ardirec_r10_trace_geometry_tests)
+        set_tests_properties(ardirec_r10_trace_geometry_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
         qt_add_executable(ardirec_r9_plot_guides_tests
             test_r9_plot_guides.cpp
         )
