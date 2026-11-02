@@ -16,7 +16,9 @@ MenuBar {
         implicitHeight: 29
         implicitWidth: Math.max(52, contentItem.implicitWidth + 22)
         contentItem: Text {
-            text: menuItem.text
+            // Strip the mnemonic marker from the custom-painted caption;
+            // MenuBarItem still owns Alt-key and keyboard navigation.
+            text: menuItem.text.replace("&", "")
             color: menuItem.highlighted ? "#173e59" : "#283b49"
             font.pixelSize: 11
             verticalAlignment: Text.AlignVCenter
