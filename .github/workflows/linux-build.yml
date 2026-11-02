@@ -36,6 +36,9 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends ninja-build zip curl libfuse2
 
+      - name: Validate Material icons and AA renderer contract
+        run: python3 scripts/check_r10_visual_contract.py
+
       - name: Install Qt 6 (desktop QML)
         uses: jurplel/install-qt-action@v4
         with:

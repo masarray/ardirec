@@ -59,7 +59,7 @@ Rectangle {
         action: root.viewAction(viewName)
         checkable: true
         hoverEnabled: true
-        Layout.preferredWidth: root.showViewLabels ? Math.max(85, control.implicitContentWidth + 20) : 40
+        Layout.preferredWidth: root.showViewLabels ? Math.max(85, control.labelText.length * 7.4 + 54) : 40
         Layout.preferredHeight: 34
         padding: 0
 
