@@ -47,11 +47,11 @@ Rectangle {
     readonly property real residualOtherScale: selectedScale(residualOtherChannels)
     readonly property bool sequenceAvailable: hasThreePhase("Voltage") || hasThreePhase("Current")
     readonly property var groupModel: [
-        { title: "VOLTAGE", subtitle: "phase / neutral voltage vectors", channels: voltageChannels, scale: voltageScale },
-        { title: "CURRENT", subtitle: "phase / neutral current vectors", channels: currentChannels, scale: currentScale },
-        { title: "RESIDUAL VOLTAGE", subtitle: "recorded U0 / 3U0 / residual-voltage signals", channels: residualVoltageChannels, scale: residualVoltageScale },
-        { title: "RESIDUAL CURRENT", subtitle: "recorded I0 / 3I0 / residual-current signals", channels: residualCurrentChannels, scale: residualCurrentScale },
-        { title: "AUXILIARY VECTORS", subtitle: "custom signals assigned to the residual/vector group", channels: residualOtherChannels, scale: residualOtherScale }
+        { title: "VOLTAGE", subtitle: "phase / neutral voltage vectors", channels: voltageChannels, scale: stableScale(voltageChannels) },
+        { title: "CURRENT", subtitle: "phase / neutral current vectors", channels: currentChannels, scale: stableScale(currentChannels) },
+        { title: "RESIDUAL VOLTAGE", subtitle: "recorded U0 / 3U0 / residual-voltage signals", channels: residualVoltageChannels, scale: stableScale(residualVoltageChannels) },
+        { title: "RESIDUAL CURRENT", subtitle: "recorded I0 / 3I0 / residual-current signals", channels: residualCurrentChannels, scale: stableScale(residualCurrentChannels) },
+        { title: "AUXILIARY VECTORS", subtitle: "custom signals assigned to the residual/vector group", channels: residualOtherChannels, scale: stableScale(residualOtherChannels) }
     ]
 
     // Compute group scroll positions from the stable model rather than delegate
@@ -524,7 +524,7 @@ Rectangle {
                                         snapshot: groupCard.nearViewport ? root.displaySnapshotA : ({valid:false})
                                         channels: groupCard.groupData.channels
                                         title: "C1 · " + groupCard.groupData.title
-                                        scaleMagnitude: groupCard.groupData.scale
+                                        scaleMagnitude: root.selectedScale(groupCard.groupData.channels)
                                         scaleMode: root.fitToCursors ? "fit" : "record"
                                         cursorAccent: "#244f9e"
                                     }
@@ -534,7 +534,7 @@ Rectangle {
                                         snapshot: groupCard.nearViewport ? root.displaySnapshotB : ({valid:false})
                                         channels: groupCard.groupData.channels
                                         title: "C2 · " + groupCard.groupData.title
-                                        scaleMagnitude: groupCard.groupData.scale
+                                        scaleMagnitude: root.selectedScale(groupCard.groupData.channels)
                                         scaleMode: root.fitToCursors ? "fit" : "record"
                                         cursorAccent: "#b77900"
                                     }
