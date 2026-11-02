@@ -21,7 +21,7 @@ ArDiRec targets four qualities above feature count:
 
 See [PRD](docs/PRD.md), [parity matrix](docs/PARITY_MATRIX.md), [architecture](docs/ARCHITECTURE.md), and [roadmap](docs/ROADMAP.md).
 
-## Current status — G1 Viewer Alpha
+## Current status — engineering prerelease candidate (not stable)
 
 The current desktop alpha contains:
 
@@ -41,17 +41,24 @@ The current desktop alpha contains:
 - Windows CI plus a portable ZIP development distribution.
 - Product, compatibility, performance and validation specifications.
 
-The alpha deliberately caps desktop preview loading at **500,000 frames**. A later G1 slice replaces this temporary limit with a memory-mapped/lazy SignalStore and persistent multi-resolution LOD pyramid.
+Large COMTRADE records use indexed/lazy DAT access and bounded waveform LOD. CI exercises 10M-sample and 120-channel cases, but manual vendor compatibility and SIGRA comparison remain release gates.
 
-## Try the Windows alpha
+## Install on Windows or Linux (candidate packages)
 
-During alpha/beta development, Windows builds are distributed as a transparent portable ZIP folder, for example:
+The build workflows generate two installer ZIPs; they are CI artifacts until
+a reviewed **draft prerelease** is explicitly published:
 
-`ardirec-v0.2.0-alpha.7-windows-x64-portable.zip`
+- **Windows 10/11 x64:** `ArDiRec-v<VERSION>-Windows-x64-Setup.zip` contains a
+  conventional Inno Setup wizard (per-user, no admin required), Start menu
+  entry, optional desktop shortcut, in-place upgrades and standard uninstall.
+- **Linux x86_64:** `ArDiRec-v<VERSION>-Linux-x86_64-Setup.zip` contains a
+  double-click-installable Debian `.deb` package for Ubuntu/Debian users and
+  a portable AppImage alternative for compatible Linux desktop distributions.
 
-Extract the archive anywhere and run `ardirec.exe` from the extracted folder. No installer is required and ardirec does not install itself into Windows. The folder intentionally contains Qt runtime DLLs/plugins produced by `windeployqt`; keeping these files visible makes development packaging fast and predictable.
-
-A proper Windows installer remains a release-stage deliverable. The repository now carries a canonical Inno Setup definition in `installer/ardirec.iss`; it uses the same `icon/favicon.ico` identity as the Windows executable. The executable is currently unsigned, so Windows SmartScreen may warn on first launch.
+Unzip the matching package, read its README, and launch the installer.
+The Windows setup is **not code-signed**; ZIP packaging does not avoid
+Windows SmartScreen warnings. Verify SHA256SUMS from the official release.
+See [installer and test contract](docs/DISTRIBUTION.md).
 
 ## Build
 
