@@ -1,0 +1,140 @@
+name: Linux Installer Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux-installers:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Read canonical version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(tr -d '\r\n' < VERSION)"
+          [[ "$version" =~ ^0\.2\.0-(alpha|rc)\.[0-9]+$ ]] || { echo "Invalid prerelease version" >&2; exit 1; }
+          echo "ARDIREC_PACKAGE_VERSION=$version" >> "$GITHUB_ENV"
+
+      - name: Install packaging dependencies
+        shell: bash
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends ninja-build zip curl libfuse2
+
+      - name: Install Qt 6 (desktop QML)
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.3'
+          cache: true
+
+      - name: Configure and build Release
+        shell: bash
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DARDIREC_BUILD_DESKTOP=ON -DARDIREC_BUILD_TESTS=ON
+          cmake --build build --parallel 2
+          test -x build/apps/desktop/ardirec
+
+      - name: Test full desktop and R5/R6 stress
+        shell: bash
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          ctest --test-dir build --output-on-failure
+          ctest --test-dir build --output-on-failure --repeat until-fail:3 \
+            -R 'ardirec_(document_lifecycle_tests|r4_qml_runtime_tests|r5_linked_cursor_tests|r5_phasor_zero_flicker_tests|r5_table_zero_flicker_tests|r5_locus_parity_tests|r6_workspace_runtime_tests|r6_phasor_performance_tests)'
+
+      - name: Bundle Qt/QML as AppImage
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p tools dist AppDir
+          curl --fail --location --retry 3 -o tools/linuxdeploy-x86_64.AppImage \
+            https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+          curl --fail --location --retry 3 -o tools/linuxdeploy-plugin-qt-x86_64.AppImage \
+            https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-x86_64.AppImage
+          chmod +x tools/linuxdeploy*.AppImage
+          cp icon/android-chrome-512x512.png tools/ardirec.png
+          export APPIMAGE_EXTRACT_AND_RUN=1
+          export QML_SOURCES_PATHS="$GITHUB_WORKSPACE/apps/desktop/qml"
+          export QMAKE="$(command -v qmake6 || command -v qmake || true)"
+          export PATH="$GITHUB_WORKSPACE/tools:$PATH"
+          cd dist
+          ../tools/linuxdeploy-x86_64.AppImage \
+            --appdir "$GITHUB_WORKSPACE/AppDir" \
+            --executable "$GITHUB_WORKSPACE/build/apps/desktop/ardirec" \
+            --desktop-file "$GITHUB_WORKSPACE/packaging/linux/ardirec.desktop" \
+            --icon-file "$GITHUB_WORKSPACE/tools/ardirec.png" \
+            --plugin qt --output appimage
+          mapfile -t images < <(find . -maxdepth 1 -type f -name '*.AppImage')
+          if [[ "${#images[@]}" -ne 1 ]]; then echo "Expected exactly one produced AppImage" >&2; exit 1; fi
+          mv "${images[0]}" "ArDiRec-v$ARDIREC_PACKAGE_VERSION-Linux-x86_64.AppImage"
+          chmod +x "ArDiRec-v$ARDIREC_PACKAGE_VERSION-Linux-x86_64.AppImage"
+
+      - name: Smoke test actual Qt AppImage
+        shell: bash
+        run: |
+          set -euo pipefail
+          app="dist/ArDiRec-v$ARDIREC_PACKAGE_VERSION-Linux-x86_64.AppImage"
+          set +e
+          APPIMAGE_EXTRACT_AND_RUN=1 QT_QPA_PLATFORM=offscreen timeout -s TERM 8s "$app" > dist/appimage-smoke.log 2>&1
+          status=$?
+          set -e
+          cat dist/appimage-smoke.log
+          if [[ "$status" -ne 124 ]]; then echo "AppImage startup failed (exit $status)" >&2; exit 1; fi
+          if grep -Eiq 'QQmlApplicationEngine failed|module .* is not installed|Could not load the Qt platform plugin|failed to load component' dist/appimage-smoke.log; then
+            echo "AppImage QML/Qt plugin startup failure" >&2; exit 1
+          fi
+          echo "Packaged AppImage startup: PASS"
+
+      - name: Build Debian installer and ZIP (two install paths)
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$ARDIREC_PACKAGE_VERSION"
+          app="dist/ArDiRec-v$version-Linux-x86_64.AppImage"
+          bash scripts/build-linux-deb.sh "$version" "$app" dist
+          cat > dist/README-Linux.txt <<EOF
+          ArDiRec $version — Linux x86_64 installer package
+
+          Ubuntu / Debian-based desktop (easiest):
+          1. Extract this ZIP; double-click ArDiRec-v$version-Linux-amd64.deb.
+          2. Click Install in your system Software Installer (password may be required).
+          3. Find ArDiRec in your Applications menu. Remove it via the same package manager.
+
+          Other compatible Linux desktops:
+          1. Extract this ZIP; right-click the .AppImage > Properties > Permissions > Allow executing.
+          2. Double-click the AppImage. If necessary, open a terminal in the extracted
+             folder and run: chmod +x *.AppImage && APPIMAGE_EXTRACT_AND_RUN=1 ./*.AppImage
+          Compatibility: x86_64 Linux, glibc 2.35+; unusual desktops may need extra libraries.
+          This is a development candidate, not yet a certified stable engineering release.
+          Official releases: https://github.com/masarray/ardirec/releases
+          EOF
+          cd dist
+          zip -j -9 "ArDiRec-v$version-Linux-x86_64-Setup.zip" \
+            "ArDiRec-v$version-Linux-x86_64.AppImage" \
+            "ArDiRec-v$version-Linux-amd64.deb" README-Linux.txt
+          unzip -t "ArDiRec-v$version-Linux-x86_64-Setup.zip"
+          sha256sum "ArDiRec-v$version-Linux-x86_64-Setup.zip"
+
+      - name: Upload Linux installer ZIP
+        uses: actions/upload-artifact@v7
+        with:
+          name: ardirec-linux-installer-zip
+          path: dist/ArDiRec-v${{ env.ARDIREC_PACKAGE_VERSION }}-Linux-x86_64-Setup.zip
+          if-no-files-found: error
+          retention-days: 14
