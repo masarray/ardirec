@@ -1,96 +1,96 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "phasor_vector_item.hpp"
+#include "phasor_vector_geometry.hpp"
 
 #include <QColor>
-#include <QSGFlatColorMaterial>
 #include <QSGGeometry>
 #include <QSGGeometryNode>
-#include <QSGNode>
+#include <QSGVertexColorMaterial>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
+#include <cstdint>
 #include <vector>
 
 namespace {
-constexpr double kPi = 3.141592653589793238462643383279502884;
+using Colored = QSGGeometry::ColoredPoint2D;
 
-QSGGeometryNode* make_line_node() {
-    auto* geometry = new QSGGeometry(QSGGeometry::defaultAttributes_Point2D(), 2);
-    geometry->setDrawingMode(QSGGeometry::DrawLines);
+struct Premultiplied {
+    quint8 red;
+    quint8 green;
+    quint8 blue;
+    quint8 alpha;
+};
 
-    auto* material = new QSGFlatColorMaterial();
-
-    auto* node = new QSGGeometryNode();
-    node->setGeometry(geometry);
-    node->setFlag(QSGNode::OwnsGeometry);
-    node->setMaterial(material);
-    node->setFlag(QSGNode::OwnsMaterial);
-    return node;
+Premultiplied tint(const QColor& color) {
+    const float alpha = static_cast<float>(color.alphaF());
+    return {
+        static_cast<quint8>(std::lround(color.red() * alpha)),
+        static_cast<quint8>(std::lround(color.green() * alpha)),
+        static_cast<quint8>(std::lround(color.blue() * alpha)),
+        static_cast<quint8>(std::lround(255.0F * alpha))
+    };
 }
 
-QSGGeometryNode* make_arrow_node() {
-    auto* geometry = new QSGGeometry(QSGGeometry::defaultAttributes_Point2D(), 3);
+void paint(Colored& vertex, const QPointF& point, Premultiplied color, bool transparent = false) {
+    if (transparent) {
+        vertex.set(static_cast<float>(point.x()), static_cast<float>(point.y()), 0, 0, 0, 0);
+    } else {
+        vertex.set(static_cast<float>(point.x()), static_cast<float>(point.y()),
+                   color.red, color.green, color.blue, color.alpha);
+    }
+}
+
+QSGGeometryNode* geometry_node(int vertices, int triangles) {
+    auto* node = new QSGGeometryNode;
+    auto* geometry = new QSGGeometry(QSGGeometry::defaultAttributes_ColoredPoint2D(),
+                                     vertices, triangles * 3);
     geometry->setDrawingMode(QSGGeometry::DrawTriangles);
-
-    auto* material = new QSGFlatColorMaterial();
-
-    auto* node = new QSGGeometryNode();
+    geometry->setVertexDataPattern(QSGGeometry::DynamicPattern);
     node->setGeometry(geometry);
     node->setFlag(QSGNode::OwnsGeometry);
+    auto* material = new QSGVertexColorMaterial;
+    material->setFlag(QSGMaterial::Blending, true);
     node->setMaterial(material);
     node->setFlag(QSGNode::OwnsMaterial);
     return node;
-}
-
-void update_line(QSGGeometryNode* node,
-                 float x1, float y1, float x2, float y2,
-                 const QColor& color, float width) {
-    auto* geometry = node->geometry();
-    geometry->setLineWidth(width);
-    auto* vertices = geometry->vertexDataAsPoint2D();
-    vertices[0].set(x1, y1);
-    vertices[1].set(x2, y2);
-    node->markDirty(QSGNode::DirtyGeometry);
-
-    auto* material = static_cast<QSGFlatColorMaterial*>(node->material());
-    if (material->color() != color) {
-        material->setColor(color);
-        node->markDirty(QSGNode::DirtyMaterial);
-    }
-}
-
-void update_arrow(QSGGeometryNode* node,
-                  float x, float y, double angleRadians,
-                  const QColor& color) {
-    constexpr float head = 9.0f;
-    const float x1 = x - static_cast<float>(std::cos(angleRadians - 0.45) * head);
-    const float y1 = y + static_cast<float>(std::sin(angleRadians - 0.45) * head);
-    const float x2 = x - static_cast<float>(std::cos(angleRadians + 0.45) * head);
-    const float y2 = y + static_cast<float>(std::sin(angleRadians + 0.45) * head);
-
-    auto* geometry = node->geometry();
-    auto* vertices = geometry->vertexDataAsPoint2D();
-    vertices[0].set(x, y);
-    vertices[1].set(x1, y1);
-    vertices[2].set(x2, y2);
-    node->markDirty(QSGNode::DirtyGeometry);
-
-    auto* material = static_cast<QSGFlatColorMaterial*>(node->material());
-    if (material->color() != color) {
-        material->setColor(color);
-        node->markDirty(QSGNode::DirtyMaterial);
-    }
 }
 
 class VectorNode final : public QSGNode {
 public:
     VectorNode() {
-        line = make_line_node();
-        arrow = make_arrow_node();
+        line = geometry_node(8, 6);
+        arrow = geometry_node(15, 7);
         appendChildNode(line);
         appendChildNode(arrow);
+        // Four vertices per endpoint; left feather / inner core / inner core / right feather.
+        auto* indexes = line->geometry()->indexDataAsUShort();
+        for (int band = 0; band < 3; ++band) {
+            const int at = band * 6;
+            indexes[at + 0] = static_cast<quint16>(band);
+            indexes[at + 1] = static_cast<quint16>(band + 1);
+            indexes[at + 2] = static_cast<quint16>(band + 4);
+            indexes[at + 3] = static_cast<quint16>(band + 4);
+            indexes[at + 4] = static_cast<quint16>(band + 1);
+            indexes[at + 5] = static_cast<quint16>(band + 5);
+        }
+        indexes = arrow->geometry()->indexDataAsUShort();
+        indexes[0] = 0;
+        indexes[1] = 1;
+        indexes[2] = 2;
+        // Three fading edge strips with no separate detached triangular tip.
+        for (int edge = 0; edge < 3; ++edge) {
+            const int v = 3 + 4 * edge;
+            const int index = 3 + 6 * edge;
+            indexes[index + 0] = static_cast<quint16>(v);
+            indexes[index + 1] = static_cast<quint16>(v + 1);
+            indexes[index + 2] = static_cast<quint16>(v + 2);
+            indexes[index + 3] = static_cast<quint16>(v + 2);
+            indexes[index + 4] = static_cast<quint16>(v + 1);
+            indexes[index + 5] = static_cast<quint16>(v + 3);
+        }
     }
-
     QSGGeometryNode* line{nullptr};
     QSGGeometryNode* arrow{nullptr};
 };
@@ -104,6 +104,54 @@ void clear_vectors(VectorRootNode* root) {
     }
 }
 
+void update_vector(VectorNode* node, const ardirec::desktop::PhasorStroke& shape,
+                   const QColor& color, bool earth) {
+    const Premultiplied ink = tint(color);
+    // Thick, readable, smooth, calibrated shaft. QSG DrawLines/setLineWidth
+    // are backend-dependent (typically rasterized at 1 physical pixel).
+    const float halfCore = earth ? 1.15F : 1.65F;
+    const float feather = 0.75F;
+    const QPointF delta = shape.tip - shape.origin;
+    const float len = std::hypot(static_cast<float>(delta.x()), static_cast<float>(delta.y()));
+    const QPointF normal = len > 1e-5F
+        ? QPointF(-delta.y() / len, delta.x() / len) : QPointF(0, 1);
+    const float offsets[4] = {-halfCore-feather, -halfCore, halfCore, halfCore+feather};
+    Colored* line = node->line->geometry()->vertexDataAsColoredPoint2D();
+    for (int end = 0; end < 2; ++end) {
+        const QPointF position = end == 0 ? shape.origin : shape.shaftEnd;
+        for (int i = 0; i < 4; ++i)
+            paint(line[4 * end + i], position + normal * offsets[i],
+                  ink, i == 0 || i == 3 || len < 0.2F);
+    }
+    node->line->markDirty(QSGNode::DirtyGeometry);
+
+    Colored* arrow = node->arrow->geometry()->vertexDataAsColoredPoint2D();
+    const QPointF corners[3] = {shape.tip, shape.headLeft, shape.headRight};
+    if (!shape.showArrowhead) {
+        // Retain the QSG node while hiding an oversized head on a short vector.
+        for (int v = 0; v < 15; ++v) paint(arrow[v], shape.tip, ink, true);
+    } else {
+        for (int v = 0; v < 3; ++v) paint(arrow[v], corners[v], ink);
+        constexpr float featherWidth = 0.9F;
+        for (int edge = 0; edge < 3; ++edge) {
+            const QPointF a = corners[edge];
+            const QPointF b = corners[(edge + 1) % 3];
+            const QPointF segment = b - a;
+            const float distance = std::hypot(static_cast<float>(segment.x()),
+                                              static_cast<float>(segment.y()));
+            const QPointF outward = distance > 1e-5F
+                ? QPointF(segment.y() / distance, -segment.x() / distance)
+                : QPointF(0, 0);
+            const int v = 3 + 4 * edge;
+            paint(arrow[v + 0], a, ink);
+            paint(arrow[v + 1], b, ink);
+            paint(arrow[v + 2], a + outward * featherWidth, ink, true);
+            paint(arrow[v + 3], b + outward * featherWidth, ink, true);
+        }
+    }
+    node->arrow->markDirty(QSGNode::DirtyGeometry);
+}
+
 std::vector<QVariantMap> valid_rows(const QVariantList& vectors) {
     std::vector<QVariantMap> rows;
     rows.reserve(static_cast<std::size_t>(vectors.size()));
@@ -111,8 +159,8 @@ std::vector<QVariantMap> valid_rows(const QVariantList& vectors) {
         const QVariantMap row = value.toMap();
         if (!row.value(QStringLiteral("valid")).toBool()) continue;
         const double magnitude = row.value(QStringLiteral("magnitude")).toDouble();
-        const double angleDegrees = row.value(QStringLiteral("angle")).toDouble();
-        if (!std::isfinite(magnitude) || !std::isfinite(angleDegrees)) continue;
+        const double angle = row.value(QStringLiteral("angle")).toDouble();
+        if (!std::isfinite(magnitude) || magnitude < 0.0 || !std::isfinite(angle)) continue;
         rows.push_back(row);
     }
     return rows;
@@ -142,18 +190,13 @@ void PhasorVectorItem::setScaleMagnitude(double value) {
 QSGNode* PhasorVectorItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*) {
     auto* root = oldNode ? static_cast<VectorRootNode*>(oldNode) : new VectorRootNode();
     const auto rows = valid_rows(m_vectors);
-
     if (width() < 8.0 || height() < 8.0 || !(m_scaleMagnitude > 0.0) || rows.empty()) {
         clear_vectors(root);
         return root;
     }
 
-    const float cx = static_cast<float>(width() * 0.5);
-    const float cy = static_cast<float>(height() * 0.5);
-    const float radius = static_cast<float>(std::max(4.0, std::min(width(), height()) * 0.43));
-
     while (root->childCount() < static_cast<int>(rows.size()))
-        root->appendChildNode(new VectorNode());
+        root->appendChildNode(new VectorNode);
     while (root->childCount() > static_cast<int>(rows.size())) {
         QSGNode* child = root->lastChild();
         root->removeChildNode(child);
@@ -163,19 +206,13 @@ QSGNode* PhasorVectorItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData
     QSGNode* child = root->firstChild();
     for (const QVariantMap& row : rows) {
         auto* vectorNode = static_cast<VectorNode*>(child);
-        const double magnitude = row.value(QStringLiteral("magnitude")).toDouble();
-        const double angleDegrees = row.value(QStringLiteral("angle")).toDouble();
-        const double angle = angleDegrees * kPi / 180.0;
-        const double fraction = std::clamp(magnitude / m_scaleMagnitude, 0.0, 1.0);
-        const float length = radius * 0.94f * static_cast<float>(fraction);
-        const float ex = cx + static_cast<float>(std::cos(angle) * length);
-        const float ey = cy - static_cast<float>(std::sin(angle) * length);
-        const QColor color(row.value(QStringLiteral("color"), QStringLiteral("#6f7780")).toString());
-        const QString phase = row.value(QStringLiteral("phase")).toString();
-        const float lineWidth = phase == QStringLiteral("E") ? 1.8f : 2.4f;
-
-        update_line(vectorNode->line, cx, cy, ex, ey, color, lineWidth);
-        update_arrow(vectorNode->arrow, ex, ey, angle, color);
+        const auto geometry = ardirec::desktop::project_phasor(
+            width(), height(), row.value(QStringLiteral("magnitude")).toDouble(),
+            m_scaleMagnitude, row.value(QStringLiteral("angle")).toDouble());
+        const QColor color(row.value(QStringLiteral("color"),
+                       QStringLiteral("#6f7780")).toString());
+        update_vector(vectorNode, geometry, color,
+                      row.value(QStringLiteral("phase")).toString() == QStringLiteral("E"));
         child = child->nextSibling();
     }
     return root;
