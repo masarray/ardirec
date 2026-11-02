@@ -95,25 +95,25 @@ qt_add_qml_module(ardirec
         qml/HarmonicsView.qml
         qml/ValueTableView.qml
     RESOURCES
-        qml/icons/folder-open.svg
-        qml/icons/sliders-horizontal.svg
-        qml/icons/maximize-2.svg
-        qml/icons/crosshair.svg
-        qml/icons/zoom-in.svg
-        qml/icons/zoom-out.svg
-        qml/icons/triangle-alert.svg
-        qml/icons/activity.svg
-        qml/icons/circle-dot.svg
-        qml/icons/chart-column.svg
-        qml/icons/table-2.svg
-        qml/icons/layers-3.svg
-        qml/icons/trash-2.svg
-        qml/icons/eye.svg
-        qml/icons/shield-check.svg
-        qml/icons/minus.svg
-        qml/icons/plus.svg
-        qml/icons/copy.svg
-        qml/icons/x.svg
+        qml/material/folder_open.svg
+        qml/material/tune.svg
+        qml/material/layers.svg
+        qml/material/fullscreen.svg
+        qml/material/my_location.svg
+        qml/material/zoom_in.svg
+        qml/material/zoom_out.svg
+        qml/material/warning.svg
+        qml/material/show_chart.svg
+        qml/material/adjust.svg
+        qml/material/bar_chart.svg
+        qml/material/table_chart.svg
+        qml/material/remove.svg
+        qml/material/content_copy.svg
+        qml/material/close.svg
+        qml/material/delete.svg
+        qml/material/visibility.svg
+        qml/material/verified.svg
+        qml/material/add.svg
 )
 
 target_compile_definitions(ardirec PRIVATE ARDIREC_VERSION="${ARDIREC_VERSION}")
