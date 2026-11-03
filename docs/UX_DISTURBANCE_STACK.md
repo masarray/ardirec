@@ -1,6 +1,6 @@
 # Disturbance Stack UX
 
-ardirec uses a familiar disturbance-record workflow without copying SIGRA's visual design.
+ardirec uses a familiar disturbance-record workflow without copying reference's visual design.
 
 ## Core model
 
@@ -36,7 +36,7 @@ The product should feel like a precision event timeline rather than a legacy mul
 
 ## Familiarity contract
 
-A SIGRA/TransView user should immediately understand:
+A reference/TransView user should immediately understand:
 
 - time increases left to right
 - every visible row is synchronized

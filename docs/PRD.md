@@ -82,7 +82,7 @@ Derived quantities expose source signals, algorithm, window, frequency basis and
 - frequency/ROCOF basis.
 - P/Q/S/PF.
 
-### G4 — SIGRA-class views
+### G4 — reference-class views
 - vector view.
 - R-X/locus.
 - harmonics and spectrum.

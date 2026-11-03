@@ -18,7 +18,7 @@ This closes the regression where moving C2 appeared to change C1.
 
 `ardirec_r4_locus_fit_tests` exercises the production asynchronous native Locus snapshot path against the known `distance_p1` fixture. The energized L1-E point must remain approximately `100 + j0 Ω`, the low-current tail must remain invalid/a gap, and the protection-relevant extents must remain bounded around valid trajectory data rather than being dominated by invalid low-current samples.
 
-The existing `ardirec_locus_snapshot_tests` remains mandatory for SIGRA classical-grounding parity, status-window gaps, multi-rate timestamp-weighted DFT behavior, and native-buffer production rendering data.
+The existing `ardirec_locus_snapshot_tests` remains mandatory for reference classical-grounding parity, status-window gaps, multi-rate timestamp-weighted DFT behavior, and native-buffer production rendering data.
 
 ## Cursor dimension
 
