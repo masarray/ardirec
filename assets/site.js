@@ -53,7 +53,7 @@
       const windowsMeta = document.querySelector("#download-windows + .package-meta");
       const linuxMeta = document.querySelector("#download-linux + .package-meta");
       const mb = value => (value / 1000000).toFixed(1) + " MB";
-      if (windowsMeta && Number.isFinite(assets.windows.size)) windowsMeta.textContent = "Installer ZIP · " + mb(assets.windows.size) + " · Signed: no";
+      if (windowsMeta && Number.isFinite(assets.windows.size)) windowsMeta.textContent = "Installer ZIP · " + mb(assets.windows.size);
       if (linuxMeta && Number.isFinite(assets.linux.size)) linuxMeta.textContent = "Debian / AppImage ZIP · " + mb(assets.linux.size);
     })
     .catch(() => { /* Keep the verified version-pinned static fallback. */ })

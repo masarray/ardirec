@@ -63,6 +63,23 @@ for value in ("v0.2.0", "ArDiRec-v0.2.0-Windows-x64-Setup.zip", "ArDiRec-v0.2.0-
     if value not in landing:
         failures.append(f"landing page missing {value}")
 
+# The first screen of the README and landing page addresses people who use
+# the application. Contributor processes belong in linked technical documents.
+for term in ("Be precise about validation:", "CI exercises", "NOT release-qualified", "milestone", "not an application screenshot"):
+    if term.lower() in (readme + landing).lower():
+        failures.append(f"public-facing copy contains internal review wording: {term}")
+for label, value in (
+    ("README benefit", "Disturbance records, clearly understood."),
+    ("README Windows action", "Download for Windows"),
+    ("README Linux action", "Download for Linux"),
+    ("README first-use guide", "From record to insight"),
+    ("Landing user benefit", "See the whole event."),
+    ("Landing download action", "Download ArDiRec"),
+):
+    document = readme if label.startswith("README") else landing
+    if value not in document:
+        failures.append(f"public-facing copy missing {label}")
+
 if failures:
     print("Public repository contract: FAIL", file=sys.stderr)
     for failure in failures:

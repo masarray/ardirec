@@ -86,6 +86,13 @@ def check(site: Path) -> None:
     assert "https://api.github.com/repos/masarray/ardirec/releases/latest" in js
     assert "AbortController" in js and ".catch(" in js, "Latest-release client must keep safe fallback"
 
+    # Public wording is intended for people using the application, not maintainers.
+    assert "See the whole event." in html and "Download ArDiRec" in html
+    assert "not an application screenshot" not in html.lower()
+    assert "milestone" not in html.lower() and "code agent" not in html.lower()
+    assert 'class="preview-caption">Waveform illustration' in html, "Keep the sample graphic clearly identified"
+    assert "⌘" not in html, "Linux platform marker must not look like the macOS Command key"
+
     manifest = json.loads((site / "icon/site.webmanifest").read_text(encoding="utf-8"))
     assert manifest["short_name"] == "ArDiRec"
     assert manifest["display"] == "browser", "Do not impersonate a standalone installed web app"
