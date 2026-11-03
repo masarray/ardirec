@@ -319,7 +319,7 @@ void verify_qml_first_open_and_scrub_budget() {
 
 void verify_fundamental_worker_latency_and_dedup() {
     const std::filesystem::path cfgPath =
-        std::filesystem::path(ARDIREC_TEST_DATA_DIR) / "distance_sigra_parity.cfg";
+        std::filesystem::path(ARDIREC_TEST_DATA_DIR) / "distance_reference_parity.cfg";
 
     DocumentController document;
     CursorSnapshotController snapshots(&document);
