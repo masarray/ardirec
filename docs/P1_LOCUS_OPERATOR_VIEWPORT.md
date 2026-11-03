@@ -9,12 +9,12 @@ This phase follows the P0 cursor-performance work. It intentionally does not cha
 - Provide compact `-`, `Fit`, and `+` controls and mouse-wheel zoom for Locus mode. `Fit` restores the validated robust engineering frame.
 - Keep the viewport stable when a user hides or shows a zone/trajectory. Visibility is a presentation choice and must not silently change axis scale.
 - Preserve the static/dynamic render split from P0: cursor movement must not repaint the large Canvas or rebuild full-record loci.
-- Preserve all current SIGRA-parity semantics: Earth and phase-phase panels, legacy zone ordering, dashed zones, hollow sample markers, interactive legend, Primary/Secondary conversion, and the current minimum-current validity guard.
+- Preserve all current reference-parity semantics: Earth and phase-phase panels, legacy zone ordering, dashed zones, hollow sample markers, interactive legend, Primary/Secondary conversion, and the current minimum-current validity guard.
 
 ## Non-goals
 
 - Mutual/parallel-line compensation (`RM/RL`, `XM/XL`, `KS`, `ZS`) is P2 numerical parity work.
-- No curve smoothing, coordinate offset, or cosmetic manipulation may be used to imitate SIGRA.
+- No curve smoothing, coordinate offset, or cosmetic manipulation may be used to imitate reference.
 - No change to full-cycle DFT or distance-loop formulas is included here.
 
 ## Acceptance checks

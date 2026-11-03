@@ -34,4 +34,4 @@ This is a capability target, not a claim of implementation completion and not an
 
 ## Benchmark products
 
-Capability research uses Siemens SIGRA, OMICRON TransView, SEL SynchroWAVe Event and other disturbance tools as black-box workflow references. ardirec does not reuse proprietary code, artwork or protected UI assets.
+Capability research uses independent engineering reference, OMICRON TransView, SEL SynchroWAVe Event and other disturbance tools as black-box workflow references. ardirec does not reuse proprietary code, artwork or protected UI assets.

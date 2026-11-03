@@ -1,6 +1,6 @@
 # Table parity+ design
 
-SIGRA's table is a strong benchmark for compact point-in-time engineering reading. ardirec P4 keeps the useful density but extends the workflow with:
+reference's table is a strong benchmark for compact point-in-time engineering reading. ardirec P4 keeps the useful density but extends the workflow with:
 
 - one shared snap-capable cursor;
 - simultaneous Instant, RMS and H1 quantities;

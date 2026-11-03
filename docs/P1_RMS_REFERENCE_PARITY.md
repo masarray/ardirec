@@ -1,13 +1,13 @@
-# P1 — SIGRA one-cycle RMS parity
+# P1 — reference one-cycle RMS parity
 
 ## Problem reproduced
 
-On the Siemens SIGRA `ligne_1` reference record (50 Hz, 1 kHz), ArdIREC's RMS waveform had two visible errors:
+On the independent engineering reference `ligne_1` reference record (50 Hz, 1 kHz), ArdIREC's RMS waveform had two visible errors:
 
-1. At the left edge of the finite record, ArdIREC divided by the number of samples currently available. The first point therefore behaved like a one-sample RMS and started near the instantaneous peak. SIGRA instead grows into the one-cycle RMS envelope from a low value.
+1. At the left edge of the finite record, ArdIREC divided by the number of samples currently available. The first point therefore behaved like a one-sample RMS and started near the instantaneous peak. reference instead grows into the one-cycle RMS envelope from a low value.
 2. After one complete cycle was available, the renderer used both endpoints of `[t-T, t]`. With a 1 kHz / 50 Hz record this is 21 samples, not 20. A stationary sinusoid therefore showed a false ripple although its true one-cycle RMS is constant.
 
-The reference record makes the defect measurable. For UL1T, the corrected 20-sample rolling RMS settles at approximately `57.724 V`. The former 21-sample inclusive renderer oscillates by several volts around that value, while SIGRA remains essentially flat.
+The reference record makes the defect measurable. For UL1T, the corrected 20-sample rolling RMS settles at approximately `57.724 V`. The former 21-sample inclusive renderer oscillates by several volts around that value, while reference remains essentially flat.
 
 ## Correct semantics
 
