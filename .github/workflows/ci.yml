@@ -24,6 +24,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Enforce public repository identity and onboarding
+        run: python3 scripts/check_public_repo_contract.py
       - name: Enforce recovery correctness guards
         run: python3 scripts/check_recovery_contract.py
       - name: Enforce R2 workstation lifecycle guards
