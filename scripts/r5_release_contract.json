@@ -8,11 +8,11 @@
     "contract_issue": 72
   },
   "locked_blobs": {
-    "core/src/distance/distance.cpp": "f404e0790a850c008edddfda525f065ba3679ed7",
-    "tests/data/distance_sigra_parity.cfg": "1964595a41da6de9ed7f132576bdb64bd6b35f99",
-    "tests/data/distance_sigra_parity.dat": "3389421a269a522ad80989279df19c9036cc3a5b",
-    "tests/data/distance_sigra_parity.rio": "23cec142cdec7d16f9efe79984b81768e1aac65d",
-    "tests/data/ligne_1_sigra.rio": "25902ae68e895a9cd2e186e4265facadb236a3d0"
+    "core/src/distance/distance.cpp": "d3494ff6704956b16f3e405b5c6f7287a121c926",
+    "tests/data/distance_reference_parity.cfg": "f43f654ca7772b2573c7767c80b503e836e9fdb4",
+    "tests/data/distance_reference_parity.dat": "3389421a269a522ad80989279df19c9036cc3a5b",
+    "tests/data/distance_reference_parity.rio": "23cec142cdec7d16f9efe79984b81768e1aac65d",
+    "tests/data/ligne_1_reference.rio": "47362cd9590d5bc529d9e5cb05f5c0c03f54c711"
   },
   "contracts": {
     "linked_local_cursors": {
