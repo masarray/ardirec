@@ -5,6 +5,7 @@ import Ardirec.Render 1.0
 
 Rectangle {
     id: root
+    objectName: "engineeringDigitalLane"
     color: "#fbfbfb"
     border.color: "#d2d5d8"
 

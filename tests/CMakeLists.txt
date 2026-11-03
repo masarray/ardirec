@@ -327,6 +327,21 @@ if(TARGET Qt6::Core)
         add_test(NAME ardirec_r10_trace_geometry_tests COMMAND ardirec_r10_trace_geometry_tests)
         set_tests_properties(ardirec_r10_trace_geometry_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
+        qt_add_executable(ardirec_r12_compact_density_tests
+            test_r12_compact_density.cpp
+        )
+        set_target_properties(ardirec_r12_compact_density_tests PROPERTIES AUTOMOC ON)
+        target_link_libraries(ardirec_r12_compact_density_tests PRIVATE
+            Qt6::Core Qt6::Qml Qt6::Quick Qt6::QuickControls2)
+        target_compile_definitions(ardirec_r12_compact_density_tests PRIVATE
+            ARDIREC_QML_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../apps/desktop/qml"
+        )
+        ardirec_set_warnings(ardirec_r12_compact_density_tests)
+        ardirec_enable_sanitizers(ardirec_r12_compact_density_tests)
+        add_test(NAME ardirec_r12_compact_density_tests COMMAND ardirec_r12_compact_density_tests)
+        set_tests_properties(ardirec_r12_compact_density_tests PROPERTIES
+            ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
         qt_add_executable(ardirec_r12_dimension_arrows_tests
             test_r12_dimension_arrows.cpp
         )

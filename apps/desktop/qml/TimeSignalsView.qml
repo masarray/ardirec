@@ -100,6 +100,7 @@ Rectangle {
 
     Flickable {
         id: signalFlick
+        objectName: "engineeringSignalFlick"
         anchors.fill: parent
         clip: true
         contentWidth: width
@@ -225,6 +226,7 @@ Rectangle {
             }
 
             Rectangle {
+                objectName: "engineeringDigitalHeader"
                 width: parent.width
                 height: root.document && root.document.digitalCount > 0 ? 30 : 0
                 visible: root.document && root.document.digitalCount > 0

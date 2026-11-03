@@ -5,6 +5,7 @@ import Ardirec.Render 1.0
 
 Rectangle {
     id: root
+    objectName: "engineeringAnalogLane"
     color: "#ffffff"
     border.color: "#bac5ce"
     readonly property real plotZeroFraction: displayMode === "rms" ? 0.90 : 0.50
@@ -133,6 +134,7 @@ Rectangle {
             anchors.right: parent.right
             anchors.leftMargin: 7
             anchors.rightMargin: 7
+            objectName: "engineeringCursorAValueCell"
             y: 33
             height: 17
             radius: 2
@@ -158,6 +160,7 @@ Rectangle {
             anchors.right: parent.right
             anchors.leftMargin: 7
             anchors.rightMargin: 7
+            objectName: "engineeringCursorBValueCell"
             y: 51
             height: 17
             radius: 2
