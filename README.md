@@ -1,14 +1,18 @@
-<div align="center">
-  <img src="icon/android-chrome-192x192.png" alt="ArDiRec logo" width="78" height="78">
+<p align="center"><img src="icon/android-chrome-192x192.png" alt="ArDiRec logo" width="78" height="78"></p>
 
-  # ArDiRec
+<h1 align="center">ArDiRec</h1>
 
-  **Disturbance records, clearly understood.**
+<p align="center"><strong>Disturbance records, clearly understood.</strong></p>
 
-  Open-source COMTRADE analysis for protection, commissioning, and power-system engineers.
+<p align="center">Open-source COMTRADE analysis for protection, commissioning, and power-system engineers.</p>
 
-  [Website](https://masarray.github.io/ardirec/) · [Download](https://github.com/masarray/ardirec/releases/latest) · [Getting started](docs/GETTING_STARTED.md) · [Support](https://github.com/masarray/ardirec/issues)
-</div>
+<p align="center">
+  <a href="https://masarray.github.io/ardirec/">Website</a> ·
+  <a href="https://github.com/masarray/ardirec/releases/latest">Download</a> ·
+  <a href="docs/GETTING_STARTED.md">Getting started</a> ·
+  <a href="https://github.com/masarray/ardirec/issues">Support</a>
+</p>
+
 
 ArDiRec brings **waveforms, digital events, measurements, and electrical analysis** together in a single desktop workspace. Open a relay disturbance record, find the important moments, and examine how the system behaved before, during, and after an event.
 
