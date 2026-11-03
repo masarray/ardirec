@@ -7,7 +7,7 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
-if ($Version -notmatch '^0\.2\.0-(alpha|rc)\.\d+$') { throw "Invalid candidate version: $Version" }
+if ($Version -notmatch '^[0-9]+\.[0-9]+\.[0-9]+(?:-(?:alpha|beta|rc)\.\d+)?$') { throw "Invalid SemVer package version: $Version" }
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $stage = (Resolve-Path $StageDir).Path
 if (-not (Test-Path (Join-Path $stage 'ardirec.exe') -PathType Leaf)) { throw 'Staged executable missing' }
@@ -63,7 +63,7 @@ ArDiRec $Version - Windows 10/11 x64
 3. Launch ArDiRec from the Windows Start menu (no administrator access needed).
 4. Uninstall through Windows Settings > Installed apps > ArDiRec.
 Existing per-user installations are updated in place.
-This development candidate is UNSIGNED. A ZIP does not remove SmartScreen warnings.
+This Windows installer is UNSIGNED. A ZIP does not remove SmartScreen warnings.
 Verify the official GitHub release and SHA256SUMS.txt before installing.
 https://github.com/masarray/ardirec
 "@ | Set-Content -Path $readme -Encoding UTF8

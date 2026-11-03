@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       release_version:
-        description: 'Confirm exact VERSION (e.g. 0.2.0-alpha.23)'
+        description: 'Confirm exact approved Stable VERSION (e.g. 0.2.0)'
         required: true
         type: string
 
@@ -21,12 +21,12 @@ jobs:
     runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
-      - name: Verify immutable prerelease identity and R5 / R6 gates
+      - name: Verify immutable stable identity and R5 / R6 gates
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
           $version = (Get-Content VERSION -Raw).Trim()
-          if ($version -notmatch '^0\.2\.0-(?:alpha|rc)\.\d+$') { throw "Only qualification prereleases are permitted: $version" }
+          if ($version -notmatch '^[0-9]+\.[0-9]+\.[0-9]+$') { throw "Only approved stable SemVer versions are permitted: $version" }
           if ($version -ne '${{ inputs.release_version }}') { throw 'Release input does not match canonical VERSION' }
           $existing = & git ls-remote --tags origin "refs/tags/v$version"
           if ($LASTEXITCODE -ne 0) { throw 'Could not verify existing tags' }
@@ -50,15 +50,15 @@ jobs:
     permissions:
       contents: read
 
-  publish-draft:
-    name: Publish both checked installer ZIPs as draft prerelease
+  publish-stable:
+    name: Publish both verified installer ZIPs as public Stable
     needs: [preflight, windows-installers, linux-installers]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - name: Download candidate installers from this run
+      - name: Download verified installers from this run
         uses: actions/download-artifact@v4
         with:
           pattern: ardirec-*-installer-zip
@@ -85,24 +85,25 @@ jobs:
             exit 1
           fi
 
-      - name: Create draft prerelease (manual approval to publish)
+      - name: Publish user-approved Stable with verified installers
         uses: softprops/action-gh-release@v3
         with:
           tag_name: v${{ inputs.release_version }}
           target_commitish: ${{ github.sha }}
           name: ArDiRec v${{ inputs.release_version }} — Windows and Linux installers
-          draft: true
-          prerelease: true
-          make_latest: false
+          draft: false
+          prerelease: false
+          make_latest: true
           generate_release_notes: true
           fail_on_unmatched_files: true
           body: |
-            Candidate release (NOT Stable). Windows: extract the ZIP and run the Inno Setup
-            installer; Linux: extract the ZIP, choose Debian GUI installer or AppImage.
-            Check SHA256SUMS.txt before installing.
-            Installer build/CI passes do not establish SIGRA or field COMTRADE parity.
-            Review Windows/Linux manual acceptance before publishing this draft.
-            Unsigned Windows executable may trigger SmartScreen.
+            ArDiRec v${{ inputs.release_version }} — user-approved first public Stable release.
+            Focus: manual COMTRADE disturbance investigation, time signals, digital
+            events, synchronized cursors, phasors, harmonics, impedance locus, and MDI.
+            Windows: unzip and run Inno Setup. Linux: unzip, choose Debian installer
+            or AppImage. Verify both ZIP files against SHA256SUMS.txt.
+            Stable does not certify full SIGRA or vendor-specific COMTRADE parity.
+            Windows executable is unsigned and may trigger SmartScreen.
           files: |
             release-assets/ArDiRec-v${{ inputs.release_version }}-Windows-x64-Setup.zip
             release-assets/ArDiRec-v${{ inputs.release_version }}-Linux-x86_64-Setup.zip

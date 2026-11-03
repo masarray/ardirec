@@ -25,7 +25,7 @@ STRESS_TESTS = (
     "ardirec_r6_workspace_runtime_tests",
     "ardirec_r6_phasor_performance_tests",
 )
-QUALIFICATION_VERSIONS = {"0.2.0-alpha.23", "0.2.0-rc.1"}
+QUALIFICATION_VERSIONS = {"0.2.0-alpha.23", "0.2.0-rc.1", "0.2.0"}
 
 
 def text(path: str) -> str:
@@ -98,7 +98,12 @@ forbid(".github/workflows/release.yml", "  push:", "do not publish on arbitrary 
 require(".github/workflows/release.yml", "Release input does not match canonical VERSION", "operator version confirmation required")
 require(".github/workflows/release.yml", "already exists: refusing overwrite", "immutable release tags required")
 require(".github/workflows/release.yml", "check_r6_workspace_contract.py --require-release-ready", "R6 release gate required")
-require(".github/workflows/release.yml", "prerelease: true", "stable publishing is not yet authorized")
+if version == "0.2.0":
+    require(".github/workflows/release.yml", "prerelease: false", "Stable must be a true non-prerelease")
+    require(".github/workflows/release.yml", "draft: false", "approved Stable must be public")
+    require(".github/workflows/release.yml", "make_latest: true", "Stable must be marked latest")
+else:
+    require(".github/workflows/release.yml", "prerelease: true", "candidate releases must remain prerelease")
 forbid(".github/workflows/release.yml", "0.2.0-alpha.14",
        "release workflow must not publish a stale historical build after R5.5")
 

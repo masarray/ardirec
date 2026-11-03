@@ -37,10 +37,10 @@ On the exact Windows artifact that already passed CI, CodeQL, CTest stress, runt
 8. Scrub continuously through C1/C2 and confirm Phasor/Table do not flash empty, flicker legends/axes, or collapse/reflow.
 9. Minimize/restore duplicate MDI children and close/reopen the COMTRADE record; no stale frame or stuck busy state may remain.
 
-Only after this manual Windows/SIGRA comparison passes may `VERSION` be promoted to `0.2.0-rc.1`. After the RC version commit, exact-head CI + CodeQL + Windows packaged smoke must run again, the PR must be merged with its expected head SHA, and the resulting merge commit on `main` must be validated again before #77 and umbrella #71 are closed.
+The historical R5.5 path called for `0.2.0-rc.1` after a manual Windows/SIGRA comparison, exact-head CI and review. With the owner's reported test and explicit approval on 2026-11-03, public `v0.2.0` Stable is now authorized. This approval does not constitute independent SIGRA parity certification.
 
 ## Mandatory R6.5 workstation qualification
 
 The latest R6.5 milestone must also be qualified on the **same exact Windows candidate**: managed Tile shared-edge resize, virtual Free-mode scrolling, pointer-relative edge auto-scroll, window lifecycle (minimize/maximize/restore/close), Phasor first-open and scrub without flicker. Repeated R6 workspace QML and Phasor performance tests are part of the Linux/Windows automated gates. Consult [R6 acceptance](R6_WORKSPACE_ACCEPTANCE.md).
 
-**Current decision: HOLD — NOT STABLE.** The canonical `0.2.0-alpha.23` is a development qualification candidate. Before RC/stable promotion, record the tested commit SHA, CI/CodeQL/Windows Build run URLs, ZIP SHA256, representative vendor COMTRADE matrix, measured SIGRA comparison, real Windows PC/DPI, defects, and manual signoff/date in issues #77 and #91. Automated green checks are necessary but not sufficient. The manual-only prerelease workflow rejects mismatched version, existing tags and stable versions.
+**Release decision (2026-11-03): owner-approved v0.2.0 Stable.** The user reports application testing completed. R12 exact-head CI, CodeQL and Windows/Linux build were green. Specific multi-vendor COMTRADE validation, SIGRA parity matrices and per-DPI field test evidence have not been independently verified here. The Windows executable remains unsigned.

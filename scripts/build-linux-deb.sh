@@ -8,7 +8,7 @@ fi
 version="$1"
 appimage="$(realpath "$2")"
 output="$(realpath -m "$3")"
-[[ "$version" =~ ^0\.2\.0-(alpha|rc)\.[0-9]+$ ]] || { echo "Invalid version" >&2; exit 1; }
+[[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta|rc)\.[0-9]+)?$ ]] || { echo "Invalid SemVer version" >&2; exit 1; }
 [[ -s "$appimage" ]] || { echo "Missing AppImage" >&2; exit 1; }
 root="$(cd "$(dirname "$0")/.." && pwd)"
 mkdir -p "$output"

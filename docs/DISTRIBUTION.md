@@ -1,7 +1,8 @@
 # ArDiRec R8 Installer Distribution
 
-All packages are **release candidates** until engineering acceptance is signed off.
-Green CI and a 5-second GUI startup smoke test are not proof of SIGRA parity.
+The v0.2.0 public Stable release follows owner-reported manual acceptance, full CI,
+CodeQL and packaged installer smoke testing. CI success alone does not certify SIGRA
+parity or every vendor COMTRADE format.
 
 ## Windows (x64, Windows 10/11)
 
@@ -40,6 +41,8 @@ Build workflows upload CI artifacts for pull requests and main; they do not
 create public releases. A manual release must match VERSION, pass the
 strict numerical/R5/R6 gates, and successfully build **both** installers.
 The publishing job downloads artifacts from that same workflow run, validates
-the two ZIP filenames, calculates SHA256SUMS.txt, and creates a **draft
-prerelease**. RC and Stable require manual Windows and Linux tests, multi-vendor
-COMTRADE compatibility and SIGRA comparison. No automatic Stable release.
+the two ZIP filenames, calculates SHA256SUMS.txt, and publishes only an
+explicitly requested, non-prerelease stable SemVer version. It never publishes
+on source pushes. The owner has reported product testing and approved the
+initial stable publication. This does not assert full SIGRA parity or complete
+multi-vendor COMTRADE certification; broader acceptance remains ongoing.
