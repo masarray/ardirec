@@ -1,10 +1,10 @@
 # Calculation parity — alpha.12
 
-The Siemens SIGRA `line1.CFG` sample exposed several semantic differences that were not COMTRADE decoding errors.
+The independent engineering reference `line1.CFG` sample exposed several semantic differences that were not COMTRADE decoding errors.
 
 ## What already matched
 
-At the same 0 ms trigger reference in Secondary representation, ardirec alpha.11 matched SIGRA for:
+At the same 0 ms trigger reference in Secondary representation, ardirec alpha.11 matched reference for:
 
 - H1 RMS magnitude on IL1/IL2/IL3 and UL1E/UL2E/UL3E;
 - H2/H1, H3/H1 and H5/H1 ratios.
@@ -21,7 +21,7 @@ That evidence isolates the remaining discrepancies to calculation/presentation s
 
 ## line1.CFG benchmark at trigger 0 ms
 
-Reference values observed in SIGRA Secondary Table:
+Reference values observed in reference Secondary Table:
 
 | Signal | H1 RMS | Phase | Last extremum | DC % | H2/H1 | H3/H1 | H5/H1 |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |

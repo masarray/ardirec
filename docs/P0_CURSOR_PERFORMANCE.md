@@ -23,7 +23,7 @@ The optimized path separates static and dynamic work:
 - No locus geometry is simplified or cosmetically altered to gain speed.
 - R-X mapping remains conformal.
 - Existing kL and distance-current-floor semantics remain unchanged.
-- RIO/XRIO zone interpretation and legacy SIGRA zone ordering remain unchanged.
+- RIO/XRIO zone interpretation and legacy reference zone ordering remain unchanged.
 - Cursor final values remain exact; only intermediate drag commits are coalesced.
 
 ## Acceptance

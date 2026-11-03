@@ -7,9 +7,9 @@ ArdIREC treats the R-X locus as an engineering calculation first and a visualiza
 - COMTRADE timestamps and channel metadata are authoritative. Phase metadata is preferred over channel-name heuristics.
 - Voltage/current vectors are fundamental-frequency RMS phasors calculated by a full-cycle DFT over a trailing one-cycle window ending at the requested sampling instant.
 - The measuring window is always to the left of the reference instant. A status change (fault inception, trip/disconnection, acquisition gap, or equivalent event) inside that window invalidates the calculated point and creates an explicit trajectory gap.
-- SIGRA reference direction is `IE = -(IL1 + IL2 + IL3) = -3I0`. A measured residual/earth-current channel is preferred when its semantics are known; otherwise the residual is reconstructed from phase currents.
+- reference reference direction is `IE = -(IL1 + IL2 + IL3) = -3I0`. A measured residual/earth-current channel is preferred when its semantics are known; otherwise the residual is reconstructed from phase currents.
 - Phase-phase loops use line-line voltage and line-current difference on the phase-loop impedance plane.
-- For classical Siemens/SIGRA earth compensation, `RE/RL` and `XE/XL` remain independent real factors. They are never collapsed into a synthetic complex `kL` using an assumed line angle. A complex `kL` path remains available only for formats that explicitly provide it or provide enough line data for an unambiguous conversion.
+- For classical traditional protection-tool earth compensation, `RE/RL` and `XE/XL` remain independent real factors. They are never collapsed into a synthetic complex `kL` using an assumed line angle. A complex `kL` path remains available only for formats that explicitly provide it or provide enough line data for an unambiguous conversion.
 - A low measuring-current condition is invalid, not an arbitrarily large finite impedance.
 - C1/C2 readouts and the rendered trajectory must use exactly the same channel mapping, DFT frequency, timestamp weighting, measuring window, residual-current convention, compensation model, current floor, and validity rules.
 
@@ -95,14 +95,14 @@ A locus change is not complete until all of the following remain green:
 - CodeQL;
 - Windows packaged application startup smoke.
 
-The SIGRA parity fixture intentionally combines explicit COMTRADE phase metadata, a measured `IE` channel, a classical `RE/RL` + `XE/XL` RIO sidecar, and a binary transition so those semantics cannot regress independently. The multi-rate fixture separately locks frequency provenance and timestamp-weighted DFT behavior.
+The reference parity fixture intentionally combines explicit COMTRADE phase metadata, a measured `IE` channel, a classical `RE/RL` + `XE/XL` RIO sidecar, and a binary transition so those semantics cannot regress independently. The multi-rate fixture separately locks frequency provenance and timestamp-weighted DFT behavior.
 
 ## External engineering references
 
 The implementation contract above is aligned with these public references:
 
 - IEC 60255-24 / IEEE C37.111 COMTRADE: transient waveform/event exchange format and multiple sampling-rate support.
-- Siemens SIPROTEC SIGRA manual: full-cycle DFT, one-cycle backward measuring window, calculated-value invalidation on status change, prefault frequency determination/fallback, classical `RE/RL` + `XE/XL` impedance calculation, RIO/XRIO trip-zone overlays, and cursor-value tables.
+- Siemens SIPROTEC reference manual: full-cycle DFT, one-cycle backward measuring window, calculated-value invalidation on status change, prefault frequency determination/fallback, classical `RE/RL` + `XE/XL` impedance calculation, RIO/XRIO trip-zone overlays, and cursor-value tables.
 - SEL, *Identifying the Proper Impedance Plane and Fault Trajectories in Distance Protection Analysis*: the measured trajectory and protection characteristic must be compared on the correct impedance plane.
 - OMICRON TransView: separate time/vector/locus/table views, impedance loci with imported distance zones, and cursor-oriented engineering analysis.
 - OMICRON, *Different Representations of the Ground Impedance Matching*: `Kr = RE/RL` and `Kx = XE/XL` are an independent real-value representation; conversion to a complex `kL` requires additional line information.
