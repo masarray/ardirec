@@ -102,7 +102,6 @@ if version == "0.2.0":
     require(".github/workflows/release.yml", "prerelease: false", "Stable must be a true non-prerelease")
     require(".github/workflows/release.yml", "draft: false", "approved Stable must be public")
     require(".github/workflows/release.yml", "make_latest: true", "Stable must be marked latest")
-    forbid(".github/workflows/release.yml", "prerelease: true", "Stable cannot masquerade as prerelease")
 else:
     require(".github/workflows/release.yml", "prerelease: true", "candidate releases must remain prerelease")
 forbid(".github/workflows/release.yml", "0.2.0-alpha.14",

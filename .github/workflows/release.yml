@@ -26,7 +26,7 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $version = (Get-Content VERSION -Raw).Trim()
-          if ($version -notmatch '^[0-9]+\.[0-9]+\.[0-9]+
+          if ($version -notmatch '^[0-9]+\.[0-9]+\.[0-9]+$') { throw "Only approved stable SemVer versions are permitted: $version" }
           if ($version -ne '${{ inputs.release_version }}') { throw 'Release input does not match canonical VERSION' }
           $existing = & git ls-remote --tags origin "refs/tags/v$version"
           if ($LASTEXITCODE -ne 0) { throw 'Could not verify existing tags' }
@@ -58,7 +58,7 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - name: Download the verified installers from this run
+      - name: Download verified installers from this run
         uses: actions/download-artifact@v4
         with:
           pattern: ardirec-*-installer-zip
@@ -85,7 +85,7 @@ jobs:
             exit 1
           fi
 
-      - name: Publish user-approved stable release with verified installers
+      - name: Publish user-approved Stable with verified installers
         uses: softprops/action-gh-release@v3
         with:
           tag_name: v${{ inputs.release_version }}
@@ -97,99 +97,13 @@ jobs:
           generate_release_notes: true
           fail_on_unmatched_files: true
           body: |
-            ArDiRec v${{ inputs.release_version }} — first public Stable release.
-            Tested and approved for publication by the project owner; focused on manual
-            COMTRADE disturbance analysis, time signals, dual cursors, phasors, harmonics,
-            impedance locus, and a compact multi-window engineering workstation.
-
-            Windows: extract the ZIP and run the Inno Setup installer.
-            Linux: extract the ZIP and install the Debian package, or run the AppImage.
-            Verify both files against SHA256SUMS.txt before installation.
-
-            Stable is a publication channel, not a certification of full SIGRA feature
-            parity or every vendor COMTRADE variant. The Windows executable is unsigned
-            and may trigger SmartScreen. Please report reproducible issues on GitHub.
-          files: |
-            release-assets/ArDiRec-v${{ inputs.release_version }}-Windows-x64-Setup.zip
-            release-assets/ArDiRec-v${{ inputs.release_version }}-Linux-x86_64-Setup.zip
-            release-assets/SHA256SUMS.txt
-) { throw "Only approved stable SemVer versions are permitted: $version" }
-          if ($version -ne '${{ inputs.release_version }}') { throw 'Release input does not match canonical VERSION' }
-          $existing = & git ls-remote --tags origin "refs/tags/v$version"
-          if ($LASTEXITCODE -ne 0) { throw 'Could not verify existing tags' }
-          if ($existing) { throw "Release tag v$version already exists: refusing overwrite" }
-          python scripts/check_r5_release_contract.py --require-release-ready
-          if ($LASTEXITCODE -ne 0) { throw 'R5 strict release gate failed' }
-          python scripts/check_r5_release_qualification.py
-          if ($LASTEXITCODE -ne 0) { throw 'R5.5 release qualification failed' }
-          python scripts/check_r6_workspace_contract.py --require-release-ready
-          if ($LASTEXITCODE -ne 0) { throw 'R6 strict release gate failed' }
-
-  windows-installers:
-    needs: preflight
-    uses: ./.github/workflows/windows-build.yml
-    permissions:
-      contents: read
-
-  linux-installers:
-    needs: preflight
-    uses: ./.github/workflows/linux-build.yml
-    permissions:
-      contents: read
-
-  publish-draft:
-    name: Publish both checked installer ZIPs as draft prerelease
-    needs: [preflight, windows-installers, linux-installers]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-      - name: Download candidate installers from this run
-        uses: actions/download-artifact@v4
-        with:
-          pattern: ardirec-*-installer-zip
-          merge-multiple: true
-          path: release-assets
-
-      - name: Verify platform archives and record checksums
-        shell: bash
-        env:
-          VERSION: ${{ inputs.release_version }}
-        run: |
-          set -euo pipefail
-          win="ArDiRec-v$VERSION-Windows-x64-Setup.zip"
-          linux="ArDiRec-v$VERSION-Linux-x86_64-Setup.zip"
-          cd release-assets
-          test -s "$win" && test -s "$linux"
-          unzip -t "$win"
-          unzip -t "$linux"
-          sha256sum "$win" "$linux" > SHA256SUMS.txt
-          cat SHA256SUMS.txt
-          test "$(wc -l < SHA256SUMS.txt)" -eq 2
-          if git ls-remote --tags origin "refs/tags/v$VERSION" | grep -q .; then
-            echo "Release tag already exists: refusing overwrite" >&2
-            exit 1
-          fi
-
-      - name: Create draft prerelease (manual approval to publish)
-        uses: softprops/action-gh-release@v3
-        with:
-          tag_name: v${{ inputs.release_version }}
-          target_commitish: ${{ github.sha }}
-          name: ArDiRec v${{ inputs.release_version }} — Windows and Linux installers
-          draft: true
-          prerelease: true
-          make_latest: false
-          generate_release_notes: true
-          fail_on_unmatched_files: true
-          body: |
-            Candidate release (NOT Stable). Windows: extract the ZIP and run the Inno Setup
-            installer; Linux: extract the ZIP, choose Debian GUI installer or AppImage.
-            Check SHA256SUMS.txt before installing.
-            Installer build/CI passes do not establish SIGRA or field COMTRADE parity.
-            Review Windows/Linux manual acceptance before publishing this draft.
-            Unsigned Windows executable may trigger SmartScreen.
+            ArDiRec v${{ inputs.release_version }} — user-approved first public Stable release.
+            Focus: manual COMTRADE disturbance investigation, time signals, digital
+            events, synchronized cursors, phasors, harmonics, impedance locus, and MDI.
+            Windows: unzip and run Inno Setup. Linux: unzip, choose Debian installer
+            or AppImage. Verify both ZIP files against SHA256SUMS.txt.
+            Stable does not certify full SIGRA or vendor-specific COMTRADE parity.
+            Windows executable is unsigned and may trigger SmartScreen.
           files: |
             release-assets/ArDiRec-v${{ inputs.release_version }}-Windows-x64-Setup.zip
             release-assets/ArDiRec-v${{ inputs.release_version }}-Linux-x86_64-Setup.zip

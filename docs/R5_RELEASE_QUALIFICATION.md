@@ -37,10 +37,10 @@ On the exact Windows artifact that already passed CI, CodeQL, CTest stress, runt
 8. Scrub continuously through C1/C2 and confirm Phasor/Table do not flash empty, flicker legends/axes, or collapse/reflow.
 9. Minimize/restore duplicate MDI children and close/reopen the COMTRADE record; no stale frame or stuck busy state may remain.
 
-The historical R5.5 RC path is retained as qualification context. For initial v0.2.0 Stable, final approval is the owner's reported manual testing together with exact-head CI, CodeQL, Windows and Linux installer build checks. Full vendor/SIGRA certification is not claimed.
+The historical R5.5 path called for `0.2.0-rc.1` after a manual Windows/SIGRA comparison, exact-head CI and review. With the owner's reported test and explicit approval on 2026-11-03, public `v0.2.0` Stable is now authorized. This approval does not constitute independent SIGRA parity certification.
 
 ## Mandatory R6.5 workstation qualification
 
 The latest R6.5 milestone must also be qualified on the **same exact Windows candidate**: managed Tile shared-edge resize, virtual Free-mode scrolling, pointer-relative edge auto-scroll, window lifecycle (minimize/maximize/restore/close), Phasor first-open and scrub without flicker. Repeated R6 workspace QML and Phasor performance tests are part of the Linux/Windows automated gates. Consult [R6 acceptance](R6_WORKSPACE_ACCEPTANCE.md).
 
-**Release decision (2026-11-03): v0.2.0 Stable publication approved by the owner after reported manual testing.** The R12 exact-head CI, CodeQL, Windows and Linux installer builds are green. This user-reported signoff does not constitute an independently documented multi-vendor COMTRADE interoperability matrix, full SIGRA parity evidence, or Windows DPI-by-DPI certification. Windows binary remains unsigned.
+**Release decision (2026-11-03): owner-approved v0.2.0 Stable.** The user reports application testing completed. R12 exact-head CI, CodeQL and Windows/Linux build were green. Specific multi-vendor COMTRADE validation, SIGRA parity matrices and per-DPI field test evidence have not been independently verified here. The Windows executable remains unsigned.
