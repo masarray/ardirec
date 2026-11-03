@@ -127,6 +127,7 @@ Rectangle {
         // millisecond value visible even when the cursors are too close to contain it.
         Item {
             id: dimension
+            objectName: "engineeringTimeDimension"
             anchors.fill: parent
             readonly property real ax: root.pixelForTime(root.cursorATime)
             readonly property real bx: root.pixelForTime(root.cursorBTime)
@@ -185,7 +186,7 @@ Rectangle {
                     joinStyle: ShapePath.RoundJoin
                     startX: dimension.leftX + 10
                     startY: 11.5
-                    PathLine { x: dimension.leftX + 4; y: 15.5 }
+                    PathLine { objectName: "dimensionLeftTip"; x: dimension.leftX + 4; y: 15.5 }
                     PathLine { x: dimension.leftX + 10; y: 19.5 }
                 }
                 ShapePath {
@@ -197,7 +198,7 @@ Rectangle {
                     joinStyle: ShapePath.RoundJoin
                     startX: dimension.rightX - 10
                     startY: 11.5
-                    PathLine { x: dimension.rightX - 4; y: 15.5 }
+                    PathLine { objectName: "dimensionRightTip"; x: dimension.rightX - 4; y: 15.5 }
                     PathLine { x: dimension.rightX - 10; y: 19.5 }
                 }
             }

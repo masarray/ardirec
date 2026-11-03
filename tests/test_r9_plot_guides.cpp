@@ -23,7 +23,7 @@ void verify_zero(QQuickItem* guides, QQuickItem* zero, int height,
     guides->setProperty("displayMode", mode);
     QCoreApplication::processEvents();
     require(std::abs(zero->y() - expected) < 0.6, "zero guide does not match renderer coordinates");
-    require(std::abs(zero->height() - 2.0) < 0.01, "zero guide must stay 2px high");
+    require(std::abs(zero->height() - 1.0) < 0.01, "zero guide must stay 1px, distinct from the 3px track boundary");
     require(std::abs(zero->width() - guides->width()) < 0.01, "zero guide spans the entire plotting area");
 }
 }
@@ -41,10 +41,10 @@ int main(int argc, char** argv) {
         auto* zero = guides->findChild<QQuickItem*>("engineeringZeroLine");
         require(zero != nullptr, "zero line must be addressable for accessibility and tests");
         guides->setWidth(840);
-        verify_zero(guides, zero, 200, "instantaneous", 99.0);
-        verify_zero(guides, zero, 200, "rms", 179.0);
-        verify_zero(guides, zero, 300, "rms", 269.0);
-        verify_zero(guides, zero, 300, "instantaneous", 149.0);
+        verify_zero(guides, zero, 200, "instantaneous", 99.5);
+        verify_zero(guides, zero, 200, "rms", 179.5);
+        verify_zero(guides, zero, 300, "rms", 269.5);
+        verify_zero(guides, zero, 300, "instantaneous", 149.5);
         std::cout << "R9 plot guide coordinates: PASS\n";
         return 0;
     } catch (const std::exception& error) {
