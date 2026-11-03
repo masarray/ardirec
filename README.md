@@ -21,9 +21,9 @@ ArDiRec targets four qualities above feature count:
 
 See [PRD](docs/PRD.md), [parity matrix](docs/PARITY_MATRIX.md), [architecture](docs/ARCHITECTURE.md), and [roadmap](docs/ROADMAP.md).
 
-## Current status — engineering prerelease candidate (not stable)
+## Current status — v0.2.0 public Stable
 
-The current desktop alpha contains:
+The initial stable desktop release contains:
 
 - C++20 COMTRADE CFG parser.
 - DAT decoding for ASCII, BINARY, BINARY32 and FLOAT32.
@@ -38,15 +38,14 @@ The current desktop alpha contains:
 - Synchronized Phasor, raw R-X Locus, Harmonics and Value Table views.
 - Global **Secondary / Primary** value representation driven by COMTRADE transformer-ratio and recorded-side metadata; the same representation is consumed by waveform, RMS, phasor, harmonics, table and raw impedance calculations.
 - Compact cursor-analysis header with C1, C2, C2-C1 and C2+C1 plus simultaneous instantaneous/RMS values.
-- Windows CI plus a portable ZIP development distribution.
+- Windows 10/11 installer ZIP and Linux installer/AppImage ZIP with packaging smoke tests.
 - Product, compatibility, performance and validation specifications.
 
-Large COMTRADE records use indexed/lazy DAT access and bounded waveform LOD. CI exercises 10M-sample and 120-channel cases, but manual vendor compatibility and SIGRA comparison remain release gates.
+Large COMTRADE records use indexed/lazy DAT access and bounded waveform LOD. CI exercises 10M-sample and 120-channel cases, while broader vendor compatibility and full SIGRA parity remain ongoing validation work.
 
-## Install on Windows or Linux (candidate packages)
+## Download and install v0.2.0 Stable
 
-The build workflows generate two installer ZIPs; they are CI artifacts until
-a reviewed **draft prerelease** is explicitly published:
+Get the verified installer ZIPs from the [latest public Stable release](https://github.com/masarray/ardirec/releases/latest):
 
 - **Windows 10/11 x64:** `ArDiRec-v<VERSION>-Windows-x64-Setup.zip` contains a
   conventional Inno Setup wizard (per-user, no admin required), Start menu
@@ -58,6 +57,9 @@ a reviewed **draft prerelease** is explicitly published:
 Unzip the matching package, read its README, and launch the installer.
 The Windows setup is **not code-signed**; ZIP packaging does not avoid
 Windows SmartScreen warnings. Verify SHA256SUMS from the official release.
+
+This is a user-tested initial Stable release for manual disturbance-record investigation,
+not a certification of complete SIGRA parity or all proprietary vendor formats.
 See [installer and test contract](docs/DISTRIBUTION.md).
 
 ## Build

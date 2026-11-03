@@ -27,7 +27,7 @@ jobs:
         run: |
           set -euo pipefail
           version="$(tr -d '\r\n' < VERSION)"
-          [[ "$version" =~ ^0\.2\.0-(alpha|rc)\.[0-9]+$ ]] || { echo "Invalid prerelease version" >&2; exit 1; }
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta|rc)\.[0-9]+)?$ ]] || { echo "Invalid SemVer version" >&2; exit 1; }
           echo "ARDIREC_PACKAGE_VERSION=$version" >> "$GITHUB_ENV"
 
       - name: Install packaging dependencies
@@ -124,7 +124,7 @@ jobs:
           2. Double-click the AppImage. If necessary, open a terminal in the extracted
              folder and run: chmod +x *.AppImage && APPIMAGE_EXTRACT_AND_RUN=1 ./*.AppImage
           Compatibility: x86_64 Linux, glibc 2.35+; unusual desktops may need extra libraries.
-          This is a development candidate, not yet a certified stable engineering release.
+          Public Stable distribution. Vendor-specific COMTRADE and SIGRA parity is not certified.
           Official releases: https://github.com/masarray/ardirec/releases
           EOF
           cd dist
