@@ -133,8 +133,8 @@ Rectangle {
             anchors.right: parent.right
             anchors.leftMargin: 7
             anchors.rightMargin: 7
-            y: 43
-            height: 30
+            y: 39
+            height: 25
             radius: 3
             color: "#f7f9fc"
             border.color: "#cbd6e6"
@@ -158,8 +158,8 @@ Rectangle {
             anchors.right: parent.right
             anchors.leftMargin: 7
             anchors.rightMargin: 7
-            y: 77
-            height: 30
+            y: 68
+            height: 25
             radius: 3
             color: "#fcfaf5"
             border.color: "#e4d3ae"
@@ -297,7 +297,7 @@ Rectangle {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
-        height: 2
-        color: "#aab9c5"
+        height: 3
+        color: "#7d929f"
     }
 }

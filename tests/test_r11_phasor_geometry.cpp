@@ -40,7 +40,7 @@ int main(int argc, char** argv) {
         near(longVector.length, 120.0 * 0.90 * (60.0/67.2), 0.01,
              "FIT is proportional to true magnitude");
         require(longVector.showArrowhead, "long vector has a head");
-        require(longVector.headLength <= 11.0F && longVector.headHalfWidth <= 5.5F,
+        require(longVector.headLength <= 9.0F && longVector.headHalfWidth <= 4.0F,
                 "head has bounded size; no spikes");
         near(longVector.tip.y(), 150.0, 0.01, "zero degree points right");
         const auto downVector = project_phasor(500, 300, 60.0, 67.2, -90.0);

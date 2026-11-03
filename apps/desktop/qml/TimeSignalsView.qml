@@ -22,7 +22,9 @@ Rectangle {
     property real cursorATime: 0.0
     property real cursorBTime: 0.0
     property real axisWidth: 170
-    property real analogTrackHeight: 148
+    // Compact default: 28% more analog channels visible without scaling data.
+    // C1/C2 keep independent, readable rows inside the 106px lane.
+    property real analogTrackHeight: 106
     property real digitalTrackHeight: 28
     property real cursorHoverRadius: 16
     property real cursorSnapRadius: 12

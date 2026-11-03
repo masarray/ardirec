@@ -49,8 +49,9 @@ inline PhasorStroke project_phasor(double width, double height,
     // creates an inverted/overgrown "arrow". Do not falsify magnitude.
     shape.showArrowhead = shape.length >= 14.0F;
     if (shape.showArrowhead) {
-        shape.headLength = std::clamp(shape.length * 0.22F, 6.0F, 11.0F);
-        shape.headHalfWidth = std::clamp(shape.length * 0.080F, 3.0F, 5.5F);
+        // Avoid a bulky tip on the now-thinner instrument trace.
+        shape.headLength = std::clamp(shape.length * 0.18F, 5.0F, 9.0F);
+        shape.headHalfWidth = std::clamp(shape.length * 0.060F, 2.5F, 4.0F);
         const QPointF base = shape.tip - QPointF(ux * shape.headLength, uy * shape.headLength);
         shape.headLeft = base + QPointF(nx * shape.headHalfWidth, ny * shape.headHalfWidth);
         shape.headRight = base - QPointF(nx * shape.headHalfWidth, ny * shape.headHalfWidth);

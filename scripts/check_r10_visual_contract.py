@@ -41,8 +41,8 @@ require("Apache License" in license_text and "Version 2.0" in license_text,
 header = (ROOT / "apps/desktop/antialiased_trace_geometry.hpp").read_text(encoding="utf-8")
 require("QSGVertexColorMaterial" in header and "DrawTriangles" in header,
         "anti-aliased stroke must use vertex-color triangles")
-require("halfCore = 0.925F" in header and "0.70F" in header,
-        "R10 stroke width/AA feather unexpectedly changed")
+require("halfCore = 0.70F" in header and "feather = 0.85F" in header,
+        "R12 compact engineering stroke width/AA feather unexpectedly changed")
 for name in ("waveform_item.cpp", "rms_waveform_item.cpp"):
     source = (ROOT / "apps/desktop" / name).read_text(encoding="utf-8")
     require("update_antialiased_trace(" in source, f"{name} bypasses AA shared renderer")

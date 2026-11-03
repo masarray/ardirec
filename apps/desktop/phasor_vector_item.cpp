@@ -107,10 +107,10 @@ void clear_vectors(VectorRootNode* root) {
 void update_vector(VectorNode* node, const ardirec::desktop::PhasorStroke& shape,
                    const QColor& color, bool earth) {
     const Premultiplied ink = tint(color);
-    // Thick, readable, smooth, calibrated shaft. QSG DrawLines/setLineWidth
-    // are backend-dependent (typically rasterized at 1 physical pixel).
-    const float halfCore = earth ? 1.15F : 1.65F;
-    const float feather = 0.75F;
+    // Restrained instrument-grade stroke. Core is 1.50px for phases and
+    // 1.20px for earth, with edge feathering that remains backend-independent.
+    const float halfCore = earth ? 0.60F : 0.75F;
+    const float feather = 0.80F;
     const QPointF delta = shape.tip - shape.origin;
     const float len = std::hypot(static_cast<float>(delta.x()), static_cast<float>(delta.y()));
     const QPointF normal = len > 1e-5F
@@ -132,7 +132,7 @@ void update_vector(VectorNode* node, const ardirec::desktop::PhasorStroke& shape
         for (int v = 0; v < 15; ++v) paint(arrow[v], shape.tip, ink, true);
     } else {
         for (int v = 0; v < 3; ++v) paint(arrow[v], corners[v], ink);
-        constexpr float featherWidth = 0.9F;
+        constexpr float featherWidth = 0.75F;
         for (int edge = 0; edge < 3; ++edge) {
             const QPointF a = corners[edge];
             const QPointF b = corners[(edge + 1) % 3];

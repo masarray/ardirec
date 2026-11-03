@@ -14,8 +14,8 @@ Rectangle {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
-        height: 2
-        color: "#93a6b5"
+        height: 3
+        color: "#8398a7"
     }
 
     property string title: "SECTION"

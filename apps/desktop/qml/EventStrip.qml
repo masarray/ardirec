@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Shapes
 
 Rectangle {
     id: root
@@ -144,20 +145,62 @@ Rectangle {
                      && root.cursorBTime >= root.viewStart && root.cursorBTime <= root.viewStart + root.visibleDuration
             z: 3
 
+            // Engineering dimension: | <----- Δt -----> |. End ticks are
+            // *exactly* at cursor positions. Both chevron tips point OUTWARD.
+            // Separate ShapePath geometry removes imprecise rotated rectangles.
             Rectangle {
-                x: dimension.leftX
-                y: 15
-                width: Math.max(1, dimension.span)
-                height: 1
-                color: "#626d75"
-                opacity: 0.85
+                objectName: "dimensionLeftTick"
+                x: Math.round(dimension.leftX)
+                y: 9
+                width: 1
+                height: 13
+                color: "#5a7182"
             }
-
-            // inward arrow heads remain attached to the two cursor positions.
-            Rectangle { x: dimension.leftX; y: 11; width: 8; height: 1.4; rotation: 35; transformOrigin: Item.Left; color: "#626d75" }
-            Rectangle { x: dimension.leftX; y: 18; width: 8; height: 1.4; rotation: -35; transformOrigin: Item.Left; color: "#626d75" }
-            Rectangle { x: dimension.rightX - 8; y: 11; width: 8; height: 1.4; rotation: -35; transformOrigin: Item.Right; color: "#626d75" }
-            Rectangle { x: dimension.rightX - 8; y: 18; width: 8; height: 1.4; rotation: 35; transformOrigin: Item.Right; color: "#626d75" }
+            Rectangle {
+                objectName: "dimensionRightTick"
+                x: Math.round(dimension.rightX) - 1
+                y: 9
+                width: 1
+                height: 13
+                color: "#5a7182"
+            }
+            Rectangle {
+                x: dimension.leftX + 4
+                y: 15
+                width: Math.max(0, dimension.span - 8)
+                height: 1
+                visible: dimension.span >= 16
+                color: "#5a7182"
+            }
+            Shape {
+                objectName: "dimensionOutwardArrows"
+                anchors.fill: parent
+                visible: dimension.span >= 24
+                ShapePath {
+                    objectName: "dimensionLeftArrowPath"
+                    strokeColor: "#5a7182"
+                    strokeWidth: 1.25
+                    fillColor: "transparent"
+                    capStyle: ShapePath.RoundCap
+                    joinStyle: ShapePath.RoundJoin
+                    startX: dimension.leftX + 10
+                    startY: 11.5
+                    PathLine { x: dimension.leftX + 4; y: 15.5 }
+                    PathLine { x: dimension.leftX + 10; y: 19.5 }
+                }
+                ShapePath {
+                    objectName: "dimensionRightArrowPath"
+                    strokeColor: "#5a7182"
+                    strokeWidth: 1.25
+                    fillColor: "transparent"
+                    capStyle: ShapePath.RoundCap
+                    joinStyle: ShapePath.RoundJoin
+                    startX: dimension.rightX - 10
+                    startY: 11.5
+                    PathLine { x: dimension.rightX - 4; y: 15.5 }
+                    PathLine { x: dimension.rightX - 10; y: 19.5 }
+                }
+            }
 
             Rectangle {
                 id: outsideLeader

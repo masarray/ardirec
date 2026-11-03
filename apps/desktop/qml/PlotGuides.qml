@@ -44,9 +44,11 @@ Item {
         id: zeroReference
         objectName: "engineeringZeroLine"
         x: 0
-        y: root.zeroPixel - 1
+        // Sharp 1px engineering baseline; 3px lane dividers cannot be
+        // confused with this reference. Keep RMS=90% / Instant=50%.
+        y: root.zeroPixel - 0.5
         width: root.width
-        height: 2
-        color: "#60798b"
+        height: 1
+        color: "#658094"
     }
 }
