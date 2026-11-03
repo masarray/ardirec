@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import QtQuick
+import "WorkstationVisualMetrics.js" as VisualMetrics
 import QtQuick.Controls
 
 Item {
@@ -34,8 +35,8 @@ Item {
     property var tableChannels: []
     property int selectedChannel: -1
     property real axisWidth: 170
-    property real analogTrackHeight: 148
-    property real digitalTrackHeight: 28
+    property real analogTrackHeight: VisualMetrics.analogTrackHeight
+    property real digitalTrackHeight: VisualMetrics.digitalTrackHeight
 
     readonly property bool dualCursorView: viewType === "time" || viewType === "phasor" || viewType === "locus"
     readonly property bool singleCursorView: viewType === "harmonics" || viewType === "table"

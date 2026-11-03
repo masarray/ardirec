@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import QtQuick
+import "WorkstationVisualMetrics.js" as VisualMetrics
 import QtQuick.Controls
 
 Rectangle {
@@ -24,8 +25,8 @@ Rectangle {
     property real axisWidth: 170
     // Compact default: 28% more analog channels visible without scaling data.
     // C1/C2 keep independent, readable rows inside the 106px lane.
-    property real analogTrackHeight: 106
-    property real digitalTrackHeight: 28
+    property real analogTrackHeight: VisualMetrics.analogTrackHeight
+    property real digitalTrackHeight: VisualMetrics.digitalTrackHeight
     property real cursorHoverRadius: 16
     property real cursorSnapRadius: 12
     property real pendingATime: 0.0

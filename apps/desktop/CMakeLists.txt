@@ -67,6 +67,7 @@ qt_add_qml_module(ardirec
     VERSION 1.0
     QML_FILES
         qml/Main.qml
+        qml/WorkstationVisualMetrics.js
         qml/AppActions.qml
         qml/WorkstationMenuBar.qml
         qml/WorkstationStatusBar.qml

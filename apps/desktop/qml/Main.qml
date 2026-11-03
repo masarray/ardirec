@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import QtQuick
+import "WorkstationVisualMetrics.js" as VisualMetrics
 import QtQuick.Controls
 import QtQuick.Dialogs
 import QtQuick.Layouts
@@ -35,8 +36,8 @@ ApplicationWindow {
     readonly property string viewMode: mdiWorkspace.activeViewType
     property string timeDisplayMode: "instantaneous"
     property real axisWidth: 170
-    property real analogTrackHeight: 148
-    property real digitalTrackHeight: 28
+    property real analogTrackHeight: VisualMetrics.analogTrackHeight
+    property real digitalTrackHeight: VisualMetrics.digitalTrackHeight
 
     readonly property bool hasRecord: documentController.sampleCount > 1 && documentController.analogCount > 0
     readonly property real fullDuration: documentController.durationSeconds

@@ -133,9 +133,9 @@ Rectangle {
             anchors.right: parent.right
             anchors.leftMargin: 7
             anchors.rightMargin: 7
-            y: 39
-            height: 25
-            radius: 3
+            y: 33
+            height: 17
+            radius: 2
             color: "#f7f9fc"
             border.color: "#cbd6e6"
             Row {
@@ -158,9 +158,9 @@ Rectangle {
             anchors.right: parent.right
             anchors.leftMargin: 7
             anchors.rightMargin: 7
-            y: 68
-            height: 25
-            radius: 3
+            y: 51
+            height: 17
+            radius: 2
             color: "#fcfaf5"
             border.color: "#e4d3ae"
             Row {

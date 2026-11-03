@@ -55,10 +55,11 @@ QSGNode* update_antialiased_trace(QSGNode* oldNode,
 
     auto* vertices = geometry->vertexDataAsColoredPoint2D();
     auto* indices = geometry->indexDataAsUInt();
-    // Professional thin waveform: 1.40px opaque core + 0.85px smooth
-    // alpha falloff each side, without modifying a single signal sample.
-    constexpr float halfCore = 0.70F;
-    constexpr float feather = 0.85F;
+    // Original 1px instrument line, with restrained readability gain:
+    // 1.10px opaque core and 0.35px transparent feather on both sides.
+    // No signal interpolation or smoothing of measured transients.
+    constexpr float halfCore = 0.55F;
+    constexpr float feather = 0.35F;
     const float outer = halfCore + feather;
     const float opacity = static_cast<float>(traceColor.alphaF());
     const auto red = static_cast<quint8>(std::lround(traceColor.red() * opacity));

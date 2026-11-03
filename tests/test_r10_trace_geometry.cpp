@@ -34,9 +34,9 @@ int main(int argc, char** argv) {
         auto* v = geometry->vertexDataAsColoredPoint2D();
         require(v[0].a == 0 && v[1].a == 255 && v[2].a == 255 && v[3].a == 0,
                 "outer feather is transparent and inner stroke is opaque");
-        require(std::abs(v[1].y - 19.30F) < 0.02F,
-                "core width is 1.40 logical pixels");
-        require(std::abs(v[0].y - 18.45F) < 0.02F,
+        require(std::abs(v[1].y - 19.45F) < 0.02F,
+                "core width is 1.10 logical pixels");
+        require(std::abs(v[0].y - 19.10F) < 0.02F,
                 "antialiased feather extends smoothly past core");
         const QSGNode* old = result;
         result = ardirec::desktop::update_antialiased_trace(result, points, false,

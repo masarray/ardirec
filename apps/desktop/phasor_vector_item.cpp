@@ -107,10 +107,10 @@ void clear_vectors(VectorRootNode* root) {
 void update_vector(VectorNode* node, const ardirec::desktop::PhasorStroke& shape,
                    const QColor& color, bool earth) {
     const Premultiplied ink = tint(color);
-    // Restrained instrument-grade stroke. Core is 1.50px for phases and
-    // 1.20px for earth, with edge feathering that remains backend-independent.
-    const float halfCore = earth ? 0.60F : 0.75F;
-    const float feather = 0.80F;
+    // Instrument line: 1.20px phase / 1.00px earth core, with a
+    // narrow 0.40px alpha fringe to preserve legibility without bulk.
+    const float halfCore = earth ? 0.50F : 0.60F;
+    const float feather = 0.40F;
     const QPointF delta = shape.tip - shape.origin;
     const float len = std::hypot(static_cast<float>(delta.x()), static_cast<float>(delta.y()));
     const QPointF normal = len > 1e-5F
