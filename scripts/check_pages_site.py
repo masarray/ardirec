@@ -63,7 +63,8 @@ def check(site: Path) -> None:
     assert not page.images_without_alt, f"Images missing alt: {page.images_without_alt}"
     required_ids = ("main", "top", "features", "workflow", "download", "download-windows", "download-linux", "download-checksums")
     assert set(required_ids).issubset(page.ids), "Required navigation/download IDs missing"
-    assert page.meta.get("description", "").startswith("ArDiRec"), "Missing SEO description"
+    description = page.meta.get("description", "")
+    assert "ArDiRec" in description and 65 <= len(description) <= 200, "Missing or unhelpful SEO description"
     assert page.meta.get("og:url") == BASE, "Incorrect canonical social URL"
     assert f'<link rel="canonical" href="{BASE}">' in html, "Incorrect canonical link"
     assert 'href="#main"' in html and "prefers-reduced-motion" in css, "Accessibility requirements missing"
@@ -85,6 +86,13 @@ def check(site: Path) -> None:
     assert "https://github.com/masarray/ardirec/releases/download/v0.2.0/" in html
     assert "https://api.github.com/repos/masarray/ardirec/releases/latest" in js
     assert "AbortController" in js and ".catch(" in js, "Latest-release client must keep safe fallback"
+
+    # Public wording is intended for people using the application, not maintainers.
+    assert "See the whole event." in html and "Download ArDiRec" in html
+    assert "not an application screenshot" not in html.lower()
+    assert "milestone" not in html.lower() and "code agent" not in html.lower()
+    assert 'class="preview-caption">Waveform illustration' in html, "Keep the sample graphic clearly identified"
+    assert "⌘" not in html, "Linux platform marker must not look like the macOS Command key"
 
     manifest = json.loads((site / "icon/site.webmanifest").read_text(encoding="utf-8"))
     assert manifest["short_name"] == "ArDiRec"
