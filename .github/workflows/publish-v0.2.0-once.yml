@@ -41,6 +41,8 @@ jobs:
   windows-installers:
     needs: preflight
     uses: ./.github/workflows/windows-build.yml
+    with:
+      release_lane: true
     permissions:
       contents: read
 
