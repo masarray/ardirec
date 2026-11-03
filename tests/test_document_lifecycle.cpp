@@ -77,7 +77,7 @@ void require_analysis_invalidated(const CursorSnapshotController& cursor,
 int main(int argc, char* argv[]) {
     QCoreApplication app(argc, argv);
     try {
-        const std::filesystem::path cfgPath = std::filesystem::path(ARDIREC_TEST_DATA_DIR) / "distance_sigra_parity.cfg";
+        const std::filesystem::path cfgPath = std::filesystem::path(ARDIREC_TEST_DATA_DIR) / "distance_reference_parity.cfg";
         const QUrl cfgUrl = QUrl::fromLocalFile(QString::fromStdString(cfgPath.string()));
 
         DocumentController document;

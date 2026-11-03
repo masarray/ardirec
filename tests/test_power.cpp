@@ -94,7 +94,7 @@ int main() {
         require(std::isfinite(missingSpectrum.fundamental_rms), "missing-sample fundamental remains finite");
         require(std::isfinite(missingSpectrum.thd_percent), "missing-sample THD remains finite");
 
-        // SIGRA-compatible phase position: sine phase at the cursor/reference instant.
+        // reference-compatible phase position: sine phase at the cursor/reference instant.
         // 1 kHz / 50 Hz gives 20 samples/cycle and therefore a Nyquist limit of H10.
         const auto lowRateTimes = cycle_times(20, frequency);
         std::vector<double> lowRate;

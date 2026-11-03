@@ -181,16 +181,16 @@ int main(int argc, char* argv[]) {
         require(std::isfinite(locus.maxAbsR()) && std::isfinite(locus.maxAbsX()),
                 "native finite locus extents remain available for forensic Fit All");
 
-        // SIGRA classical-method parity fixture keeps R1.1 semantics locked.
-        const std::filesystem::path sigraPath = std::filesystem::path(ARDIREC_TEST_DATA_DIR) / "distance_sigra_parity.cfg";
-        load_and_wait(document, sigraPath);
-        require(document.sampleCount() == 80, "SIGRA parity fixture sample count");
+        // reference classical-method parity fixture keeps R1.1 semantics locked.
+        const std::filesystem::path referencePath = std::filesystem::path(ARDIREC_TEST_DATA_DIR) / "distance_reference_parity.cfg";
+        load_and_wait(document, referencePath);
+        require(document.sampleCount() == 80, "reference parity fixture sample count");
         require(document.channelPhase(0) == QStringLiteral("L1")
                     && document.channelPhase(1) == QStringLiteral("L2")
                     && document.channelPhase(2) == QStringLiteral("L3"),
                 "explicit COMTRADE phase metadata is classified before name heuristics");
         require(document.digitalEdgeTimes().size() == 1,
-                "SIGRA parity fixture exposes the TRIP status transition");
+                "reference parity fixture exposes the TRIP status transition");
         require(locus.classicalGroundingValid(), "matching RIO sidecar selects classical earth compensation");
         require_near(locus.reOverRl(), 1.0, 1.0e-12, "RIO RE/RL is preserved directly");
         require_near(locus.xeOverXl(), 0.6, 1.0e-12, "RIO XE/XL is preserved directly");
@@ -199,9 +199,9 @@ int main(int argc, char* argv[]) {
         locus.request(document.dataStartSeconds(), document.durationSeconds(), 4000, 0.0, 0.0);
         wait_for_locus(locus, before);
         snapshot = locus.nativeSnapshot();
-        require(snapshot != nullptr, "SIGRA parity locus publishes a native snapshot");
+        require(snapshot != nullptr, "reference parity locus publishes a native snapshot");
         require(snapshot->loops[0].size() == 80,
-                "SIGRA parity fixture remains unsimplified below the render budget");
+                "reference parity fixture remains unsimplified below the render budget");
 
         const LocusNativePoint& beforeTrip = snapshot->loops[0].at(25);
         require(beforeTrip.valid != 0, "pre-trip one-cycle window remains valid");
@@ -212,7 +212,7 @@ int main(int argc, char* argv[]) {
 
         const LocusNativePoint& spanningTrip = snapshot->loops[0].at(40);
         require(spanningTrip.valid == 0,
-                "status change inside the SIGRA measuring window creates a locus gap");
+                "status change inside the reference measuring window creates a locus gap");
         require(snapshot->statusRejectedCount > 0,
                 "native snapshot records status-window validity rejections");
 

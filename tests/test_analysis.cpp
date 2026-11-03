@@ -75,7 +75,7 @@ int main(int argc, char* argv[]) {
         require(std::abs(wrapped_angle_delta(angle22, angle20)) < 0.1,
                 "phasor angle uses a fixed record reference instead of cursor-relative rotation");
 
-        // SIGRA-style finite-record RMS uses a full one-cycle denominator from the first sample.
+        // reference-style finite-record RMS uses a full one-cycle denominator from the first sample.
         // Missing history to the left of the record is zero-filled; once the cycle is complete,
         // the window is (t-T,t] and therefore remains exactly 20 samples at 1 kHz / 50 Hz.
         require_near(analysis.rmsValue(0, 0.000), 15.8113883, 1.0e-5,
