@@ -42,4 +42,4 @@ jobs:
           gh release edit v0.2.0 --title "ArDiRec v0.2.0 — Stable" --notes-file /tmp/ardirec-v0.2.0-release-notes.md
           after="$(gh release view v0.2.0 --json assets --jq '.assets[].name' | sort)"
           test "$before" = "$after"
-          gh release view v0.2.0 --json tagName,isDraft,isPrerelease,title,assets --jq '{tag:.tagName,draft:.isDraft,prerelease:.isPrerelease,title:.title,assets:[.assets[].name]}'
+          gh release view v0.2.0 --json tagName,isDraft,isPrerelease,name,assets --jq '{tag:.tagName,draft:.isDraft,prerelease:.isPrerelease,title:.name,assets:[.assets[].name]}'
