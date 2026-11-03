@@ -127,7 +127,7 @@ forbid(locus, "Repeater {\n                    model: locusSnapshotController.lo
        "production locus rendering must not materialize one QML delegate per trajectory point")
 
 
-# R1.1 SIGRA parity: production locus semantics use COMTRADE metadata, measured
+# R1.1 reference parity: production locus semantics use COMTRADE metadata, measured
 # residual current, trailing one-cycle validity and direct classical RE/RL-XE/XL.
 for needle, reason in (
     ("m_document->channelPhase(index)", "Locus channel binding must honor COMTRADE phase metadata"),
@@ -136,7 +136,7 @@ for needle, reason in (
     ("window_has_status_change", "status changes inside a measurement window must create an invalid gap"),
     ("m_document->digitalEdgeTimes()", "Locus worker must consume immutable event timing"),
     ("read_classical_grounding_factors", "RIO RE/RL and XE/XL must remain independent"),
-    ("distance_impedance_rerl_xexl", "production earth loops must support direct SIGRA classical compensation"),
+    ("distance_impedance_rerl_xexl", "production earth loops must support direct reference classical compensation"),
     ("kMaximumAnalysisPoints = 65536u", "numerical analysis fidelity must remain separate from render budget"),
     ("simplify_bounded", "high-resolution loci must be shape-simplified before rendering"),
 ):
@@ -167,15 +167,15 @@ for needle, reason in (
     ("distance_p1.cfg", "async production path requires deterministic fixture"),
     ("100.0", "golden energized impedance must stay locked"),
     ("post-open", "low-current invalid/gap semantics must stay locked"),
-    ("distance_sigra_parity.cfg", "SIGRA fixture must exercise metadata/residual/classical/event validity"),
+    ("distance_reference_parity.cfg", "reference fixture must exercise metadata/residual/classical/event validity"),
     ("classicalGroundingValid", "matching RIO sidecar must select classical compensation"),
-    ("statusRejectedCount", "SIGRA status-window rejection must stay observable"),
+    ("statusRejectedCount", "reference status-window rejection must stay observable"),
 ):
     require("tests/test_locus_snapshot.cpp", needle, reason)
-require("tests/data/distance_sigra_parity.rio", "RE/RL", "SIGRA fixture must carry resistance compensation ratio")
-require("tests/data/distance_sigra_parity.rio", "XE/XL", "SIGRA fixture must carry reactance compensation ratio")
+require("tests/data/distance_reference_parity.rio", "RE/RL", "reference fixture must carry resistance compensation ratio")
+require("tests/data/distance_reference_parity.rio", "XE/XL", "reference fixture must carry reactance compensation ratio")
 require("tests/CMakeLists.txt", "ardirec_locus_snapshot_tests", "production-path Locus golden must run under CTest")
-require("tests/R5LocusParity.cmake", "ardirec_r5_locus_parity_tests", "R5.4 SIGRA viewport/full-cycle qualification must run under CTest")
+require("tests/R5LocusParity.cmake", "ardirec_r5_locus_parity_tests", "R5.4 reference viewport/full-cycle qualification must run under CTest")
 
 
 # R1.2/R5.4 frequency + multi-rate DFT: calculation frequency is estimated once

@@ -98,7 +98,7 @@ DistanceImpedance distance_impedance_rerl_xexl(FaultLoop loop,
     const std::complex<double> phase_current = phasors.current[static_cast<std::size_t>(first)];
     if (!finite_complex(voltage) || !finite_complex(phase_current)) return result;
 
-    // Siemens/SIGRA classical earth-loop equation:
+    // traditional protection-tool classical earth-loop equation:
     // U = (Ip - kr*IE) R + j (Ip - kx*IE) X.
     // R and X are real unknowns, so the two complex coefficients form a 2x2
     // real system. Keeping kr and kx separate is essential; collapsing them to a

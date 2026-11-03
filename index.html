@@ -2,50 +2,143 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>ArDiRec — COMTRADE Workstation</title>
-  <meta name="description" content="ArDiRec (Ari Disturbance Recorder) is an open-source, vendor-neutral COMTRADE workstation for protection and disturbance engineers.">
-  <meta name="theme-color" content="#eef0f2">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f5f7f8">
+  <meta name="description" content="ArDiRec is a free and open-source COMTRADE disturbance-analysis workstation for protection and power-system engineers. Download v0.2.0 for Windows or Linux.">
+  <title>ArDiRec — Open-source COMTRADE analysis</title>
   <link rel="icon" href="icon/favicon.ico" sizes="any">
   <link rel="icon" type="image/png" sizes="32x32" href="icon/favicon-32x32.png">
-  <link rel="icon" type="image/png" sizes="16x16" href="icon/favicon-16x16.png">
   <link rel="apple-touch-icon" href="icon/apple-touch-icon.png">
   <link rel="manifest" href="icon/site.webmanifest">
-  <meta property="og:title" content="ArDiRec — COMTRADE Workstation">
-  <meta property="og:description" content="Open any disturbance record. Understand it immediately.">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="ArDiRec — COMTRADE disturbance analysis">
+  <meta property="og:description" content="Inspect time signals, digital events, phasors and impedance in a fast, open-source engineering workstation.">
   <meta property="og:image" content="https://raw.githubusercontent.com/masarray/ardirec/main/icon/android-chrome-512x512.png">
   <style>
-    :root { color-scheme: light dark; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-    * { box-sizing: border-box; }
-    body { margin: 0; min-height: 100vh; background: #eef0f2; color: #17212a; display: grid; place-items: center; }
-    main { width: min(920px, calc(100% - 40px)); padding: 56px 0; text-align: center; }
-    .logo { width: 150px; height: 150px; object-fit: contain; filter: drop-shadow(0 14px 26px rgba(20,31,42,.14)); }
-    h1 { margin: 24px 0 8px; font-size: clamp(2.4rem, 7vw, 4.8rem); letter-spacing: -.045em; }
-    .tagline { margin: 0 auto; max-width: 720px; color: #52616d; font-size: clamp(1.05rem, 2.4vw, 1.35rem); line-height: 1.55; }
-    .actions { margin-top: 32px; display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; }
-    a { color: inherit; }
-    .button { display: inline-flex; align-items: center; min-height: 44px; padding: 0 18px; border-radius: 8px; text-decoration: none; font-weight: 650; border: 1px solid #aeb8c0; background: #fff; }
-    .button.primary { background: #17212a; color: #fff; border-color: #17212a; }
-    .meta { margin-top: 42px; color: #74808a; font-size: .9rem; }
-    @media (prefers-color-scheme: dark) {
-      body { background: #11171c; color: #edf2f6; }
-      .tagline, .meta { color: #9daab4; }
-      .button { background: #1b252d; border-color: #3b4852; }
-      .button.primary { background: #edf2f6; color: #11171c; border-color: #edf2f6; }
+    :root { color-scheme: light; --bg:#f5f7f8; --surface:#fff; --text:#19252d; --muted:#566774; --line:#dbe2e6; --accent:#0d6572; --soft:#e7f1f2; font-family:Inter, ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+    * { box-sizing:border-box; }
+    html { scroll-behavior:smooth; }
+    body { margin:0; background:var(--bg); color:var(--text); line-height:1.55; -webkit-font-smoothing:antialiased; }
+    a { color:var(--accent); text-underline-offset:3px; }
+    a:focus-visible { outline:2px solid var(--accent); outline-offset:3px; border-radius:4px; }
+    .container { width:min(100% - 40px, 990px); margin-inline:auto; }
+    header { border-bottom:1px solid var(--line); background:var(--surface); }
+    .nav { min-height:68px; display:flex; align-items:center; justify-content:space-between; gap:18px; }
+    .brand { display:flex; align-items:center; gap:10px; color:var(--text); text-decoration:none; font-size:17px; font-weight:650; letter-spacing:-.02em; }
+    .brand img { width:32px; height:32px; object-fit:contain; }
+    .navlinks { display:flex; align-items:center; gap:22px; flex-wrap:wrap; font-size:13px; font-weight:550; }
+    .navlinks a { text-decoration:none; color:var(--muted); }
+    .navlinks a:hover { color:var(--accent); }
+    main { min-height:65vh; }
+    .hero { padding:78px 0 68px; display:grid; grid-template-columns:minmax(0,1.4fr) minmax(240px,.7fr); gap:50px; align-items:center; }
+    .eyebrow { margin:0 0 14px; color:var(--accent); font-size:12px; letter-spacing:.075em; text-transform:uppercase; font-weight:650; }
+    h1 { margin:0; max-width:650px; font-size:clamp(31px,4.4vw,47px); font-weight:650; line-height:1.17; letter-spacing:-.044em; }
+    .lead { margin:20px 0 0; max-width:595px; color:var(--muted); font-size:16px; line-height:1.7; }
+    .actions { display:flex; gap:10px; flex-wrap:wrap; margin-top:28px; }
+    .button { display:inline-flex; align-items:center; justify-content:center; min-height:43px; padding:0 16px; border-radius:7px; text-decoration:none; font-size:13px; font-weight:600; border:1px solid var(--line); background:var(--surface); color:var(--text); transition:background-color .15s,border-color .15s; }
+    .button:hover { border-color:var(--accent); }
+    .button.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+    .button.primary:hover { background:#084e59; }
+    .note { margin:14px 0 0; color:var(--muted); font-size:12px; }
+    .hero-aside { border:1px solid var(--line); border-radius:12px; padding:26px; background:var(--surface); }
+    .hero-aside img { width:68px; height:68px; object-fit:contain; margin-bottom:12px; }
+    .stat { padding:13px 0; border-top:1px solid var(--line); display:flex; justify-content:space-between; gap:14px; font-size:13px; }
+    .stat strong { font-weight:600; }
+    .stat span { color:var(--muted); text-align:right; }
+    section { border-top:1px solid var(--line); padding:36px 0 44px; }
+    .section-head { display:flex; align-items:baseline; justify-content:space-between; gap:22px; margin-bottom:24px; }
+    h2 { font-size:20px; font-weight:650; letter-spacing:-.025em; margin:0; }
+    .section-head p { max-width:460px; margin:0; font-size:13px; color:var(--muted); }
+    .features { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); column-gap:42px; }
+    .feature { padding:18px 0; border-top:1px solid var(--line); }
+    .feature h3 { margin:0 0 6px; font-size:14px; font-weight:650; }
+    .feature p { margin:0; color:var(--muted); font-size:13px; max-width:420px; }
+    .download-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
+    .download { border:1px solid var(--line); border-radius:9px; padding:18px; background:var(--surface); }
+    .download h3 { margin:0 0 5px; font-size:15px; font-weight:600; }
+    .download p { color:var(--muted); font-size:13px; margin:0 0 14px; min-height:40px; }
+    .download a { font-weight:600; font-size:13px; }
+    .smallprint { color:var(--muted); font-size:12px; margin:14px 0 0; }
+    footer { padding:25px 0 36px; border-top:1px solid var(--line); font-size:12px; color:var(--muted); }
+    .footer-inner { display:flex; flex-wrap:wrap; justify-content:space-between; gap:14px; }
+    .footer-inner div { display:flex; gap:16px; flex-wrap:wrap; }
+    .footer-inner a { text-decoration:none; color:var(--muted); }
+    @media (max-width:750px) {
+      .hero { grid-template-columns:1fr; gap:24px; padding:50px 0 40px; }
+      .hero-aside { display:none; }
+      .section-head { display:block; }
+      .section-head p { margin-top:8px; }
+      .features,.download-grid { grid-template-columns:1fr; }
+      .navlinks { gap:14px; }
+      .navlinks a:first-child { display:none; }
+    }
+    @media (prefers-reduced-motion:reduce) { html { scroll-behavior:auto; } .button { transition:none; } }
+    @media (prefers-color-scheme:dark) {
+      :root { color-scheme:dark; --bg:#111920; --surface:#18232b; --text:#eef3f5; --muted:#abb9c2; --line:#30404a; --accent:#6fc5cf; --soft:#19303a; }
+      .button.primary { color:#102129; background:#76cad4; border-color:#76cad4; }
+      .button.primary:hover { background:#9ad9e0; }
     }
   </style>
 </head>
 <body>
-  <main>
-    <img class="logo" src="icon/android-chrome-512x512.png" alt="ArDiRec">
-    <h1>ArDiRec</h1>
-    <p class="tagline">ArDiRec (Ari Disturbance Recorder) is an open-source, vendor-neutral COMTRADE workstation for protection and disturbance engineers. Open any disturbance record. Understand it immediately.</p>
-    <div class="actions">
-      <a class="button primary" href="https://github.com/masarray/ardirec/releases">Downloads</a>
-      <a class="button" href="https://github.com/masarray/ardirec">Source on GitHub</a>
-      <a class="button" href="https://github.com/masarray/ardirec#build">Build</a>
+  <header>
+    <nav class="container nav" aria-label="Main navigation">
+      <a class="brand" href="#top"><img src="icon/android-chrome-192x192.png" width="32" height="32" alt="">ArDiRec</a>
+      <div class="navlinks">
+        <a href="#features">Capabilities</a>
+        <a href="https://github.com/masarray/ardirec/blob/main/docs/GETTING_STARTED.md">Documentation</a>
+        <a href="https://github.com/masarray/ardirec">GitHub</a>
+      </div>
+    </nav>
+  </header>
+  <main id="top">
+    <div class="container hero">
+      <div>
+        <p class="eyebrow">Open-source engineering software · v0.2.0 Stable</p>
+        <h1>Understand disturbance records with clarity.</h1>
+        <p class="lead">ArDiRec brings COMTRADE waveforms, digital events, cursors, phasors and electrical analysis into one focused desktop workstation for protection and power-system engineers.</p>
+        <div class="actions">
+          <a class="button primary" href="#download">Download ArDiRec</a>
+          <a class="button" href="https://github.com/masarray/ardirec/blob/main/docs/GETTING_STARTED.md">Getting started</a>
+        </div>
+        <p class="note">Free and open source · GPL-3.0-or-later · Windows and Linux</p>
+      </div>
+      <aside class="hero-aside" aria-label="Project information">
+        <img src="icon/android-chrome-192x192.png" width="68" height="68" alt="">
+        <div class="stat"><strong>Version</strong><span>0.2.0 Stable</span></div>
+        <div class="stat"><strong>Analysis</strong><span>Manual engineering</span></div>
+        <div class="stat"><strong>Input</strong><span>COMTRADE CFG / DAT</span></div>
+        <div class="stat"><strong>Platform</strong><span>Windows · Linux</span></div>
+        <div class="stat"><strong>Source</strong><span>Open and auditable</span></div>
+      </aside>
     </div>
-    <p class="meta">Qt Quick · C++20 · COMTRADE · GPL-3.0-or-later</p>
+    <section id="features">
+      <div class="container">
+        <div class="section-head"><h2>Built for real investigation</h2><p>A compact workspace that prioritizes the signal and keeps calculated results traceable.</p></div>
+        <div class="features">
+          <div class="feature"><h3>Time signals & digital events</h3><p>Synchronized traces, precise trigger-relative navigation and C1/C2 cursor measurements.</p></div>
+          <div class="feature"><h3>Electrical analysis</h3><p>One-cycle RMS, phase-aware phasors, harmonics, R–X locus and engineering value table.</p></div>
+          <div class="feature"><h3>Protection context</h3><p>Supported RIO/XRIO zone overlays, phase-loop inspection and explicit diagnostic messages.</p></div>
+          <div class="feature"><h3>Responsive by design</h3><p>Indexed record access, bounded waveform rendering and asynchronous computation paths.</p></div>
+        </div>
+      </div>
+    </section>
+    <section id="download">
+      <div class="container">
+        <div class="section-head"><h2>Download v0.2.0 Stable</h2><p>Official packages are published on GitHub with SHA-256 checksums.</p></div>
+        <div class="download-grid">
+          <div class="download"><h3>Windows 10/11 · x64</h3><p>Installer wizard with Start menu integration, current-user installation and standard uninstall.</p><a href="https://github.com/masarray/ardirec/releases/download/v0.2.0/ArDiRec-v0.2.0-Windows-x64-Setup.zip">Windows installer ZIP</a></div>
+          <div class="download"><h3>Linux · x86_64</h3><p>Debian package and portable AppImage bundled in one archive for compatible Linux desktops.</p><a href="https://github.com/masarray/ardirec/releases/download/v0.2.0/ArDiRec-v0.2.0-Linux-x86_64-Setup.zip">Linux installer ZIP</a></div>
+        </div>
+        <p class="smallprint"><a href="https://github.com/masarray/ardirec/releases/download/v0.2.0/SHA256SUMS.txt">Verify SHA-256</a> · Windows builds are unsigned; verify the official package before installation. Stable does not mean universal vendor compatibility or automated fault diagnosis.</p>
+      </div>
+    </section>
   </main>
+  <footer>
+    <div class="container footer-inner">
+      <span>ArDiRec · Independent open-source engineering software</span>
+      <div><a href="https://github.com/masarray/ardirec">Source</a><a href="https://github.com/masarray/ardirec/issues">Support</a><a href="https://github.com/masarray/ardirec/blob/main/LICENSE">License</a></div>
+    </div>
+  </footer>
 </body>
 </html>

@@ -153,13 +153,13 @@ void verify_production_locus_window_validity() {
             "full-cycle qualification does not alter qualified distance reactance");
 }
 
-void verify_sigra_fit_policy() {
+void verify_reference_fit_policy() {
     DistanceZoneController zones;
     const std::filesystem::path rioPath = std::filesystem::path(ARDIREC_TEST_DATA_DIR)
-                                          / "ligne_1_sigra.rio";
+                                          / "ligne_1_reference.rio";
     require(zones.openFile(QUrl::fromLocalFile(QString::fromStdString(rioPath.string()))),
-            "canonical ligne_1 SIGRA RIO opens");
-    require(zones.hasZones(), "canonical ligne_1 SIGRA RIO exposes protection zones");
+            "canonical ligne_1 reference RIO opens");
+    require(zones.hasZones(), "canonical ligne_1 reference RIO exposes protection zones");
     const QVariantList earthZones = zones.zonesForLoop(QStringLiteral("L1-E"),
                                                         QStringLiteral("secondary"));
     require(!earthZones.isEmpty(), "canonical ligne_1 RIO exposes L1-E zones");
@@ -179,9 +179,9 @@ void verify_sigra_fit_policy() {
                                                 100.0, 61.0,
                                                 QStringLiteral("relevant")).toMap();
     require_near(relevant.value(QStringLiteral("r")).toDouble(), 15.0, 1.0e-9,
-                 "SIGRA protection-context relevant target is 15 ohm R seed");
+                 "reference protection-context relevant target is 15 ohm R seed");
     require_near(relevant.value(QStringLiteral("x")).toDouble(), 15.0, 1.0e-9,
-                 "SIGRA protection-context relevant target is 15 ohm X seed");
+                 "reference protection-context relevant target is 15 ohm X seed");
 
     const QVariantMap relevantWithDifferentTrajectory = invoke_policy(
         policy.get(), "distanceTarget", earthZones, 5000.0, 4000.0,
@@ -200,13 +200,13 @@ void verify_sigra_fit_policy() {
     const double scale = invoke_policy(policy.get(), "scaleFor",
                                        1516.0, 224.0, 15.0, 15.0).toDouble();
     require_near(scale, 224.0 / 30.0, 1.0e-9,
-                 "equal-ohm Locus transform is constrained by the SIGRA-like vertical range");
+                 "equal-ohm Locus transform is constrained by the reference-like vertical range");
     const double rHalf = 1516.0 / (2.0 * scale);
     const double xHalf = 224.0 / (2.0 * scale);
     require(rHalf > 95.0 && rHalf < 110.0,
-            "wide SIGRA-like panel naturally exposes about +/-100 ohm R");
+            "wide reference-like panel naturally exposes about +/-100 ohm R");
     require_near(xHalf, 15.0, 1.0e-9,
-                 "wide SIGRA-like panel exposes +/-15 ohm X");
+                 "wide reference-like panel exposes +/-15 ohm X");
 
     QFile locusSource(QStringLiteral(ARDIREC_QML_DIR) + QStringLiteral("/LocusView.qml"));
     require(locusSource.open(QIODevice::ReadOnly | QIODevice::Text),
@@ -226,11 +226,11 @@ int main(int argc, char* argv[]) {
     try {
         verify_complete_backward_cycle();
         verify_production_locus_window_validity();
-        verify_sigra_fit_policy();
-        std::cout << "ardirec R5.4 SIGRA Locus parity qualification: PASS\n";
+        verify_reference_fit_policy();
+        std::cout << "ardirec R5.4 reference Locus parity qualification: PASS\n";
         return 0;
     } catch (const std::exception& ex) {
-        std::cerr << "ardirec R5.4 SIGRA Locus parity qualification: FAIL: "
+        std::cerr << "ardirec R5.4 reference Locus parity qualification: FAIL: "
                   << ex.what() << '\n';
         return 1;
     }

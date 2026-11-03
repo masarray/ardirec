@@ -55,7 +55,7 @@ The following are follow-up optimizations, not reasons to delay this foundationa
 - Broader randomized/fuzz COMTRADE corpus testing beyond the deterministic corruption regression suite.
 - Multi-level LOD pyramids if profiling shows the bounded single-level cache is insufficient for extreme viewport/channel combinations.
 - Further parallelization of heavy analytical transforms after numerical parity tests are established.
-- SIGRA numerical distance/locus parity work; visual/performance code must not cosmetically alter engineering trajectories.
+- reference numerical distance/locus parity work; visual/performance code must not cosmetically alter engineering trajectories.
 
 ## Release discipline
 

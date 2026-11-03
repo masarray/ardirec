@@ -83,9 +83,9 @@ Generic LINE borders are interpreted as half-planes using the RIO LEFT/RIGHT ins
 
 Zone filtering follows the active measuring loop: `LN` applies to earth loops, `LL` to phase-phase loops, specific loop identifiers apply only to the matching loop, and `ALL` applies everywhere.
 
-### Legacy SIGRA RIO
+### Legacy reference RIO
 
-The SIGRA compatibility path also recognizes legacy `BEGIN PROTECTIONDEVICE` RIO files. `TRIPCHAR` polygons become internal `LL` characteristics and `TRIPCHAR-EARTH` polygons become `LN` characteristics. `LINEANGLE`, `RE/RL` and `XE/XL` are imported for earth-loop compensation. Mutual/parallel-circuit parameters can be detected and reported, but the parallel-line compensation algorithm remains outside the current parity scope.
+The reference compatibility path also recognizes legacy `BEGIN PROTECTIONDEVICE` RIO files. `TRIPCHAR` polygons become internal `LL` characteristics and `TRIPCHAR-EARTH` polygons become `LN` characteristics. `LINEANGLE`, `RE/RL` and `XE/XL` are imported for earth-loop compensation. Mutual/parallel-circuit parameters can be detected and reported, but the parallel-line compensation algorithm remains outside the current parity scope.
 
 ## Primary / Secondary zone base
 
@@ -99,7 +99,7 @@ Zsecondary / Zprimary = (Vsecondary / Vprimary) * (Iprimary / Isecondary)
 
 and converts imported zone geometry to the global ardirec Primary/Secondary representation. If ratio metadata is incomplete, file-native zone values are retained at 1:1 and the UI raises a warning; the application must not claim that conversion was verified.
 
-## SIGRA-style dual locus view
+## reference-style dual locus view
 
 Protection mode renders two R-X diagrams simultaneously:
 
@@ -108,11 +108,11 @@ Protection mode renders two R-X diagrams simultaneously:
 
 All available loops are visible at the same time. The loop selector is retained as an **inspection selector** for C1/C2 values and marker emphasis; it no longer hides the other protection trajectories.
 
-The R-X transform is **conformal**: one ohm uses the same number of screen pixels on the R and X axes. A wide diagram therefore naturally shows a much larger numerical R span than X span. This preserves relay characteristic geometry and matches the circle-diagram contract used by SIGRA.
+The R-X transform is **conformal**: one ohm uses the same number of screen pixels on the R and X axes. A wide diagram therefore naturally shows a much larger numerical R span than X span. This preserves relay characteristic geometry and matches the circle-diagram contract used by reference.
 
 Impedance does not have a useful finite maximum for display fitting. The automatic viewport therefore uses an **ideal-display** strategy instead of literal min/max: it fits imported zone geometry together with the robust core of the full-record trajectory (80th percentile of absolute R/X values), adds engineering margin, and clips rare extreme excursions at the viewport boundary. The underlying locus samples are not deleted or modified; only the spatial display window is robust to low-current/post-trip impedance excursions.
 
-The visual treatment intentionally favors disturbance-analysis readability over decorative UI: white plotting field, restrained grid, thin zone outlines, thin trajectories, sparse square sample markers, synchronized cursor crosses, and compact SIGRA-like zone/loop legends.
+The visual treatment intentionally favors disturbance-analysis readability over decorative UI: white plotting field, restrained grid, thin zone outlines, thin trajectories, sparse square sample markers, synchronized cursor crosses, and compact reference-like zone/loop legends.
 
 ## XRIO boundary
 
@@ -145,7 +145,7 @@ Regression tests include:
 5. synthetic classic RIO with LL circle and LN quadrilateral geometry;
 6. fault-loop filtering and Primary/Secondary zone scaling;
 7. synthetic standardized XRIO adaptation through the desktop import boundary;
-8. legacy SIGRA RIO conversion into LL/LN characteristics;
+8. legacy reference RIO conversion into LL/LN characteristics;
 9. sample-aligned six-loop availability, timestamp preservation, decimation and post-open current-floor rejection through the desktop analysis boundary.
 
 Cross-tool comparison with legally obtained records and relay settings remains required before claiming protection-algorithm parity with a commercial analysis package.

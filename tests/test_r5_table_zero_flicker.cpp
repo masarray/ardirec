@@ -75,7 +75,7 @@ QVariantMap row_for_channel(const QVariantMap& frame, int channelIndex) {
 
 void verify_async_atomic_frame() {
     const std::filesystem::path cfgPath = std::filesystem::path(ARDIREC_TEST_DATA_DIR)
-                                              / "distance_sigra_parity.cfg";
+                                              / "distance_reference_parity.cfg";
     DocumentController document;
     document.openCfg(QUrl::fromLocalFile(QString::fromStdString(cfgPath.string())));
     wait_for_document(document);

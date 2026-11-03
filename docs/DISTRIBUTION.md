@@ -1,7 +1,7 @@
 # ArDiRec R8 Installer Distribution
 
 The v0.2.0 public Stable release follows owner-reported manual acceptance, full CI,
-CodeQL and packaged installer smoke testing. CI success alone does not certify SIGRA
+CodeQL and packaged installer smoke testing. CI success alone does not certify reference
 parity or every vendor COMTRADE format.
 
 ## Windows (x64, Windows 10/11)
@@ -44,5 +44,5 @@ The publishing job downloads artifacts from that same workflow run, validates
 the two ZIP filenames, calculates SHA256SUMS.txt, and publishes only an
 explicitly requested, non-prerelease stable SemVer version. It never publishes
 on source pushes. The owner has reported product testing and approved the
-initial stable publication. This does not assert full SIGRA parity or complete
+initial stable publication. This does not assert full reference parity or complete
 multi-vendor COMTRADE certification; broader acceptance remains ongoing.

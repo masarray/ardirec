@@ -1,108 +1,70 @@
 <p align="center">
-  <img src="icon/android-chrome-192x192.png" width="128" height="128" alt="ArDiRec logo">
+  <img src="icon/android-chrome-192x192.png" alt="ArDiRec" width="84" height="84">
+</p>
+<h1 align="center">ArDiRec</h1>
+<p align="center">Open-source COMTRADE disturbance analysis for protection and power-system engineers.</p>
+<p align="center">
+  <a href="https://github.com/masarray/ardirec/releases/latest">Download stable</a> ·
+  <a href="docs/GETTING_STARTED.md">Get started</a> ·
+  <a href="docs/FAQ.md">FAQ</a> ·
+  <a href="https://github.com/masarray/ardirec/issues">Report an issue</a>
 </p>
 
-# ArDiRec
+ArDiRec (Ari Disturbance Recorder) is a vendor-neutral desktop workstation for opening, inspecting and understanding disturbance recordings. It combines time-domain signals, digital events and electrical analysis in a responsive workspace. Your source record is never silently rewritten.
 
-**ArDiRec** (Ari Disturbance Recorder) is an open-source, vendor-neutral COMTRADE workstation for protection and disturbance engineers.
+**Current public release:** [v0.2.0 Stable](https://github.com/masarray/ardirec/releases/tag/v0.2.0) · Windows 10/11 x64 · Linux x86_64
 
-> Open any disturbance record. Understand it immediately.
+## Download
 
-The project is intentionally being built in layers. The first product gate is a **SIGRA/TransView-class manual disturbance-analysis workstation** with a more modern, compact and smooth industrial UX. Multi-record combination, fault analysis and protection intelligence come only after the manual viewer is trustworthy.
+| Platform | Package | Installation |
+| --- | --- | --- |
+| Windows 10/11 (x64) | [Windows installer ZIP](https://github.com/masarray/ardirec/releases/download/v0.2.0/ArDiRec-v0.2.0-Windows-x64-Setup.zip) | Extract ZIP, run the setup wizard; installs for the current user |
+| Linux (x86_64) | [Linux installer ZIP](https://github.com/masarray/ardirec/releases/download/v0.2.0/ArDiRec-v0.2.0-Linux-x86_64-Setup.zip) | Extract ZIP; choose the Debian `.deb` installer or portable `.AppImage` |
 
-## Product direction
+Verify downloads against [SHA256SUMS.txt](https://github.com/masarray/ardirec/releases/download/v0.2.0/SHA256SUMS.txt). Windows binaries are **not code-signed**; SmartScreen may ask for confirmation. See [Getting started](docs/GETTING_STARTED.md) for detailed instructions.
 
-ArDiRec targets four qualities above feature count:
+## Explore a disturbance record
 
-1. **Compatibility** — real-world COMTRADE 1991/1999/2001/2013, including ugly vendor edge cases.
-2. **Speed** — progressive loading, lazy decoding, multi-resolution waveform LOD and GPU rendering.
-3. **Clarity** — compact precision-industrial UX where the waveform is the primary surface.
-4. **Engineering transparency** — every calculated quantity must be reproducible and explainable.
+- **Time signals:** synchronized analog waveforms and digital pickup/trip tracks, with trigger-relative timing, zoom, pan and dual measurement cursors.
+- **Electrical views:** instantaneous values, one-cycle RMS, phasors, R–X impedance locus, harmonics and a value table.
+- **Measurement context:** C1/C2 readings, differences, primary/secondary representation when valid transformer metadata is present, and phase-aware channel handling.
+- **Engineering workflow:** multi-window analysis workspace, fault-loop selection, protection-zone overlays for supported RIO/XRIO data, and explicit diagnostics where an interpretation is unsupported.
+- **Performance:** indexed/lazy record access, bounded waveform level-of-detail rendering and asynchronous analysis. CI exercises large-record benchmarks, including 10-million-sample and 120-channel scenarios.
 
-See [PRD](docs/PRD.md), [parity matrix](docs/PARITY_MATRIX.md), [architecture](docs/ARCHITECTURE.md), and [roadmap](docs/ROADMAP.md).
+The first Stable release focuses on **manual investigation**. It is not an automatic fault-classification system or a guarantee that every vendor extension can be interpreted. Supported formats and remaining gaps are documented in [COMTRADE compatibility](docs/COMTRADE_COMPATIBILITY.md).
 
-## Current status — v0.2.0 public Stable
+## Quick start
 
-The initial stable desktop release contains:
+1. Download the package for your operating system and extract the ZIP.
+2. Install or launch ArDiRec.
+3. Open a COMTRADE `.cfg` file. Keep the matching `.dat` and any available companion files in the same folder.
+4. Select relevant voltage, current and digital signals. Navigate the time axis, then position C1/C2 around an event.
+5. Switch to RMS, phasor, locus, harmonics or table views as needed. Check scaling and units before making an engineering decision.
 
-- C++20 COMTRADE CFG parser.
-- DAT decoding for ASCII, BINARY, BINARY32 and FLOAT32.
-- Packed digital/status decoding.
-- Automatic sibling-file discovery (`.cfg/.dat/.hdr/.inf/.dmf`).
-- `ardirec-cli inspect` for deterministic parser smoke tests.
-- Qt Quick disturbance stack with synchronized voltage, current, other analog and digital-event tracks.
-- Custom `QQuickItem` / Qt Scene Graph waveform rendering, min/max display decimation, shared timebase, fixed trigger reference, pan/zoom and dual measurement cursors.
-- Cursor hover feedback plus snapping to nearby rising/falling COMTRADE digital transitions for protection timing measurements.
-- Standard electrical phase identity across voltage/current views: L1 red, L2 yellow, L3 blue, E/N green.
-- Time Signals with Instantaneous / one-cycle RMS switching that preserves the same investigation context.
-- Synchronized Phasor, raw R-X Locus, Harmonics and Value Table views.
-- Global **Secondary / Primary** value representation driven by COMTRADE transformer-ratio and recorded-side metadata; the same representation is consumed by waveform, RMS, phasor, harmonics, table and raw impedance calculations.
-- Compact cursor-analysis header with C1, C2, C2-C1 and C2+C1 plus simultaneous instantaneous/RMS values.
-- Windows 10/11 installer ZIP and Linux installer/AppImage ZIP with packaging smoke tests.
-- Product, compatibility, performance and validation specifications.
+See the [step-by-step guide](docs/GETTING_STARTED.md), [FAQ](docs/FAQ.md) and [known limitations](docs/COMTRADE_COMPATIBILITY.md).
 
-Large COMTRADE records use indexed/lazy DAT access and bounded waveform LOD. CI exercises 10M-sample and 120-channel cases, while broader vendor compatibility and full SIGRA parity remain ongoing validation work.
+## Building from source
 
-## Download and install v0.2.0 Stable
-
-Get the verified installer ZIPs from the [latest public Stable release](https://github.com/masarray/ardirec/releases/latest):
-
-- **Windows 10/11 x64:** `ArDiRec-v<VERSION>-Windows-x64-Setup.zip` contains a
-  conventional Inno Setup wizard (per-user, no admin required), Start menu
-  entry, optional desktop shortcut, in-place upgrades and standard uninstall.
-- **Linux x86_64:** `ArDiRec-v<VERSION>-Linux-x86_64-Setup.zip` contains a
-  double-click-installable Debian `.deb` package for Ubuntu/Debian users and
-  a portable AppImage alternative for compatible Linux desktop distributions.
-
-Unzip the matching package, read its README, and launch the installer.
-The Windows setup is **not code-signed**; ZIP packaging does not avoid
-Windows SmartScreen warnings. Verify SHA256SUMS from the official release.
-
-This is a user-tested initial Stable release for manual disturbance-record investigation,
-not a certification of complete SIGRA parity or all proprietary vendor formats.
-See [installer and test contract](docs/DISTRIBUTION.md).
-
-## Build
-
-### Core + CLI only
+Requires CMake 3.24+, a C++20 compiler, and Qt 6.8+ with Qt Quick/QML for the desktop application.
 
 ```bash
-cmake -S . -B build -G Ninja -DARDIREC_BUILD_DESKTOP=OFF
-cmake --build build
-ctest --test-dir build --output-on-failure
-./build/cli/ardirec-cli inspect tests/data/minimal_1999.cfg
+cmake -S . -B build -DARDIREC_BUILD_DESKTOP=ON -DARDIREC_BUILD_TESTS=ON
+cmake --build build --config Release
+ctest --test-dir build -C Release --output-on-failure
 ```
 
-### Desktop
+For a core-only build, set `-DARDIREC_BUILD_DESKTOP=OFF`. Use a compatible Qt installation and CMake toolchain for your platform. See [architecture](docs/ARCHITECTURE.md), [performance contract](docs/PERFORMANCE_CONTRACT.md), and [contribution guide](CONTRIBUTING.md).
 
-Requirements:
+## Project and trust
 
-- CMake 3.24+
-- C++20 compiler
-- Qt 6.8+ (Qt 6.11.2 is the recommended development version as of August 2026)
-- Qt Quick, QML and Quick Controls 2
+ArDiRec is written in C++20 with Qt Quick and custom Qt Scene Graph rendering. The source is licensed under [GPL-3.0-or-later](LICENSE). Automated CI covers numerical regression, core builds across operating systems, desktop behavior, Windows installation/uninstallation, Linux packaging and code scanning.
 
-```bash
-cmake -S . -B build -G Ninja -DCMAKE_PREFIX_PATH=/path/to/Qt/6.x.x/<kit>
-cmake --build build
-```
+**Be precise about validation:** successful tests and a Stable release do not establish compatibility with every field recording or certify third-party engineering parity. Verify calculated values against your equipment context and approved engineering procedures.
 
-Qt 6.11.2 is currently available in the official Qt release tree; the project keeps a Qt 6.8 minimum so contributors can also use the maintained 6.8 line.
+- [Releases and changelog](CHANGELOG.md)
+- [Project status](PROJECT_STATUS.md)
+- [Security and responsible disclosure](SECURITY.md)
+- [Contributing](CONTRIBUTING.md)
+- [Issue tracker](https://github.com/masarray/ardirec/issues)
 
-## Non-goals for Viewer 1.0
-
-Viewer 1.0 does **not** include AI-generated fault conclusions. It first earns trust through manual investigation parity: time signals, cursors, RMS/phasors, vector, symmetrical components, power/frequency, impedance/R-X, harmonics, formulas, RIO/XRIO overlays, tables and exports.
-
-## Licensing
-
-ArDiRec is licensed under the **GNU General Public License v3.0 or later**. See [LICENSE](LICENSE).
-
-Third-party code must be license-compatible and documented. Competitor products are used only as black-box capability/UX benchmarks; proprietary code and visual assets must not be copied.
-
-## Trademark note
-
-SIGRA, SIPROTEC, OMICRON, TransView, SEL and other product names are trademarks of their respective owners. ArDiRec is not affiliated with or endorsed by those vendors.
-
-## Contributing
-
-Start with [CONTRIBUTING.md](CONTRIBUTING.md). Compatibility fixtures, reproducible parser edge cases, benchmark records that can legally be redistributed, and calculation-validation evidence are especially valuable.
+Copyright and trademarks remain with their respective owners. ArDiRec is an independent open-source project.

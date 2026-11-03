@@ -86,7 +86,7 @@ int main(int argc, char* argv[]) {
     QCoreApplication app(argc, argv);
     try {
         const std::filesystem::path cfgPath = std::filesystem::path(ARDIREC_TEST_DATA_DIR)
-                                              / "distance_sigra_parity.cfg";
+                                              / "distance_reference_parity.cfg";
         DocumentController document;
         document.openCfg(QUrl::fromLocalFile(QString::fromStdString(cfgPath.string())));
         wait_for_document(document);

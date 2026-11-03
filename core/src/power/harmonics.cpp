@@ -102,7 +102,7 @@ HarmonicSpectrum harmonic_spectrum(std::span<const double> samples,
                                       / static_cast<long double>(finite_count);
         const auto value = accumulators[static_cast<std::size_t>(order - 1)] * rms_scale;
         const double magnitude = static_cast<double>(std::abs(value));
-        // DFT coefficients are cosine-referenced. Protection tools such as SIGRA
+        // DFT coefficients are cosine-referenced. Protection tools such as reference
         // report sine-wave phase position at the reference instant, hence +90 deg.
         const double raw_angle = static_cast<double>(std::atan2(value.imag(), value.real())
                                                        * 180.0L / kPi);

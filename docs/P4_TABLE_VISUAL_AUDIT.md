@@ -14,4 +14,4 @@ The P4 redesign prioritizes scan speed:
 - horizontal scrolling only when the viewport is too narrow;
 - virtualized rows and cached snapshots.
 
-The design intentionally uses SIGRA's engineering density as a capability reference but keeps ardirec's own modern neutral visual identity.
+The design intentionally uses reference's engineering density as a capability reference but keeps ardirec's own modern neutral visual identity.

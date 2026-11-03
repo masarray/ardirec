@@ -41,7 +41,7 @@ require("tests/test_r4_cursor_isolation.cpp", "cursor.cursorA() == frozenA",
 for token in ("frozenScreen.fraction", "frozenScreen.angleDegrees", "frozenScreen.x", "frozenScreen.y"):
     require("tests/test_r4_cursor_isolation.cpp", token,
             "C1 normalized screen transform must be frozen while C2 moves")
-require("tests/test_r4_cursor_isolation.cpp", "distance_sigra_parity.cfg",
+require("tests/test_r4_cursor_isolation.cpp", "distance_reference_parity.cfg",
         "C1/C2 isolation must use a deterministic COMTRADE engineering fixture")
 
 # 2. Locus parity/default fit remains explicit and production-path native.

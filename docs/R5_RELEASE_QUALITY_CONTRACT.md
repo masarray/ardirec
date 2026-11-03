@@ -18,10 +18,10 @@ R5 adds no product feature before these release blockers are closed.
 R5.0 deliberately does **not** change production DFT or distance equations. The following repository blobs are locked by `scripts/r5_release_contract.json` and checked by `scripts/check_r5_release_contract.py`:
 
 - `core/src/distance/distance.cpp`
-- `tests/data/distance_sigra_parity.cfg`
-- `tests/data/distance_sigra_parity.dat`
-- `tests/data/distance_sigra_parity.rio`
-- `tests/data/ligne_1_sigra.rio`
+- `tests/data/distance_reference_parity.cfg`
+- `tests/data/distance_reference_parity.dat`
+- `tests/data/distance_reference_parity.rio`
+- `tests/data/ligne_1_reference.rio`
 
 A later R5 stage may change a locked numerical anchor only when its issue contains executable golden evidence proving a numerical defect and the manifest is deliberately updated in the same review.
 
@@ -29,9 +29,9 @@ A later R5 stage may change a locked numerical anchor only when its issue contai
 
 ## Reference limitation recorded by R5.0
 
-The repository currently contains the deterministic `distance_sigra_parity` CFG/DAT/RIO fixture and the `ligne_1_sigra.rio` protection reference. The original complete `ligne_1` CFG/DAT/HDR set used for manual SIGRA comparison is not versioned in the repository. R5.0 therefore does not invent or synthesize that missing raw reference.
+The repository currently contains the deterministic `distance_reference_parity` CFG/DAT/RIO fixture and the `ligne_1_reference.rio` protection reference. The original complete `ligne_1` CFG/DAT/HDR set used for manual reference comparison is not versioned in the repository. R5.0 therefore does not invent or synthesize that missing raw reference.
 
-R5.4 keeps the original user-supplied `ligne_1` record and SIGRA screenshots as explicit manual qualification inputs rather than silently committing private/raw field material. Issue #85 records the provenance. The repository-side executable qualification uses the locked `ligne_1_sigra.rio` protection model plus deterministic COMTRADE fixtures; final R5.5 Windows/SIGRA comparison still uses the original full record.
+R5.4 keeps the original user-supplied `ligne_1` record and reference screenshots as explicit manual qualification inputs rather than silently committing private/raw field material. Issue #85 records the provenance. The repository-side executable qualification uses the locked `ligne_1_reference.rio` protection model plus deterministic COMTRADE fixtures; final R5.5 Windows/reference comparison still uses the original full record.
 
 ## Release-blocking contracts
 
@@ -84,7 +84,7 @@ The former mandatory `SequenceSummary` block is removed from the Table layout. S
 
 R5.3 deliberately does **not** change the Table's existing beginning-of-record measurement-window policy. Complete backward-cycle qualification remains owned by R5.4 so the zero-flicker refactor cannot silently change numerical validity rules.
 
-### R5.4 — SIGRA Locus parity (#76)
+### R5.4 — reference Locus parity (#76)
 
 Qualified DFT/distance equations are not changed merely to make a plot look familiar. R5.4 first corrects measurement-window validity and view policy, then changes mathematics only if a golden test proves it necessary.
 
@@ -94,15 +94,15 @@ Required behavior:
 - C1/C2 position does not participate in automatic viewport scale selection;
 - low-current poles/outliers do not dominate the default investigation viewport;
 - complete finite trajectory remains available through a forensic Fit All path;
-- trajectory, zones, orientation, C1/C2 markers and default viewport are compared against the SIGRA reference.
+- trajectory, zones, orientation, C1/C2 markers and default viewport are compared against the reference reference.
 
-R5.4 keeps the frozen Siemens/SIGRA classical earth-loop equation and all locked distance blobs unchanged. `trailing_cycle_window()` now rejects beginning-of-record requests until the complete backward period exists; it still uses timestamp-cell weighting and therefore remains valid across COMTRADE sample-rate section boundaries.
+R5.4 keeps the frozen traditional protection-tool classical earth-loop equation and all locked distance blobs unchanged. `trailing_cycle_window()` now rejects beginning-of-record requests until the complete backward period exists; it still uses timestamp-cell weighting and therefore remains valid across COMTRADE sample-rate section boundaries.
 
-Default Locus scaling is separated into `LocusFitPolicy.qml`. When protection zones are present, **Fit Relevant is protection-context driven**: the zone family defines the target engineering range and finite remote trajectory poles are allowed to clip, matching the supplied SIGRA Circle Diagrams reference. C1/C2 are overlay markers only and never participate in auto-fit. When zones are absent, the existing robust trajectory extent remains the fallback. **Fit All** still uses the complete finite family extent, so no numerical trajectory point is discarded merely to obtain a readable default view.
+Default Locus scaling is separated into `LocusFitPolicy.qml`. When protection zones are present, **Fit Relevant is protection-context driven**: the zone family defines the target engineering range and finite remote trajectory poles are allowed to clip, matching the supplied reference Circle Diagrams reference. C1/C2 are overlay markers only and never participate in auto-fit. When zones are absent, the existing robust trajectory extent remains the fallback. **Fit All** still uses the complete finite family extent, so no numerical trajectory point is discarded merely to obtain a readable default view.
 
-The locked `ligne_1_sigra.rio` has an outer protection characteristic near `R = ±13.05 Ω`, `X = ±12 Ω`. With the production nice-range policy this becomes a 15 Ω target. Because the plot uses one common pixel-per-ohm scale on both axes, the wide SIGRA-like panel naturally exposes about `±100 Ω` horizontally while holding `±15 Ω` vertically—the same investigation framing seen in the supplied SIGRA screenshot, without altering impedance mathematics.
+The locked `ligne_1_reference.rio` has an outer protection characteristic near `R = ±13.05 Ω`, `X = ±12 Ω`. With the production nice-range policy this becomes a 15 Ω target. Because the plot uses one common pixel-per-ohm scale on both axes, the wide reference-like panel naturally exposes about `±100 Ω` horizontally while holding `±15 Ω` vertically—the same investigation framing seen in the supplied reference screenshot, without altering impedance mathematics.
 
-`ardirec_r5_locus_parity_tests` executes three layers of evidence: complete-cycle rejection/acceptance including a multi-rate timestamp window; the production `LocusSnapshotController` on `distance_p1` proving pre-cycle points become invalid while the qualified 100+j0 Ω golden point stays unchanged; and the production `LocusFitPolicy.qml` against `ligne_1_sigra.rio`, proving protection-context Fit Relevant remains stable despite large finite trajectory outliers while Fit All still expands to expose them.
+`ardirec_r5_locus_parity_tests` executes three layers of evidence: complete-cycle rejection/acceptance including a multi-rate timestamp window; the production `LocusSnapshotController` on `distance_p1` proving pre-cycle points become invalid while the qualified 100+j0 Ω golden point stays unchanged; and the production `LocusFitPolicy.qml` against `ligne_1_reference.rio`, proving protection-context Fit Relevant remains stable despite large finite trajectory outliers while Fit All still expands to expose them.
 
 ### R5.5 — release gate (#77)
 
@@ -114,7 +114,7 @@ python3 scripts/check_r5_release_contract.py --require-release-ready
 
 It must fail until every manifest contract has graduated from `known_fail` to `pass` and the corresponding source probe observes the corrected state.
 
-R5.5 additionally requires exact-head CI, CodeQL, Windows build/CTest, packaged startup smoke, scrub/MDI lifecycle stress, merge with expected head SHA, post-merge `main` validation, and manual Windows/SIGRA comparison before `0.2.0-rc.1` is allowed.
+R5.5 additionally requires exact-head CI, CodeQL, Windows build/CTest, packaged startup smoke, scrub/MDI lifecycle stress, merge with expected head SHA, post-merge `main` validation, and manual Windows/reference comparison before `0.2.0-rc.1` is allowed.
 
 ## Known-failure accounting
 

@@ -1,6 +1,6 @@
 BEGIN PROTECTIONDEVICE
 DEVICE               7SA522
-SUBSTATION           SIGRA 4
+SUBSTATION           REFERENCE FEEDER
 FEEDER                Ligne 1 
   RATING                100.000,   100.000,    50.000
   MAX                   120.000,    10.000

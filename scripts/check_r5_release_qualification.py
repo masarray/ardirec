@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """R5.5 release-qualification guard.
 
-This gate intentionally does not replace the manual Windows/SIGRA visual check.
+This gate intentionally does not replace the manual Windows/reference visual check.
 It proves that every executable R5 contract is green, version identity has one
 source of truth, and CI/Windows packaging repeatedly exercise the release-
 blocking interaction/lifecycle paths before an RC can be promoted.
@@ -107,7 +107,7 @@ else:
 forbid(".github/workflows/release.yml", "0.2.0-alpha.14",
        "release workflow must not publish a stale historical build after R5.5")
 
-require("docs/R5_RELEASE_QUALIFICATION.md", "manual Windows/SIGRA",
+require("docs/R5_RELEASE_QUALIFICATION.md", "manual Windows/reference",
         "the non-automatable final visual gate must remain explicit")
 require("docs/R5_RELEASE_QUALIFICATION.md", "0.2.0-rc.1",
         "RC promotion policy must remain explicit")

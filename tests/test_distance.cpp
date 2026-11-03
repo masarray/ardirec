@@ -71,7 +71,7 @@ int main() {
         require(lnResult.valid, "L1-E compensated loop is valid");
         require_complex_near(lnResult.impedance, targetLn, 1.0e-12, "L1-E compensation recovers target impedance");
 
-        // Classical SIGRA compensation is not a complex-kL shortcut. RE/RL and
+        // Classical reference compensation is not a complex-kL shortcut. RE/RL and
         // XE/XL multiply the earth current independently in the R and X equations.
         ThreePhasePhasors classical{};
         classical.current[0] = {1.2, -0.35};
@@ -183,35 +183,35 @@ END TESTOBJECT
         require(!ardirec::distance::zone_matches_loop(quad, FaultLoop::L2L3), "LN zone excluded from phase-phase loop");
 
         const std::filesystem::path dataDir = ARDIREC_TEST_DATA_DIR;
-        const auto sigraModel = ardirec::distance::parse_rio(read_text_file(dataDir / "ligne_1_sigra.rio"));
-        require(sigraModel.valid, "legacy SIGRA PROTECTIONDEVICE RIO parses");
-        require(sigraModel.device_name == "7SA522", "legacy SIGRA device name");
-        require_near(sigraModel.line_angle_degrees, 80.0, 1.0e-12, "legacy SIGRA line angle");
-        require(sigraModel.grounding_factor_valid, "legacy SIGRA grounding factor available");
-        require_complex_near(sigraModel.grounding_factor, {1.0, 0.0}, 1.0e-12,
-                             "legacy SIGRA RE/RL and XE/XL convert to kL when explicit line angle is present");
-        require(sigraModel.zones.size() == 10, "legacy SIGRA five zones become LL/LN pairs");
+        const auto referenceModel = ardirec::distance::parse_rio(read_text_file(dataDir / "ligne_1_reference.rio"));
+        require(referenceModel.valid, "legacy reference PROTECTIONDEVICE RIO parses");
+        require(referenceModel.device_name == "7SA522", "legacy reference device name");
+        require_near(referenceModel.line_angle_degrees, 80.0, 1.0e-12, "legacy reference line angle");
+        require(referenceModel.grounding_factor_valid, "legacy reference grounding factor available");
+        require_complex_near(referenceModel.grounding_factor, {1.0, 0.0}, 1.0e-12,
+                             "legacy reference RE/RL and XE/XL convert to kL when explicit line angle is present");
+        require(referenceModel.zones.size() == 10, "legacy reference five zones become LL/LN pairs");
 
-        const auto& sigraZ1Ll = sigraModel.zones[0];
-        const auto& sigraZ1Ln = sigraModel.zones[1];
-        require(sigraZ1Ll.label == "Zone Z1" && sigraZ1Ll.fault_loop == "LL", "legacy Z1 phase-phase mapping");
-        require(sigraZ1Ln.label == "Zone Z1" && sigraZ1Ln.fault_loop == "LN", "legacy Z1 earth mapping");
-        require(sigraZ1Ll.shape.kind == ardirec::distance::ZoneShapeKind::Polygon
-                    && sigraZ1Ll.shape.points.size() == 6,
+        const auto& referenceZ1Ll = referenceModel.zones[0];
+        const auto& referenceZ1Ln = referenceModel.zones[1];
+        require(referenceZ1Ll.label == "Zone Z1" && referenceZ1Ll.fault_loop == "LL", "legacy Z1 phase-phase mapping");
+        require(referenceZ1Ln.label == "Zone Z1" && referenceZ1Ln.fault_loop == "LN", "legacy Z1 earth mapping");
+        require(referenceZ1Ll.shape.kind == ardirec::distance::ZoneShapeKind::Polygon
+                    && referenceZ1Ll.shape.points.size() == 6,
                 "legacy Z1 TRIPCHAR vertex polygon");
-        require(sigraZ1Ln.shape.kind == ardirec::distance::ZoneShapeKind::Polygon
-                    && sigraZ1Ln.shape.points.size() == 5,
+        require(referenceZ1Ln.shape.kind == ardirec::distance::ZoneShapeKind::Polygon
+                    && referenceZ1Ln.shape.points.size() == 5,
                 "legacy Z1 TRIPCHAR-EARTH vertex polygon");
-        require_near(sigraZ1Ll.shape.points[1].r, -1.086, 1.0e-12, "legacy Z1 LL vertex R");
-        require_near(sigraZ1Ll.shape.points[1].x, 1.880, 1.0e-12, "legacy Z1 LL vertex X");
-        require(ardirec::distance::zone_matches_loop(sigraZ1Ll, FaultLoop::L1L2), "legacy LL zone matches phase loop");
-        require(!ardirec::distance::zone_matches_loop(sigraZ1Ll, FaultLoop::L1E), "legacy LL zone excluded from earth loop");
-        require(ardirec::distance::zone_matches_loop(sigraZ1Ln, FaultLoop::L1E), "legacy LN zone matches earth loop");
+        require_near(referenceZ1Ll.shape.points[1].r, -1.086, 1.0e-12, "legacy Z1 LL vertex R");
+        require_near(referenceZ1Ll.shape.points[1].x, 1.880, 1.0e-12, "legacy Z1 LL vertex X");
+        require(ardirec::distance::zone_matches_loop(referenceZ1Ll, FaultLoop::L1L2), "legacy LL zone matches phase loop");
+        require(!ardirec::distance::zone_matches_loop(referenceZ1Ll, FaultLoop::L1E), "legacy LL zone excluded from earth loop");
+        require(ardirec::distance::zone_matches_loop(referenceZ1Ln, FaultLoop::L1E), "legacy LN zone matches earth loop");
 
-        const auto& sigraZ1bLl = sigraModel.zones[8];
-        const auto& sigraZ1bLn = sigraModel.zones[9];
-        require(sigraZ1bLl.label == "Zone Z1B" && sigraZ1bLl.type == "OVERREACH", "legacy overreach LL preserved");
-        require(sigraZ1bLn.label == "Zone Z1B" && sigraZ1bLn.type == "OVERREACH", "legacy overreach LN preserved");
+        const auto& referenceZ1bLl = referenceModel.zones[8];
+        const auto& referenceZ1bLn = referenceModel.zones[9];
+        require(referenceZ1bLl.label == "Zone Z1B" && referenceZ1bLl.type == "OVERREACH", "legacy overreach LL preserved");
+        require(referenceZ1bLn.label == "Zone Z1B" && referenceZ1bLn.type == "OVERREACH", "legacy overreach LN preserved");
 
         std::cout << "ardirec distance tests: PASS\n";
         return 0;

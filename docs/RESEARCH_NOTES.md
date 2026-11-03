@@ -4,7 +4,7 @@ These references inform capability targets, interoperability risks and future va
 
 ## Commercial capability benchmarks
 
-- Siemens SIGRA — time signals, synchronized cursors, calculated quantities, vector/locus/harmonics/table and multi-record workflows.
+- independent engineering reference — time signals, synchronized cursors, calculated quantities, vector/locus/harmonics/table and multi-record workflows.
 - OMICRON TransView — time, vector, locus, harmonics and table workflow; XRIO-based distance-zone context.
 - SEL SynchroWAVe Event — event analysis, reusable displays and custom calculations.
 
