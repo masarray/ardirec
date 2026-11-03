@@ -138,8 +138,7 @@ int main(int argc, char** argv) {
                       << "; model voltage=" << view->property("voltageChannels").toList().size()
                       << ", current=" << view->property("currentChannels").toList().size()
                       << ", digital=" << view->property("displayedDigitalChannels").toList().size()
-                      << '
-';
+                      << '\n';
         }
         require(analog.size() == 7, "three voltage + four current channels instantiated");
         require(digital.size() == 4, "four digital Pickup/Trip channels instantiated");
