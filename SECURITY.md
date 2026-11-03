@@ -1,7 +1,19 @@
-# Security Policy
+# Security policy
 
-ardirec parses files that may come from external parties. Treat COMTRADE and companion files as untrusted input.
+ArDiRec opens measurement files that may originate outside your organization. Treat COMTRADE records and companion metadata as untrusted inputs, even when they come from familiar equipment.
 
-Please report security vulnerabilities privately to the project maintainer rather than publishing an exploit in an issue. Until a dedicated security contact is configured, use GitHub's private vulnerability reporting feature when enabled for the repository.
+## Reporting a vulnerability
 
-Security-sensitive parser changes should include malformed-input tests. The project aims to use bounded reads, checked conversions and sanitizers in development/CI where practical.
+Please use [GitHub private vulnerability reporting](https://github.com/masarray/ardirec/security/advisories) if it is enabled for this repository. Do not publish exploit details, proof-of-concept files, security credentials or confidential substation records in a public issue.
+
+If private reporting is unavailable, contact the repository maintainer privately through an existing trusted channel rather than posting sensitive details publicly. No response-time or remediation SLA is promised.
+
+## In scope
+
+- Unsafe parsing of CFG, DAT and optional companion files.
+- File handling, path traversal, memory safety and resource-exhaustion problems.
+- Unsafe behavior when opening malformed or adversarial records.
+
+Please include the affected ArDiRec version, operating system, reproduction steps and a minimal non-sensitive test case where possible.
+
+Security fixes should add regression tests and preserve bounded-input handling. See [Contributing](CONTRIBUTING.md).

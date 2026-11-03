@@ -1,30 +1,29 @@
-# COMTRADE Compatibility Strategy
+# COMTRADE compatibility
 
-## Canonical target
+ArDiRec is designed for vendor-neutral disturbance recordings. This page separates **current application capabilities** from **compatibility targets** so that users know what is tested and what still needs field evidence.
 
-Implementation behavior is grounded in the applicable IEEE C37.111 / IEC 60255-24 specifications. Open-source projects are compatibility references and test-corpus sources, not the normative standard.
+## Current v0.2.0 capabilities
 
-## Viewer 1.0 target matrix
+- Open a COMTRADE `.cfg` record and locate its companion `.dat`.
+- Decode ASCII, BINARY, BINARY32 and FLOAT32 DAT formats through the core parser.
+- Read analog and packed digital/status signals for the engineering workstation.
+- Use metadata for signal channels, timestamps and primary/secondary representation when those fields are valid.
+- Present diagnostics for unsupported or malformed input rather than silently inventing values.
 
-- Revisions: 1991, 1999, IEC 60255-24:2001, 2013.
-- Containers: CFG+DAT and 2013 CFF.
-- DAT: ASCII, BINARY, BINARY32, FLOAT32.
-- Channels: analog and packed digital/status.
-- Timing: time multiplier, multiple sample-rate segments, timestamp quality/time-code fields where defined.
-- Analog metadata: a/b scaling, skew, primary/secondary CT/VT values.
-- Optional companion metadata: HDR/INF preserved; DMF/equipment mapping evaluated as extension input.
-- Text: robust UTF-8 plus configurable legacy encodings.
+Specific vendor revisions, extensions and sidecar conventions vary. Report an example if a record fails.
 
-## Compatibility diagnostics
+## Compatibility objectives, not certification
 
-Loading should produce three severities:
+The longer-term validation matrix includes COMTRADE 1991, 1999, IEC 60255-24:2001 and 2013; varying sample rates, damaged/truncated files, timestamp quality, character encodings and proprietary metadata. Support for 2013 CFF containers and every legacy text encoding is **not guaranteed in v0.2.0**.
 
-- **Info** — unusual but valid record.
-- **Warning** — recoverable inconsistency; record can still be investigated.
-- **Error** — safe interpretation is impossible.
+Optional RIO/XRIO data may be interpreted for supported zone shapes and compensation conventions. Unsupported proprietary scripts/converters are not executed or guessed.
 
-Examples include DAT length mismatch, missing samples, unsupported extensions, invalid ratios and inconsistent channel counts.
+## Engineering validation
 
-## Torture suite
+Automated tests cover deterministic parser and numerical cases, plus large-record and desktop performance. This is not an exhaustive survey of vendor devices or every operating environment. In field work, verify channel association, timebase, frequency, units, CT/VT scaling and the validity of calculated quantities.
 
-The repository will grow a synthetic redistributable suite covering revisions × data formats × sample-rate patterns × missing values × encodings × malformed boundaries. Vendor-provided records are included only with redistribution permission.
+## Reporting an incompatible record
+
+Open a [GitHub issue](https://github.com/masarray/ardirec/issues) and provide: application version, operating system, COMTRADE revision, DAT type, sample rates, analog/digital channel counts, reproduction steps, diagnostic text, and a minimally shareable sample where authorized.
+
+Do not upload confidential utility or substation recordings without explicit permission.

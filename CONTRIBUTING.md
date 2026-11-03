@@ -1,32 +1,49 @@
-# Contributing to ardirec
+# Contributing to ArDiRec
 
-Thank you for helping build a trustworthy open disturbance-analysis workstation.
+Thank you for contributing to an open-source COMTRADE workstation for protection and disturbance engineering.
 
-## Development priorities
+## Before you begin
 
-Compatibility and correctness outrank feature count. A small parser edge-case fix with a regression fixture is a first-class contribution.
+- Search [existing issues](https://github.com/masarray/ardirec/issues) and open a focused issue for a substantial change.
+- Prefer one engineering problem per pull request; include expected/actual behavior and measurable acceptance criteria.
+- Do not include proprietary source, artwork, user recordings or field datasets without redistribution permission.
+- Security vulnerabilities should follow [responsible disclosure](SECURITY.md), not a public issue.
 
-## Before opening a pull request
+## Build and test
 
-1. Build core and run tests.
-2. Add or update tests for behavior changes.
-3. Do not include COMTRADE records you are not allowed to redistribute.
-4. Keep UI code out of the core parser/calculation layers.
-5. Do not copy proprietary vendor source code, screenshots as application assets, icons or protected UI artwork.
-6. Document algorithm references for new engineering calculations.
-
-## Core test command
+Install CMake 3.24+ and a C++20 compiler. For desktop development, install Qt 6.8+ with Qt Quick/QML.
 
 ```bash
-cmake -S . -B build -G Ninja -DARDIREC_BUILD_DESKTOP=OFF
-cmake --build build
-ctest --test-dir build --output-on-failure
+cmake -S . -B build -DARDIREC_BUILD_DESKTOP=ON -DARDIREC_BUILD_TESTS=ON
+cmake --build build --config Release
+ctest --test-dir build -C Release --output-on-failure
 ```
 
-## Coding style
+To build and test the standalone core without Qt:
 
-C++ uses the repository `.clang-format`. Prefer explicit types at interfaces, RAII, immutable data where practical and deterministic error handling. Heavy work must never be introduced on the Qt UI thread.
+```bash
+cmake -S . -B build-core -DARDIREC_BUILD_DESKTOP=OFF -DARDIREC_BUILD_TESTS=ON
+cmake --build build-core --config Release
+ctest --test-dir build-core -C Release --output-on-failure
+```
 
-## Commit/PR scope
+## Engineering standards
 
-Keep changes reviewable. Parser, calculations and rendering work should include evidence or test fixtures sufficient to reproduce the change.
+1. Preserve source samples, units, timestamps, phase interpretation and numerical meaning; never hide unsupported behavior behind fabricated values.
+2. Add deterministic regression coverage for changes to parsers, calculations or synchronization.
+3. Keep the UI thread responsive. Avoid record-length traversals or heavy calculations inside Qt render callbacks.
+4. Honor the [performance contract](docs/PERFORMANCE_CONTRACT.md), including bounded memory and safe large-record access.
+5. Separate portable core logic from Qt presentation; document assumptions and formula/window conventions.
+6. Test and document any change to install, launch or uninstall behavior on supported platforms.
+
+C++ formatting follows [`.clang-format`](.clang-format). Favor small, testable interfaces, safe lifetimes and explicit failure handling.
+
+## Pull request checklist
+
+- Explain **why** the change matters and which user workflow it improves.
+- Include tests or a reproducible fixture, plus the exact commands used.
+- For GUI changes, attach real screenshots or recordings when possible; avoid mock screenshots presented as working software.
+- For calculation changes, state units, scaling, timing window and reference values.
+- Verify that no confidential data or third-party assets were added.
+
+The repository is licensed under [GPL-3.0-or-later](LICENSE).
