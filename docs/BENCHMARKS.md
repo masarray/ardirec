@@ -2,7 +2,6 @@
 
 ardirec uses established tools as black-box capability benchmarks, not as sources of proprietary code or assets.
 
-- Siemens SIGRA: https://www.siemens.com/en-us/products/siprotec/sigra/
 - OMICRON TransView: https://www.omicronenergy.com/en/products/transview/
 - SEL SynchroWAVe Event: https://selinc.com/products/5601-2/
 

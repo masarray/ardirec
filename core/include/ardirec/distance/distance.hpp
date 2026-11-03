@@ -39,11 +39,11 @@ struct DistanceImpedance {
     double minimum_current = 1.0e-9,
     std::optional<std::complex<double>> residual_current = std::nullopt);
 
-// Classical SIGRA/relay earth-loop compensation keeps the resistive and reactive
+// Classical reference/relay earth-loop compensation keeps the resistive and reactive
 // matching factors independent:
 //   U = (Ip - kr*IE) R + j (Ip - kx*IE) X
 // where kr=RE/RL, kx=XE/XL and IE is the measured earth-current reference used by
-// SIGRA (IE = -(IL1+IL2+IL3) when reconstructed from phase currents). R and X are
+// reference (IE = -(IL1+IL2+IL3) when reconstructed from phase currents). R and X are
 // solved as real unknowns. No line angle is required or invented.
 [[nodiscard]] DistanceImpedance distance_impedance_rerl_xexl(
     FaultLoop loop,

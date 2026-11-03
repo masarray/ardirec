@@ -2,7 +2,7 @@
 import QtQml
 
 QtObject {
-    // Protection-zone context is the default investigation frame, matching SIGRA's
+    // Protection-zone context is the default investigation frame, matching reference's
     // Circle Diagrams behavior: remote finite trajectory excursions may continue
     // offscreen while the protection characteristic remains readable. When no
     // zones are loaded, fall back to the controller's robust trajectory extent.
