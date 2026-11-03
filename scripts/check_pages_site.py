@@ -63,7 +63,8 @@ def check(site: Path) -> None:
     assert not page.images_without_alt, f"Images missing alt: {page.images_without_alt}"
     required_ids = ("main", "top", "features", "workflow", "download", "download-windows", "download-linux", "download-checksums")
     assert set(required_ids).issubset(page.ids), "Required navigation/download IDs missing"
-    assert page.meta.get("description", "").startswith("ArDiRec"), "Missing SEO description"
+    description = page.meta.get("description", "")
+    assert "ArDiRec" in description and 65 <= len(description) <= 200, "Missing or unhelpful SEO description"
     assert page.meta.get("og:url") == BASE, "Incorrect canonical social URL"
     assert f'<link rel="canonical" href="{BASE}">' in html, "Incorrect canonical link"
     assert 'href="#main"' in html and "prefers-reduced-motion" in css, "Accessibility requirements missing"
