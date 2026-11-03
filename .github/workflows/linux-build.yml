@@ -124,7 +124,7 @@ jobs:
           2. Double-click the AppImage. If necessary, open a terminal in the extracted
              folder and run: chmod +x *.AppImage && APPIMAGE_EXTRACT_AND_RUN=1 ./*.AppImage
           Compatibility: x86_64 Linux, glibc 2.35+; unusual desktops may need extra libraries.
-          Public Stable distribution. Vendor-specific COMTRADE and SIGRA parity is not certified.
+          Public Stable distribution. Vendor-specific COMTRADE and reference parity is not certified.
           Official releases: https://github.com/masarray/ardirec/releases
           EOF
           cd dist

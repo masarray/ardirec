@@ -104,7 +104,7 @@ jobs:
             events, synchronized cursors, phasors, harmonics, impedance locus, and MDI.
             Windows: unzip and run Inno Setup. Linux: unzip, choose Debian installer
             or AppImage. Verify both ZIP files against SHA256SUMS.txt.
-            Stable does not certify full SIGRA or vendor-specific COMTRADE parity.
+            Stable does not certify full reference or vendor-specific COMTRADE parity.
             Windows executable is unsigned and may trigger SmartScreen.
           files: |
             release-assets/ArDiRec-v0.2.0-Windows-x64-Setup.zip

@@ -51,7 +51,7 @@ QString phase_from_name(const QString& rawName) {
 }
 
 // Convert a dedicated residual/earth-current channel to the internal phase-current
-// sum convention Ires = IL1 + IL2 + IL3 = 3I0. SIGRA's IE channel uses the opposite
+// sum convention Ires = IL1 + IL2 + IL3 = 3I0. reference's IE channel uses the opposite
 // reference direction, so IE is negated here and converted back only in the classical
 // RE/RL-XE/XL solver.
 std::optional<double> residual_to_sum_multiplier(const QString& rawName) {

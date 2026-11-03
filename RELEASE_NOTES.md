@@ -1,6 +1,6 @@
 # ardirec v0.2.0-alpha.2 — Analysis Workspace Alpha
 
-This alpha replaces the original single-waveform viewer with a disturbance-analysis workspace designed around the workflow of established tools such as SIGRA, while keeping ardirec's own implementation and visual identity.
+This alpha replaces the original single-waveform viewer with a disturbance-analysis workspace designed around the workflow of established tools such as reference, while keeping ardirec's own implementation and visual identity.
 
 ## What changed
 

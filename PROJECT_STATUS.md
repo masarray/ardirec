@@ -18,15 +18,15 @@ R5 adds no new product feature until the known release blockers are closed.
 2. **R5.1 #73 — Linked local cursors**: cursor presentation belongs to each MDI child while cursor state remains globally linked; Time/Phasor/Locus use C1+C2, Harmonics/Table use C1.
 3. **R5.2 #74 — Phasor zero-flicker**: committed-frame/stale-while-revalidate snapshot semantics and retained QSG vector geometry.
 4. **R5.3 #75 — Table zero-flicker**: asynchronous immutable table frames with stable layout during scrubbing.
-5. **R5.4 #76 — SIGRA Locus parity**: stable engineering viewport, complete backward-cycle validity and canonical SIGRA comparison without casually changing qualified distance mathematics.
-6. **R5.5 #77 — Release qualification**: stress, exact-head CI/CodeQL/Windows, post-merge validation and manual Windows/SIGRA gate before RC.
+5. **R5.4 #76 — reference Locus parity**: stable engineering viewport, complete backward-cycle validity and canonical reference comparison without casually changing qualified distance mathematics.
+6. **R5.5 #77 — Release qualification**: stress, exact-head CI/CodeQL/Windows, post-merge validation and manual Windows/reference gate before RC.
 
 ## Release blockers observed on alpha.22
 
 - One global cursor strip is being used as a substitute for cursor presentation inside each MDI analysis window.
 - Phasor scrubbing can transition committed data through an empty display state and the vector scene graph is rebuilt instead of retained.
 - Table calculations are invoked synchronously through QML-facing snapshot calls; optional Sequence Components geometry can collapse/expand while data is pending.
-- Locus default fit can depend on cursor/extreme trajectory context, producing a viewport materially different from the SIGRA investigation view.
+- Locus default fit can depend on cursor/extreme trajectory context, producing a viewport materially different from the reference investigation view.
 
 These blockers are explicitly represented in `scripts/r5_release_contract.json`. Normal CI verifies that source state and the manifest agree. The strict R5.5 gate is:
 
