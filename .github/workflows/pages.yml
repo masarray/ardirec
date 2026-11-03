@@ -1,0 +1,63 @@
+name: Deploy ArDiRec landing to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - index.html
+      - assets/**
+      - icon/**
+      - robots.txt
+      - sitemap.xml
+      - scripts/check_pages_site.py
+      - .github/workflows/pages.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ardirec-github-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Validate and package public site
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check website contract and client syntax
+        run: |
+          python3 scripts/check_pages_site.py
+          node --check assets/site.js
+      - name: Stage only public website files
+        run: |
+          set -euo pipefail
+          mkdir -p _site
+          cp index.html robots.txt sitemap.xml _site/
+          cp -R assets icon _site/
+          python3 scripts/check_pages_site.py --site-root _site
+          test -z "$(find _site -type l -print -quit)"
+          echo "Public site files:"
+          find _site -type f | sort
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+      - name: Upload website artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: _site
+
+  deploy:
+    name: Publish website
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
