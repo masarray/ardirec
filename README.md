@@ -4,6 +4,7 @@
 <h1 align="center">ArDiRec</h1>
 <p align="center">Open-source COMTRADE disturbance analysis for protection and power-system engineers.</p>
 <p align="center">
+  <a href="https://masarray.github.io/ardirec/">Website</a> ·
   <a href="https://github.com/masarray/ardirec/releases/latest">Download stable</a> ·
   <a href="docs/GETTING_STARTED.md">Get started</a> ·
   <a href="docs/FAQ.md">FAQ</a> ·

@@ -1,19 +1,14 @@
 {
   "name": "ArDiRec — COMTRADE Workstation",
   "short_name": "ArDiRec",
+  "description": "Open-source disturbance analysis for protection and power-system engineers.",
+  "start_url": "../",
+  "scope": "../",
+  "display": "browser",
+  "theme_color": "#0d171e",
+  "background_color": "#0d171e",
   "icons": [
-    {
-      "src": "android-chrome-192x192.png",
-      "sizes": "192x192",
-      "type": "image/png"
-    },
-    {
-      "src": "android-chrome-512x512.png",
-      "sizes": "512x512",
-      "type": "image/png"
-    }
-  ],
-  "theme_color": "#eef0f2",
-  "background_color": "#eef0f2",
-  "display": "standalone"
+    {"src": "android-chrome-192x192.png", "sizes": "192x192", "type": "image/png"},
+    {"src": "android-chrome-512x512.png", "sizes": "512x512", "type": "image/png"}
+  ]
 }
