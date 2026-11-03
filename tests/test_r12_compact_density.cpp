@@ -170,7 +170,7 @@ int main(int argc, char** argv) {
         const QPointF lastDigitalBottom = digital.last()->mapToItem(view, {0, digital.last()->height()});
         std::cout << "R12 visual geometry: contentHeight=" << contentHeight
                   << " viewport=" << view->height()
-                  << " digitalBottom=" << lastDigitalBottom.y() << '\\n';
+                  << " digitalBottom=" << lastDigitalBottom.y() << '\n';
         require(flick->property("contentY").toDouble() == 0.0,
                 "initial viewport starts at top without automatic scrolling");
         require(digital.last()->isVisible() && lastDigitalBottom.y() > 0.0
