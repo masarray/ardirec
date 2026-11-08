@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - index.html
+      - googlec34c43149eef6100.html
       - assets/**
       - icon/**
       - robots.txt
@@ -34,7 +35,8 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p _site
-          cp index.html robots.txt sitemap.xml _site/
+          cp index.html robots.txt sitemap.xml googlec34c43149eef6100.html _site/
+          grep -Fxq 'google-site-verification: googlec34c43149eef6100.html' _site/googlec34c43149eef6100.html
           cp -R assets icon _site/
           python3 scripts/check_pages_site.py --site-root _site
           test -z "$(find _site -type l -print -quit)"
